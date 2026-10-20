@@ -370,7 +370,7 @@ deskbrawl/
 ### M0. 기술 검증: 최상위 투명 오버레이와 입력 통과
 
 **할 일**
-- [ ] Tauri 2 + React + Vite 프로젝트 생성 및 Windows 패키징
+- [x] Tauri 2 + React + Vite 프로젝트 생성 및 Windows 패키징
 - [ ] `alwaysOnTop: true`, `transparent: true`, 창 장식 제거, 작업 표시줄 제외 설정 검증
 - [ ] PixiJS 캐릭터 1개가 VS Code·Chrome **최대화 창 위**에서도 보이는지 확인
 - [ ] `setIgnoreCursorEvents(true)` 적용 후 클릭·드래그·우클릭·스크롤이 아래 앱에 전달되는지 확인
