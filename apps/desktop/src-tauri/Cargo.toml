@@ -1,0 +1,13 @@
+[package]
+name = "deskbrawl"
+version = "0.1.0"
+description = "DeskBrawl desktop application"
+edition = "2021"
+rust-version = "1.95"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "=2.7.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.4", features = [] }
