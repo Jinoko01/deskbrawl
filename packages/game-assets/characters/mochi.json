@@ -1,0 +1,425 @@
+{
+  "frames": {
+    "mochi-0": {
+      "frame": {
+        "w": 229,
+        "h": 288,
+        "x": 62,
+        "y": 33
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 229,
+        "h": 288,
+        "x": 70,
+        "y": 41
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-1": {
+      "frame": {
+        "w": 224,
+        "h": 283,
+        "x": 374,
+        "y": 38
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 224,
+        "h": 283,
+        "x": 69,
+        "y": 46
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-2": {
+      "frame": {
+        "w": 223,
+        "h": 283,
+        "x": 688,
+        "y": 38
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 223,
+        "h": 283,
+        "x": 69,
+        "y": 46
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-3": {
+      "frame": {
+        "w": 224,
+        "h": 283,
+        "x": 1001,
+        "y": 38
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 224,
+        "h": 283,
+        "x": 69,
+        "y": 46
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-4": {
+      "frame": {
+        "w": 228,
+        "h": 283,
+        "x": 67,
+        "y": 347
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 228,
+        "h": 283,
+        "x": 75,
+        "y": 46
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-5": {
+      "frame": {
+        "w": 228,
+        "h": 287,
+        "x": 381,
+        "y": 343
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 228,
+        "h": 287,
+        "x": 76,
+        "y": 42
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-6": {
+      "frame": {
+        "w": 228,
+        "h": 282,
+        "x": 694,
+        "y": 348
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 228,
+        "h": 282,
+        "x": 75,
+        "y": 47
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-7": {
+      "frame": {
+        "w": 229,
+        "h": 286,
+        "x": 1007,
+        "y": 344
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 229,
+        "h": 286,
+        "x": 75,
+        "y": 43
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-8": {
+      "frame": {
+        "w": 235,
+        "h": 274,
+        "x": 59,
+        "y": 654
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 235,
+        "h": 274,
+        "x": 67,
+        "y": 55
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-9": {
+      "frame": {
+        "w": 246,
+        "h": 274,
+        "x": 365,
+        "y": 654
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 246,
+        "h": 274,
+        "x": 60,
+        "y": 55
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-10": {
+      "frame": {
+        "w": 249,
+        "h": 272,
+        "x": 688,
+        "y": 656
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 249,
+        "h": 272,
+        "x": 69,
+        "y": 57
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-11": {
+      "frame": {
+        "w": 228,
+        "h": 274,
+        "x": 987,
+        "y": 654
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 228,
+        "h": 274,
+        "x": 55,
+        "y": 55
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-12": {
+      "frame": {
+        "w": 234,
+        "h": 274,
+        "x": 53,
+        "y": 958
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 234,
+        "h": 274,
+        "x": 61,
+        "y": 55
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-13": {
+      "frame": {
+        "w": 253,
+        "h": 275,
+        "x": 363,
+        "y": 958
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 253,
+        "h": 275,
+        "x": 58,
+        "y": 54
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-14": {
+      "frame": {
+        "w": 279,
+        "h": 279,
+        "x": 649,
+        "y": 958
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 279,
+        "h": 279,
+        "x": 30,
+        "y": 50
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    },
+    "mochi-15": {
+      "frame": {
+        "w": 234,
+        "h": 269,
+        "x": 994,
+        "y": 964
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "w": 234,
+        "h": 269,
+        "x": 62,
+        "y": 60
+      },
+      "sourceSize": {
+        "h": 337,
+        "w": 337
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.9762611275964391
+      }
+    }
+  },
+  "animations": {
+    "idle": [
+      "mochi-0",
+      "mochi-1",
+      "mochi-2",
+      "mochi-3"
+    ],
+    "walk": [
+      "mochi-4",
+      "mochi-5",
+      "mochi-6",
+      "mochi-7"
+    ],
+    "melee": [
+      "mochi-8",
+      "mochi-9",
+      "mochi-10",
+      "mochi-11"
+    ],
+    "throw": [
+      "mochi-12",
+      "mochi-13"
+    ],
+    "hit": [
+      "mochi-14",
+      "mochi-15"
+    ]
+  },
+  "meta": {
+    "image": "mochi.png",
+    "format": "RGBA8888",
+    "size": {
+      "h": 1254,
+      "w": 1254
+    },
+    "scale": "1"
+  }
+}

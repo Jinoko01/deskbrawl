@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DeskBrawl · Pixel asset studio</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #edf1ef; background: #101817; }
+      * { box-sizing: border-box; }
+      body { margin: 0 auto; padding: 48px 24px 64px; max-width: 1180px; }
+      .eyebrow { color: #9edbc5; font-size: 12px; letter-spacing: .2em; font-weight: 700; }
+      h1 { font-size: clamp(28px, 4vw, 44px); letter-spacing: -.04em; margin: 14px 0; }
+      .intro { color: #b0beb8; line-height: 1.8; max-width: 750px; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; padding: 20px 0; margin: 14px 0; border-block: 1px solid #33433d; }
+      label { display: grid; gap: 7px; font-size: 12px; color: #c4d1ca; }
+      select, button { font: inherit; padding: 9px 12px; border: 1px solid #566c62; border-radius: 8px; background: #20322b; color: #f3f7f4; min-height: 40px; }
+      button, select { cursor: pointer; }
+      button:hover { background: #344c40; }
+      :focus-visible { outline: 3px solid #b5f1d9; outline-offset: 3px; }
+      #status { color: #b0beb8; font-size: 13px; }
+      h2 { font-size: 20px; margin: 36px 0 18px; }
+      .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+      .card { border: 1px solid #33443b; border-radius: 14px; overflow: hidden; background: #18241e; }
+      .stage { height: 166px; display: grid; place-items: center; background: #202e27; }
+      body.light .stage { background: #e8ede5; }
+      canvas { width: 144px; height: 144px; image-rendering: pixelated; }
+      .caption { padding: 15px 16px; }
+      .name { margin: 0; font-weight: 700; font-size: 16px; }
+      .description { margin: 7px 0 10px; color: #b0beb8; font-size: 12px; }
+      a { color: #afdcc8; text-underline-offset: 3px; font-size: 12px; }
+      .links { display: flex; gap: 14px; }
+      footer { margin-top: 40px; font-size: 12px; line-height: 1.8; color: #b0beb8; }
+      @media (max-width: 740px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } body { padding: 28px 16px; } }
+      @media (max-width: 370px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+    <script src="./preview-data.js" defer></script>
+    <script src="./preview.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div class="eyebrow">DESKBRAWL / SIMPLE PIXEL COLLECTION · 02</div>
+      <h1>작은 친구들, 커다란 장난.</h1>
+      <p class="intro">큰 픽셀, 점눈, 단순한 색 덩어리로 다시 그린 캐릭터 8종과 무기·돌·이펙트입니다.<br>프로젝트 에셋 검토용 미리보기입니다. 실제 게임의 캐릭터 선택 화면은 아닙니다.</p>
+    </header>
+    <div class="toolbar" aria-label="에셋 미리보기 설정">
+      <label>캐릭터 모션
+        <select id="motion">
+          <option value="idle">대기 · Idle</option>
+          <option value="walk">걷기 · Walk</option>
+          <option value="melee">근접 공격 · Melee</option>
+          <option value="throw">돌 던지기 · Throw</option>
+          <option value="hit">피격 · Hit</option>
+        </select>
+      </label>
+      <label>프레임 표시 크기
+        <select id="size">
+          <option value="64" selected>64 px</option>
+          <option value="96">96 px</option>
+          <option value="128">128 px</option>
+        </select>
+      </label>
+      <label>배경
+        <select id="background">
+          <option value="dark">어두운 배경</option>
+          <option value="light">밝은 배경</option>
+        </select>
+      </label>
+      <button type="button" id="play" aria-pressed="true">일시 정지</button>
+      <button type="button" id="step">다음 프레임</button>
+    </div>
+    <p id="status" role="status">이미지를 불러오는 중입니다.</p>
+    <main>
+      <h2>01 / 캐릭터 8종</h2>
+      <div class="grid" id="characters"></div>
+      <h2>02 / 장난감 무기 8종</h2>
+      <div class="grid" id="weapons"></div>
+      <h2>03 / 돌 · 이펙트</h2>
+      <div class="grid" id="effects"></div>
+    </main>
+    <footer>
+      캐릭터별 16프레임 · 대기 4 / 걷기 4 / 근접 공격 4 / 투척 2 / 피격 2<br>
+      밝은 배경에서도 확인하세요. 무기 장착 위치·4방향 전용 그림·실제 전투 타이밍은 게임 통합 시 조정 대상입니다.<br>
+      미리보기에서는 단발 동작도 반복합니다. 모든 스킨의 게임 능력치는 이 에셋에서 정의하지 않습니다.
+    </footer>
+    <noscript>미리보기에는 JavaScript가 필요합니다. characters, props, effects 폴더의 PNG 파일을 직접 열어 확인할 수 있습니다.</noscript>
+  </body>
+</html>
