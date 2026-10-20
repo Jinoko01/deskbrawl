@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --background: oklch(0.17 0.015 260);
+  --foreground: oklch(0.96 0.01 260);
+  --card: oklch(0.22 0.015 260);
+  --muted-foreground: oklch(0.76 0.02 260);
+  --border: oklch(0.34 0.02 260);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --font-sans: "Segoe UI", "Malgun Gothic", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply m-0 bg-background font-sans text-foreground antialiased;
+  }
+}
