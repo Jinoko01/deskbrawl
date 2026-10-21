@@ -1,8 +1,9 @@
-import { Application, ImageSource, Sprite, Spritesheet, Texture } from "pixi.js";
+import { AnimatedSprite, Application, ImageSource, Spritesheet, Texture } from "pixi.js";
 // Tauri의 script-src 'self'를 유지하면서 eval 없는 shader 경로를 사용한다.
 import "pixi.js/unsafe-eval";
 import atlas from "../../../../packages/game-assets/characters/mochi-v2.json";
 import imageUrl from "../../../../packages/game-assets/characters/mochi-v2.png";
+import { reportRendererFailure, watchReducedEffects } from "../native/overlay";
 
 // M0 표시 크기: atlas의 논리 프레임 높이를 96 CSS px로 축소한다.
 const CHARACTER_SIZE_PX = 96;
@@ -16,10 +17,17 @@ export function mountCharacter(
   let initialized = false;
   let sheet: Spritesheet | undefined;
   let observer: ResizeObserver | undefined;
+  let character: AnimatedSprite | undefined;
+  let reducedEffects = true;
+  let stopPreferences: (() => void) | undefined;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   function release() {
     observer?.disconnect();
     window.removeEventListener("resize", draw);
+    reducedMotion.removeEventListener("change", syncMotion);
+    document.removeEventListener("visibilitychange", syncMotion);
+    stopPreferences?.();
     if (initialized) {
       app.canvas.removeEventListener("webglcontextlost", onContextLost);
       app.destroy(true, { children: true });
@@ -34,12 +42,27 @@ export function mountCharacter(
     if (!disposed) {
       console.error("오버레이 캐릭터 렌더링 실패", error);
       onStatus("error");
+      void reportRendererFailure().catch((failure: unknown) => {
+        console.error("오버레이 렌더 오류 보고 실패", failure);
+      });
     }
   }
 
   function onContextLost(event: Event) {
     event.preventDefault();
     fail(new Error("WebGL context가 손실되었습니다."));
+  }
+
+  function syncMotion() {
+    if (!initialized || disposed || character === undefined) return;
+    if (reducedEffects || reducedMotion.matches || document.hidden) {
+      character.gotoAndStop(0);
+      app.stop();
+      draw();
+    } else {
+      character.play();
+      app.start();
+    }
   }
 
   function draw() {
@@ -93,13 +116,18 @@ export function mountCharacter(
       await sheet.parse();
       if (disposed) return release();
 
-      const texture = sheet.textures["mochi-0"];
-      if (texture === undefined) throw new Error("모찌 대기 프레임이 없습니다.");
-      const character = new Sprite(texture);
+      const idle = sheet.animations.idle;
+      if (idle === undefined || idle.length === 0) throw new Error("모찌 대기 프레임이 없습니다.");
+      character = new AnimatedSprite({ textures: idle, autoUpdate: false });
+      character.animationSpeed = 1000 / (60 * 220);
+      character.updateAnchor = true;
       character.anchor.copyFrom(atlas.frames["mochi-0"].anchor);
       character.roundPixels = true;
       app.stage.eventMode = "none";
       app.stage.addChild(character);
+      const sprite = character;
+      app.ticker.maxFPS = 30;
+      app.ticker.add((ticker) => sprite.update(ticker));
       app.canvas.setAttribute("role", "img");
       app.canvas.setAttribute("aria-label", "모찌 캐릭터");
       app.canvas.addEventListener("webglcontextlost", onContextLost);
@@ -107,6 +135,12 @@ export function mountCharacter(
       observer = new ResizeObserver(draw);
       observer.observe(host);
       window.addEventListener("resize", draw);
+      reducedMotion.addEventListener("change", syncMotion);
+      document.addEventListener("visibilitychange", syncMotion);
+      stopPreferences = watchReducedEffects((reduced) => {
+        reducedEffects = reduced;
+        syncMotion();
+      }, fail);
       draw();
       if (initialized) onStatus("ready");
     } catch (error) {

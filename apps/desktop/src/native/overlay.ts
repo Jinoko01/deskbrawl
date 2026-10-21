@@ -1,0 +1,35 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
+export function watchReducedEffects(
+  onChange: (reduced: boolean) => void,
+  onError: (error: unknown) => void,
+): () => void {
+  if (!isTauri()) { onChange(false); return () => {}; }
+  let disposed = false;
+  let changed = false;
+  let unlisten: (() => void) | undefined;
+  void (async () => {
+    try {
+      const stop = await listen<unknown>("overlay-effects-changed", (event) => {
+        if (disposed) return;
+        if (typeof event.payload !== "boolean") { onError(new Error("Invalid effects preference")); return; }
+        changed = true;
+        onChange(event.payload);
+      });
+      if (disposed) { stop(); return; }
+      unlisten = stop;
+      const reduced = await invoke<unknown>("overlay_reduced_effects");
+      if (typeof reduced !== "boolean") throw new Error("Invalid effects preference");
+      // A live event received during the initial query wins over that snapshot.
+      if (!disposed && !changed) onChange(reduced);
+    } catch (error) {
+      if (!disposed) onError(error);
+    }
+  })();
+  return () => { disposed = true; unlisten?.(); };
+}
+
+export async function reportRendererFailure(): Promise<void> {
+  if (isTauri()) await invoke("overlay_renderer_failed");
+}
