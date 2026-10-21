@@ -10,6 +10,7 @@ Windows에서는 네이티브 클릭 통과·비활성 스타일을 확인하고
 대기 애니메이션은 220ms 간격의 4개 프레임과 최대 30fps의 전용 ticker를 사용합니다. 트레이의 **효과 감소**, OS의 동작 줄이기 설정 또는 문서 숨김 상태에서는 첫 프레임으로 멈추고 반복 렌더링을 중단합니다. 효과 감소 값은 앱 설정 디렉터리의 `reduced-effects` 파일에 저장됩니다.
 초기화 중 종료·React Strict Mode/HMR 재실행 시 canvas·renderer·texture·구독을 정리합니다. 로딩·렌더링 실패와 WebGL context 손실은 Rust에 전달해 오버레이를 숨깁니다. DPI·해상도·작업 영역 변경, Explorer 재시작 및 절전 관련 통지에서도 안전하게 숨깁니다. 이후 트레이의 **오버레이 표시**를 선택하면 새 웹뷰와 최신 모니터 경계로 복구합니다. 자동 포커스·최상위 회수 루프는 없습니다.
 서버와 게임 입력·판정은 후속 단계입니다.
+M1의 순수 게임 코어는 `packages/game-core`에 추가했습니다. 월드·캐릭터·이동 입력·투사체 상태 모델과 고정 tick 이동·경계 처리를 제공하며, 현재 오버레이와의 연결 및 공격·투척 판정은 후속 단계입니다. API와 검증 범위는 [게임 코어 안내](packages/game-core/README.md)를 참고합니다.
 이 PC(Windows 11)에서 개발 앱 실행·한국어 표시·최대화/복원, 배포용 `deskbrawl.exe` 실행·종료, NSIS 설치 파일 생성과 설치·실행·제거까지 확인했습니다.
 Windows 11 실기기 결과와 예외는 [M0 검증 기록](docs/m0-windows11-validation.md)에 정리합니다. Windows 10 검증은 사용자 요청으로 이번 범위에서 제외했으며, 지원을 확정하지 않습니다.
 
@@ -44,6 +45,7 @@ pnpm dev:web
 
 ```powershell
 pnpm check
+pnpm test
 pnpm tauri:info
 cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --all -- --check
 cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
@@ -51,8 +53,8 @@ cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 pnpm build
 ```
 
-- `pnpm check`: ESLint, strict TypeScript, 웹 프로덕션 빌드.
-- `pnpm test`: Vitest 단위 테스트를 한 번 실행합니다. `pnpm test:watch`는 변경을 감시합니다. 현재 테스트 파일은 없으며 M1 게임 로직 구현 시 `apps/desktop/src/**/*.test.ts`에 추가합니다. 테스트가 없으면 기본 실행은 실패합니다.
+- `pnpm check`: desktop과 game-core의 ESLint·strict TypeScript 검사, 웹 프로덕션 빌드.
+- `pnpm test`: game-core 단위 테스트와 desktop의 workspace 공개 진입점 연동 테스트를 한 번 실행합니다. `pnpm test:watch`는 두 패키지의 변경을 감시합니다. 테스트가 없으면 기본 실행은 실패합니다.
 - Vitest는 Node 환경에서 실행하며 `test`, `expect` 등을 `vitest`에서 명시적으로 import합니다. React DOM 테스트 환경과 도구는 아직 추가하지 않았습니다.
 - `pnpm build`: 웹 빌드, Rust 컴파일, 로컬 Windows NSIS 설치 파일 생성. 서명·게시 작업은 하지 않습니다.
 - 설치 파일 위치: `apps/desktop/src-tauri/target/release/bundle/nsis/`.
@@ -109,6 +111,7 @@ apps/desktop/
   src/               React 화면, PixiJS 장면(game/), 스타일
   src-tauri/         Rust 진입점, 창 설정, 최소 capability
 packages/game-assets/ 기존 캐릭터·무기·돌·효과 에셋
+packages/game-core/   런타임 의존성 없는 순수 TypeScript 게임 상태·고정 tick 로직
 docs/                기획·구현 계획·개발 가이드
 ```
 
