@@ -15,6 +15,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@deskbrawl/game-core':
+        specifier: workspace:*
+        version: link:../../packages/game-core
       '@tauri-apps/api':
         specifier: 2.12.4
         version: 2.12.4
@@ -73,6 +76,27 @@ importers:
       vite:
         specifier: 8.3.4
         version: 8.3.4(@types/node@22.20.5)(jiti@2.7.0)
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(jiti@2.7.0))
+
+  packages/game-core:
+    devDependencies:
+      '@eslint/js':
+        specifier: 10.0.1
+        version: 10.0.1(eslint@10.13.0(jiti@2.7.0))
+      '@types/node':
+        specifier: 22.20.5
+        version: 22.20.5
+      eslint:
+        specifier: 10.13.0
+        version: 10.13.0(jiti@2.7.0)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      typescript-eslint:
+        specifier: 8.72.0
+        version: 8.72.0(eslint@10.13.0(jiti@2.7.0))(typescript@6.0.3)
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(jiti@2.7.0))

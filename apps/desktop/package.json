@@ -14,6 +14,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@deskbrawl/game-core": "workspace:*",
     "@tauri-apps/api": "2.12.4",
     "pixi.js": "8.22.0",
     "react": "19.3.1",

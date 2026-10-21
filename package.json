@@ -10,10 +10,10 @@
     "dev:web": "pnpm --filter @deskbrawl/desktop dev",
     "build": "pnpm --filter @deskbrawl/desktop tauri build",
     "build:web": "pnpm --filter @deskbrawl/desktop build",
-    "lint": "pnpm --filter @deskbrawl/desktop lint",
-    "typecheck": "pnpm --filter @deskbrawl/desktop typecheck",
-    "test": "pnpm --filter @deskbrawl/desktop test",
-    "test:watch": "pnpm --filter @deskbrawl/desktop test:watch",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:watch": "pnpm -r --parallel --if-present test:watch",
     "check": "pnpm lint && pnpm typecheck && pnpm build:web",
     "tauri:info": "pnpm --filter @deskbrawl/desktop tauri info"
   }
