@@ -7,7 +7,8 @@ export function OverlayScene() {
 
   useEffect(() => {
     if (host.current === null) return;
-    return mountCharacter(host.current, setStatus);
+    const scene = mountCharacter(host.current, setStatus);
+    return scene.dispose;
   }, []);
 
   return (

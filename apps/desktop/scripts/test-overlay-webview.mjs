@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-const executable = fileURLToPath(new URL("../src-tauri/target/release/deskbrawl.exe", import.meta.url));
+// --dev는 Vite와 Tauri 개발 빌드가 준비된 경우에만 소스 기반 WebGL 검증도 실행한다.
+const development = process.argv.includes("--dev");
+const executable = fileURLToPath(new URL(`../src-tauri/target/${development ? "debug" : "release"}/deskbrawl.exe`, import.meta.url));
 const controller = fileURLToPath(new URL("./overlay-test-control.ps1", import.meta.url));
 const profileRoot = resolve(fileURLToPath(new URL("../node_modules/.cache", import.meta.url)));
 mkdirSync(profileRoot, { recursive: true });
@@ -116,6 +118,26 @@ try {
   assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('overlay_reduced_effects').then(() => false, () => true)"), true,
     "Main must be denied the overlay-only command");
   await overlay.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
+  await setPreference(false);
+  if (development) {
+    assert.equal(await overlay.evaluate("location.origin"), "http://127.0.0.1:1420",
+      "Source renderer tests require the local Tauri development URL");
+    const { cssLayoutViewport: viewport } = await overlay.rpc("Page.getLayoutMetrics");
+    const { data } = await overlay.rpc("Page.captureScreenshot", { format: "png", clip: {
+      x: Math.max(0, viewport.clientWidth / 2 - 180), y: Math.max(0, viewport.clientHeight / 2 - 100),
+      width: Math.min(360, viewport.clientWidth), height: Math.min(200, viewport.clientHeight), scale: 1,
+    } });
+    const screenshot = join(profileRoot, "m1-character-scene.png");
+    writeFileSync(screenshot, Buffer.from(data, "base64"));
+    console.log(`Character preview: ${screenshot}`);
+    await overlay.evaluate("import('/scripts/test-overlay-rendering.mjs').then(module => module.testOverlayRendering())");
+    // 오류 경로 검사는 Rust의 안전 숨김을 유발한다. 새 웹뷰를 생성해 뒤의 네이티브 회귀 검사를 계속한다.
+    const previous = overlay.id;
+    control("show");
+    overlay = await findOverlay(previous);
+    await overlay.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
+    console.log("PASS: M1 two-character renderer, transparent pixels, state animations and lifecycle");
+  }
   await overlay.evaluate(`(() => {
     const canvas = document.querySelector('canvas');
     const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
@@ -125,7 +147,6 @@ try {
       gl[name] = function(...args) { window.__m0Draws++; return original.apply(this, args); };
     }
   })()`);
-  await setPreference(false);
   await until(async () => await overlay.evaluate("window.__m0Draws > 2"), "Idle animation did not draw");
   await setPreference(true);
   // Observe a quiet interval after the one final reduced-motion frame.
