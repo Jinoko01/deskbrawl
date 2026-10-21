@@ -111,7 +111,7 @@ flowchart TB
 3. `overlay.setIgnoreCursorEvents(true)`를 적용해 마우스 이벤트를 **전체 통과**시킨다. 게임 오브젝트 클릭은 MVP에서 포기하고 설정/강퇴/집중 모드는 `main` 창이나 트레이로 제공한다. 사용 시 필요한 Tauri 창 권한도 선언한다.
 4. 포커스 비획득 여부를 검증한다. Windows 특이 동작이 있으면 Win32 `WS_EX_NOACTIVATE`, `SWP_NOACTIVATE` 등을 검토하되, 단순히 CSS `pointer-events: none`만 설정해서 OS 수준 클릭 통과가 된다고 가정하지 않는다.
 5. `alwaysOnTop`가 일반 앱 창 위에 지속되는지 Windows 10/11의 Alt+Tab, 최대화, 창 이동, Win+D, DPI 변경, Explorer 재시작 등의 시나리오로 테스트한다. 다른 최상위 창과의 순서는 보장하지 않는다.
-6. 기본 작업 모드에서 I/J/K/L/U/O를 전역 등록하지 않는다. 별도 `controller`/`visit` 창에 포커스가 있을 때만 조작하며 키 눌림 잔류를 방지한다.
+6. 기본 작업 모드에서 방향키/Z/X를 전역 등록하지 않는다. 별도 `controller`/`visit` 창에 포커스가 있을 때만 조작하며 키 눌림 잔류를 방지한다.
 7. 오버레이가 입력을 가로채거나 포커스를 뺏는 문제가 발생하면 **즉시 숨기는 안전한 폴백**을 적용하고 트레이에서 복구하도록 한다. 작업 중 강제 포커스·창 Z-order 재탈취 루프는 금지한다.
 8. 작업 표시줄·알림·상대적으로 중요한 화면 부분을 가리는 문제는 게임 이동 경계/효과 크기·최대 표시 수로 완화한다. 실제 화면 정보는 서버로 전송하지 않는다.
 
@@ -149,13 +149,13 @@ await getCurrentWindow().setIgnoreCursorEvents(true);
 
 ### 기본 키 설계
 
-- 이동: `I/J/K/L`
-- 근접 공격: `U`
-- 돌 던지기: `O`
+- 이동: 방향키 `↑/←/↓/→`
+- 근접 공격: `Z`
+- 돌 던지기: `X`
 - 플레이 전환: `Ctrl+Shift+F12` (사용자 설정 가능)
 - 플레이 종료: `Esc`
 
-**중요:** `I/J/K/L/U/O`는 **전역 단축키가 아니다.** `visit` 또는 `controller` 창이 포커스를 가진 동안의 `keydown`/`keyup`만 읽는다.
+**중요:** 방향키/Z/X는 **전역 단축키가 아니다.** `visit` 또는 `controller` 창이 포커스를 가진 동안의 `keydown`/`keyup`만 읽는다.
 
 ```mermaid
 flowchart TD
@@ -387,7 +387,7 @@ deskbrawl/
 
 **할 일**
 - [ ] PixiJS 캐릭터 스프라이트 및 idle/walk/attack/stun 애니메이션
-- [ ] IJKL 이동, U 근접 공격, O 돌 던지기
+- [ ] 방향키 이동, Z 근접 공격, X 돌 던지기
 - [ ] 로컬 가상 캐릭터 2개로 공격·돌 충돌 구현
 - [ ] 넉백·기절·피격 면역·화면 경계 처리
 - [ ] 순수 로직 Vitest 단위 테스트

@@ -52,6 +52,8 @@ pnpm build
 ```
 
 - `pnpm check`: ESLint, strict TypeScript, 웹 프로덕션 빌드.
+- `pnpm test`: Vitest 단위 테스트를 한 번 실행합니다. `pnpm test:watch`는 변경을 감시합니다. 현재 테스트 파일은 없으며 M1 게임 로직 구현 시 `apps/desktop/src/**/*.test.ts`에 추가합니다. 테스트가 없으면 기본 실행은 실패합니다.
+- Vitest는 Node 환경에서 실행하며 `test`, `expect` 등을 `vitest`에서 명시적으로 import합니다. React DOM 테스트 환경과 도구는 아직 추가하지 않았습니다.
 - `pnpm build`: 웹 빌드, Rust 컴파일, 로컬 Windows NSIS 설치 파일 생성. 서명·게시 작업은 하지 않습니다.
 - 설치 파일 위치: `apps/desktop/src-tauri/target/release/bundle/nsis/`.
 - JS 의존성은 `pnpm-lock.yaml`, Rust 의존성은 `apps/desktop/src-tauri/Cargo.lock`으로 고정합니다. 두 파일 모두 패키지 관리 도구로 생성합니다.
