@@ -1,9 +1,12 @@
 import { ControlSettings } from "./ControlSettings";
 import { DEFAULT_CONTROLS, keyLabel, shortcutLabel } from "./game/keyMap";
 import { useLocalControls } from "./game/useLocalControls";
+import { useMultiplayer } from "./hooks/queries/useMultiplayer";
+import { MultiplayerPanel } from "./MultiplayerPanel";
 
 export function App() {
-  const { region, ready, playing, busy, error, supported, controls, controlsError, save } = useLocalControls();
+  const multiplayer = useMultiplayer();
+  const { region, ready, playing, busy, error, supported, controls, controlsError, save } = useLocalControls(multiplayer.input);
   // Rust가 저장된 설정을 읽기 전에는 기본값을 실제 설정처럼 보여주지 않는다.
   const loaded = controls === undefined || controls.shortcut === "loading" ? undefined : controls;
   const shown = loaded?.controls ?? (supported ? undefined : DEFAULT_CONTROLS);
@@ -21,7 +24,7 @@ export function App() {
         <div ref={region} tabIndex={playing ? 0 : -1} role="group"
           aria-label="게임 조작 영역" className="mt-8 rounded-xl border border-border p-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground">
           <p className="text-sm text-muted-foreground" role="status">
-            {playing ? "PLAY · 모찌를 조작 중" : busy ? "PLAY 시작하는 중…" : ready ? "WORK · 플레이할 수 있음" : "WORK · 오버레이 준비 중"}
+            {playing ? `PLAY · ${multiplayer.view.phase === "guest" ? "민트" : "모찌"}를 조작 중` : busy ? "PLAY 시작하는 중…" : ready ? "WORK · 플레이할 수 있음" : "WORK · 오버레이 준비 중"}
           </p>
           <p className="mt-3 text-sm leading-relaxed text-foreground">
             {keys === undefined ? "조작키를 불러오는 중…"
@@ -39,10 +42,11 @@ export function App() {
         {loaded === undefined && supported && controlsError === undefined && (
           <p className="mt-4 text-sm text-muted-foreground" role="status">조작키 설정을 불러오는 중…</p>
         )}
-        {loaded !== undefined && <ControlSettings controls={loaded.controls} disabled={playing || busy} onSave={save} />}
         {!supported && <p className="mt-4 text-sm text-muted-foreground">데스크톱 앱에서 플레이할 수 있습니다.</p>}
         {controlsError && <p className="mt-4 text-sm text-foreground" role="alert">{controlsError}</p>}
         {error && <p className="mt-4 text-sm text-foreground" role="alert">{error}</p>}
+        <MultiplayerPanel game={multiplayer} playing={playing || busy} />
+        {loaded !== undefined && <ControlSettings controls={loaded.controls} disabled={playing || busy} onSave={save} />}
       </div>
     </main>
   );

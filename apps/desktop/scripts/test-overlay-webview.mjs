@@ -6,10 +6,12 @@ import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { io } from "socket.io-client";
 
 // --dev는 Vite와 Tauri 개발 빌드가 준비된 경우에만 소스 기반 WebGL 검증도 실행한다.
 const development = process.argv.includes("--dev");
 const localGame = process.argv.includes("--local");
+const networkGame = process.argv.includes("--network");
 const executable = fileURLToPath(new URL(`../src-tauri/target/${development ? "debug" : "release"}/deskbrawl.exe`, import.meta.url));
 const controller = fileURLToPath(new URL("./overlay-test-control.ps1", import.meta.url));
 const profileRoot = resolve(fileURLToPath(new URL("../node_modules/.cache", import.meta.url)));
@@ -128,6 +130,9 @@ async function testLocalGame(main) {
   }
   assert.equal(failure, "", "Local play failed");
   await key(main, "ArrowRight", "ArrowRight", true);
+  // A defined 150 ms held-key input closes the initial 144-unit gap into melee
+  // range. The first WALK frame alone can represent only 12 units of movement.
+  await main.evaluate("new Promise(resolve => setTimeout(resolve, 150))");
   await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('모찌: walk')"), "Movement did not reach the overlay");
   await key(main, "ArrowRight", "ArrowRight", false);
   await key(main, "KeyZ", "z", true);
@@ -148,8 +153,91 @@ async function testLocalGame(main) {
   console.log("PASS: Ctrl+Shift+G PLAY/WORK, arrow movement, melee, stone lifecycle, IPC scope and Escape");
 }
 
-async function launch() {
-  app = spawn(executable, [], { windowsHide: true, env: { ...process.env,
+async function testNetwork(main) {
+  const base = "http://127.0.0.1:3000";
+  const api = async (path, body, accessToken) => {
+    const response = await fetch(`${base}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) }, body: JSON.stringify(body) });
+    assert.ok(response.ok, `Fixture request failed: ${response.status}`);
+    return response.json();
+  };
+  const denied = async (client, command) => client.evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)}).then(() => false, () => true)`);
+  assert.equal(await denied(overlay, "credential_read"), true, "Overlay must not read device credentials");
+  assert.equal(await denied(main, "network_read"), true, "Main must not read overlay IPC state");
+  await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '내 공간 연결').click()");
+  await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Native main did not host a room");
+  await until(() => overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(v => JSON.parse(v).mode === 'host')"), "Host world did not reach overlay");
+  await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '방문 링크 생성').click()");
+  let ownLink;
+  await until(async () => {
+    ownLink = await main.evaluate("[...document.querySelectorAll('label')].find(l => l.textContent.startsWith('내 방문 링크'))?.querySelector('input')?.value");
+    return !!ownLink;
+  }, "Host invite link not created");
+  const guest = await api("/v1/devices", { nickname: "M2 테스트 방문자" });
+  const guestSocket = io(base, { autoConnect: false, transports: ["websocket"], reconnection: false, auth: { version: 1, token: guest.accessToken } });
+  const ack = (event, body) => guestSocket.timeout(5000).emitWithAck(event, body);
+  try {
+    await new Promise((resolve, reject) => { guestSocket.once("connect", resolve); guestSocket.once("connect_error", reject); guestSocket.connect(); });
+    const entered = await ack("visit:join", { version: 1, token: new URL(ownLink).pathname.slice(6) });
+    assert.equal(entered.ok, true);
+    await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Guest did not appear in native host overlay");
+    await ack("player:action", { visitId: entered.visitId, actionId: crypto.randomUUID(), action: "stone" });
+    await until(() => overlay.evaluate("/모찌: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Authoritative guest stone hit did not reach native host");
+    await ack("visit:leave", { visitId: entered.visitId });
+    await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌 캐릭터'"), "Departed visitor remained in overlay");
+
+    const externalHost = await ack("room:host", { version: 1, bounds: { width: 1280, height: 720 } });
+    assert.equal(externalHost.ok, true);
+    const externalInvite = await api("/v1/rooms/me/invites", {}, guest.accessToken);
+    const deepLink = `deskbrawl://join/${new URL(externalInvite.link).pathname.slice(6)}`;
+    const second = spawn(executable, [deepLink], { windowsHide: true });
+    await new Promise((resolve, reject) => { const timeout = setTimeout(() => { second.kill(); reject(new Error("Second app did not exit")); }, 10000); second.once("exit", () => { clearTimeout(timeout); resolve(); }); second.once("error", reject); });
+    await until(() => main.evaluate("document.body.textContent.includes('친구 공간 방문 중') && !!document.querySelector('canvas')"), "Running app did not accept the deep link into preview");
+    await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '표시된 캐릭터 없음'"), "Own overlay should be empty while visiting");
+    await until(() => main.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Preview does not show the shared world");
+    assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('preview_reduced_effects').then(v => typeof v === 'boolean')"), true);
+    assert.equal(await denied(overlay, "preview_reduced_effects"), true, "Preview preference read must stay main-only");
+    await main.evaluate(`(() => {
+      const canvas = document.querySelector('canvas');
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      window.__m2Draws = 0;
+      for (const name of ['drawElements', 'drawArrays', 'drawElementsInstanced']) {
+        const original = gl[name];
+        gl[name] = function(...args) { window.__m2Draws++; return original.apply(this, args); };
+      }
+    })()`);
+    await setPreference(false);
+    await until(() => main.evaluate("window.__m2Draws > 2"), "Preview idle animation did not draw");
+    await setPreference(true);
+    await main.evaluate("new Promise(resolve => setTimeout(resolve, 150))");
+    const previewDraws = await main.evaluate("window.__m2Draws");
+    await main.evaluate("new Promise(resolve => setTimeout(resolve, 250))");
+    assert.equal(await main.evaluate("window.__m2Draws"), previewDraws, "Idle network snapshots must not redraw reduced preview");
+    await ack("player:action", { visitId: externalHost.visitId, actionId: crypto.randomUUID(), action: "stone" });
+    await until(() => main.evaluate("/민트: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Server hit did not reach visitor preview");
+    const screenshot = await main.rpc("Page.captureScreenshot", { format: "png" });
+    writeFileSync(join(profileRoot, "m2-visit-preview.png"), Buffer.from(screenshot.data, "base64"));
+    await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '귀환').click()");
+    await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Return did not restore own hosted room");
+    await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌 캐릭터'"), "Return did not restore host overlay");
+    // Restart with the same encrypted device identity and a startup deep link.
+    control("exit");
+    await until(() => app.exitCode !== null, "Test app did not exit before cold deep-link check");
+    clients.forEach((client) => client.close());
+    await launch([deepLink]);
+    const target = (await pages()).find((page) => page.type === "page" && !page.url.includes("overlay.html"));
+    assert.ok(target, "Restarted main WebView target not found");
+    main = await connect(target);
+    await until(() => main.evaluate("document.body.textContent.includes('친구 공간 방문 중') && !!document.querySelector('canvas')"), "Cold-start deep link did not restore device identity and join");
+    await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '귀환').click()");
+    await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Cold-start return failed");
+    console.log("PASS: native host overlay, shared stone hit, guest removal, single-instance deep-link forwarding, preview, return and IPC credential scope");
+    console.log("PASS: cold-start deep link with DPAPI device identity restoration");
+    return main;
+  } finally { guestSocket.disconnect(); }
+}
+
+async function launch(args = []) {
+  app = spawn(executable, args, { windowsHide: true, env: { ...process.env,
     WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
     WEBVIEW2_USER_DATA_FOLDER: profile } });
   app.on("error", (error) => { console.error(error); });
@@ -163,10 +251,11 @@ try {
   assert.equal(control("state").coversPrimary, true);
   const mainTarget = (await pages()).find((page) => page.type === "page" && !page.url.includes("overlay.html"));
   assert.ok(mainTarget, "Main WebView target not found");
-  const main = await connect(mainTarget);
+  let main = await connect(mainTarget);
   assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('overlay_reduced_effects').then(() => false, () => true)"), true,
     "Main must be denied the overlay-only command");
   if (localGame) await testLocalGame(main);
+  if (networkGame) main = await testNetwork(main);
   await overlay.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   await setPreference(false);
   if (development) {

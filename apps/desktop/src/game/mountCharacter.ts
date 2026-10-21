@@ -24,6 +24,7 @@ export interface MountedCharacterScene {
 export function mountCharacter(
   host: HTMLElement,
   onStatus: (status: "loading" | "ready" | "error") => void,
+  target: "overlay" | "preview" = "overlay",
 ): MountedCharacterScene {
   const app = new Application();
   let disposed = false;
@@ -81,7 +82,7 @@ export function mountCharacter(
     if (!disposed) {
       console.error("오버레이 캐릭터 렌더링 실패", error);
       onStatus("error");
-      void reportRendererFailure().catch((failure: unknown) => {
+      if (target === "overlay") void reportRendererFailure().catch((failure: unknown) => {
         console.error("오버레이 렌더 오류 보고 실패", failure);
       });
     }
@@ -300,7 +301,7 @@ export function mountCharacter(
       stopPreferences = watchReducedEffects((reduced) => {
         reducedEffects = reduced;
         syncMotion();
-      }, fail);
+      }, fail, target);
       if (ready && !disposed && !failed) onStatus("ready");
     } catch (error) {
       fail(error);

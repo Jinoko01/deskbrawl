@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PlayerInput } from "@deskbrawl/game-core";
 import { localAvailable, localGameSupported, sendLocalCommand, watchLocalPlay, watchLocalReset } from "../native/localGame";
 import type { LocalCommand } from "../native/localGame";
@@ -10,7 +10,9 @@ import type { Controls } from "./keyMap";
 
 const zero = { x: 0, y: 0 } as const;
 
-export function useLocalControls() {
+export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
+  const commandSink = useRef(onCommand);
+  useLayoutEffect(() => { commandSink.current = onCommand; }, [onCommand]);
   const region = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -41,7 +43,7 @@ export function useLocalControls() {
 
     function enqueue(kind: LocalCommand["kind"], movement: PlayerInput["movement"] = zero, action?: LocalCommand["action"], restore = false): Promise<void> {
       const command: LocalCommand = { kind, seq: ++sequence, movement, ...(action ? { action } : {}), ...(restore ? { restore } : {}) };
-      const result = queue.then(() => sendLocalCommand(command));
+      const result = queue.then(async () => { await sendLocalCommand(command); commandSink.current?.(command); });
       queue = result.catch(() => {});
       return result;
     }
@@ -86,7 +88,7 @@ export function useLocalControls() {
         active = true;
         setBusy(false);
         setPlaying(true);
-        region.current?.focus();
+        region.current?.focus({ preventScroll: true });
       }).catch((cause: unknown) => {
         if (!live || current !== revision) return;
         setError(`플레이 시작 실패: ${String(cause)}`);
