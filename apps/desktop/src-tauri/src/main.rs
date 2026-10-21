@@ -8,6 +8,10 @@ mod overlay;
 
 fn main() -> tauri::Result<()> {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            overlay::overlay_reduced_effects,
+            overlay::overlay_renderer_failed
+        ])
         .setup(|app| {
             overlay::setup(app)?;
             Ok(())

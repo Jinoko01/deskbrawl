@@ -1,18 +1,19 @@
 use std::sync::{
-    atomic::{AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
     mpsc, Mutex,
 };
 use std::time::Duration;
 
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
-    App, AppHandle, Manager, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
+    App, AppHandle, Emitter, Manager, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
 };
 
 const SHOW: &str = "overlay-show";
 const HIDE: &str = "overlay-hide";
 const EXIT: &str = "app-exit";
+const REDUCE_EFFECTS: &str = "reduce-effects";
 const VISIBLE: u8 = 0;
 const HIDDEN: u8 = 1;
 const SUSPENDED: u8 = 2;
@@ -20,6 +21,11 @@ const EXITING: u8 = 3;
 
 struct Control {
     intent: AtomicU8,
+    adjusting_bounds: AtomicBool,
+    recreate_required: AtomicBool,
+    preferences_loaded: AtomicBool,
+    reduced_effects: AtomicBool,
+    effects_menu: CheckMenuItem<tauri::Wry>,
     operation: Mutex<()>,
     status: MenuItem<tauri::Wry>,
 }
@@ -29,7 +35,17 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, SHOW, "오버레이 표시", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, HIDE, "오버레이 숨김", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, EXIT, "종료", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&status, &show, &hide, &exit])?;
+    // Load the saved preference on the worker, never block the UI on filesystem I/O.
+    let reduced_effects = true;
+    let effects_menu = CheckMenuItem::with_id(
+        app,
+        REDUCE_EFFECTS,
+        "효과 감소",
+        true,
+        reduced_effects,
+        None::<&str>,
+    )?;
+    let menu = Menu::with_items(app, &[&status, &show, &hide, &effects_menu, &exit])?;
     let icon = app
         .default_window_icon()
         .ok_or_else(|| std::io::Error::other("Missing tray icon"))?
@@ -43,6 +59,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             SHOW => dispatch(app, VISIBLE),
             HIDE => dispatch(app, HIDDEN),
+            REDUCE_EFFECTS => toggle_effects(app),
             EXIT => {
                 shutdown(app);
                 app.exit(0);
@@ -53,10 +70,119 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
 
     app.manage(Control {
         intent: AtomicU8::new(HIDDEN),
+        adjusting_bounds: AtomicBool::new(false),
+        recreate_required: AtomicBool::new(false),
+        preferences_loaded: AtomicBool::new(false),
+        reduced_effects: AtomicBool::new(reduced_effects),
+        effects_menu,
         operation: Mutex::new(()),
         status,
     });
     dispatch(app.handle(), VISIBLE);
+    Ok(())
+}
+
+fn read_reduced_effects(app: &AppHandle) -> std::io::Result<bool> {
+    let path = app
+        .path()
+        .app_config_dir()
+        .map_err(std::io::Error::other)?
+        .join("reduced-effects");
+    match std::fs::read_to_string(path) {
+        Ok(value) => match value.trim() {
+            "1" => Ok(true),
+            "0" => Ok(false),
+            _ => Err(std::io::Error::other("Invalid effects preference")),
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+fn toggle_effects(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let control = app.state::<Control>();
+        let Ok(_operation) = control.operation.lock() else {
+            app.exit(1);
+            return;
+        };
+        if let Err(error) = load_preferences(&app) {
+            handle(&app, Err(error));
+            return;
+        }
+        let value = !control.reduced_effects.load(Ordering::SeqCst);
+        let result = (|| -> tauri::Result<()> {
+            let directory = app.path().app_config_dir()?;
+            std::fs::create_dir_all(&directory)?;
+            std::fs::write(
+                directory.join("reduced-effects"),
+                if value { "1\n" } else { "0\n" },
+            )?;
+            control.reduced_effects.store(value, Ordering::SeqCst);
+            control.effects_menu.set_checked(value)?;
+            if let Some(window) = app.get_webview_window("overlay") {
+                window.emit("overlay-effects-changed", value)?;
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            // muda toggles native checkbox state before this callback runs.
+            if let Err(error) = control
+                .effects_menu
+                .set_checked(control.reduced_effects.load(Ordering::SeqCst))
+            {
+                eprintln!("Could not restore effects menu: {error}");
+            }
+        }
+        handle(&app, result);
+    });
+}
+
+fn load_preferences(app: &AppHandle) -> tauri::Result<()> {
+    let control = app.state::<Control>();
+    if !control.preferences_loaded.swap(true, Ordering::SeqCst) {
+        let value = match read_reduced_effects(app) {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Could not read effects preference: {error}");
+                true
+            }
+        };
+        control.reduced_effects.store(value, Ordering::SeqCst);
+        control.effects_menu.set_checked(value)?;
+    }
+    Ok(())
+}
+
+fn require_overlay(window: &WebviewWindow) -> Result<(), &'static str> {
+    if window.label() == "overlay" {
+        Ok(())
+    } else {
+        Err("OVERLAY_ONLY")
+    }
+}
+
+#[tauri::command]
+pub fn overlay_reduced_effects(window: WebviewWindow) -> Result<bool, &'static str> {
+    require_overlay(&window)?;
+    Ok(window
+        .app_handle()
+        .state::<Control>()
+        .reduced_effects
+        .load(Ordering::SeqCst))
+}
+
+#[tauri::command]
+pub fn overlay_renderer_failed(window: WebviewWindow) -> Result<(), &'static str> {
+    require_overlay(&window)?;
+    // A retry must recreate the failed renderer, rather than just reveal its DOM.
+    let app = window.app_handle().clone();
+    app.state::<Control>()
+        .recreate_required
+        .store(true, Ordering::SeqCst);
+    dispatch(&app, SUSPENDED);
+    window.hide().map_err(|_| "OVERLAY_HIDE_FAILED")?;
     Ok(())
 }
 
@@ -69,7 +195,68 @@ fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .find(|config| config.label == "overlay")
         .ok_or_else(|| std::io::Error::other("Missing overlay configuration"))?;
 
-    WebviewWindowBuilder::from_config(app, config)?.build()
+    let window = WebviewWindowBuilder::from_config(app, config)?.build()?;
+    #[cfg(windows)]
+    on_window_thread(&window, |window| {
+        crate::native_windows::watch_display(&window.as_ref().window())
+    })?;
+    Ok(window)
+}
+
+fn fit_primary_monitor(window: &WebviewWindow) -> tauri::Result<()> {
+    let monitor = window
+        .primary_monitor()?
+        .ok_or_else(|| std::io::Error::other("Primary monitor is unavailable"))?;
+    validate_monitor(
+        monitor.size().width,
+        monitor.size().height,
+        monitor.scale_factor(),
+    )?;
+    let position = *monitor.position();
+    let size = *monitor.size();
+    on_window_thread(window, move |window| {
+        let control = window.app_handle().state::<Control>();
+        control.adjusting_bounds.store(true, Ordering::SeqCst);
+        #[cfg(windows)]
+        let result = crate::native_windows::place(&window.as_ref().window(), position, size);
+        #[cfg(not(windows))]
+        let result = window
+            .set_position(position)
+            .and_then(|()| window.set_size(size));
+        control.adjusting_bounds.store(false, Ordering::SeqCst);
+        result
+    })
+}
+
+fn validate_monitor(width: u32, height: u32, scale: f64) -> tauri::Result<()> {
+    if width == 0
+        || height == 0
+        || width > i32::MAX as u32
+        || height > i32::MAX as u32
+        || !scale.is_finite()
+        || scale <= 0.0
+    {
+        return Err(std::io::Error::other("Invalid primary monitor geometry or DPI").into());
+    }
+    Ok(())
+}
+
+// Configuration changes never trigger a z-order/focus reclaim loop. A tray show
+// fits the hidden webview against a fresh primary-monitor measurement.
+pub fn display_changed(app: &AppHandle) -> bool {
+    let Some(control) = app.try_state::<Control>() else {
+        return false;
+    };
+    if control.adjusting_bounds.load(Ordering::SeqCst) {
+        return false;
+    }
+    // WebView2 can retain the previous monitor rasterization scale after a DPI
+    // transition. Recreating on explicit recovery refreshes both HWND and WebView.
+    control.recreate_required.store(true, Ordering::SeqCst);
+    if control.intent.load(Ordering::SeqCst) == VISIBLE {
+        dispatch(app, SUSPENDED);
+    }
+    true
 }
 
 // WebView2 creation and synchronous getters must not block the Windows event loop.
@@ -100,6 +287,22 @@ fn dispatch(app: &AppHandle, intent: u8) {
 }
 
 fn request_show(app: &AppHandle) -> tauri::Result<()> {
+    load_preferences(app)?;
+    let control = app.state::<Control>();
+    if control.recreate_required.load(Ordering::SeqCst) {
+        if let Some(window) = app.get_webview_window("overlay") {
+            conceal(&window)?;
+            SafeWindow::destroy(&window)?;
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while app.get_webview_window("overlay").is_some() {
+                if std::time::Instant::now() >= deadline {
+                    return Err(std::io::Error::other("Stale renderer did not close").into());
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        control.recreate_required.store(false, Ordering::SeqCst);
+    }
     let window = match app.get_webview_window("overlay") {
         Some(window) => window,
         None => create(app)?,
@@ -108,6 +311,7 @@ fn request_show(app: &AppHandle) -> tauri::Result<()> {
     if app.state::<Control>().intent.load(Ordering::SeqCst) != VISIBLE {
         return request_hide(app);
     }
+    fit_primary_monitor(&window)?;
     show_safely(&window)?;
     if app.state::<Control>().intent.load(Ordering::SeqCst) != VISIBLE {
         return request_hide(app);
@@ -174,6 +378,9 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         WindowEvent::Destroyed => {
             let app = window.app_handle();
             let control = app.state::<Control>();
+            if control.recreate_required.load(Ordering::SeqCst) {
+                return;
+            }
             if control
                 .intent
                 .compare_exchange(VISIBLE, HIDDEN, Ordering::SeqCst, Ordering::SeqCst)
@@ -206,7 +413,7 @@ impl SafeWindow for WebviewWindow {
             window.set_focusable(false)?;
             window.set_ignore_cursor_events(true)?;
             #[cfg(windows)]
-            crate::native_windows::verify(&window.as_ref().window())?;
+            crate::native_windows::prepare(&window.as_ref().window())?;
             Ok(())
         })
     }
@@ -249,7 +456,7 @@ impl SafeWindow for WebviewWindow {
 
 fn on_window_thread(
     window: &WebviewWindow,
-    action: fn(&WebviewWindow) -> tauri::Result<()>,
+    action: impl FnOnce(&WebviewWindow) -> tauri::Result<()> + Send + 'static,
 ) -> tauri::Result<()> {
     let (sender, receiver) = mpsc::sync_channel(1);
     let target = window.clone();
@@ -281,6 +488,19 @@ fn conceal(window: &impl SafeWindow) -> tauri::Result<()> {
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn monitor_geometry_rejects_unusable_dimensions_and_dpi() {
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            assert!(validate_monitor(3840, 2160, scale).is_ok());
+        }
+        assert!(validate_monitor(0, 1080, 1.0).is_err());
+        assert!(validate_monitor(1920, 0, 1.0).is_err());
+        assert!(validate_monitor(u32::MAX, 1080, 1.0).is_err());
+        for scale in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(validate_monitor(1920, 1080, scale).is_err());
+        }
+    }
 
     #[derive(Default)]
     struct FakeWindow {

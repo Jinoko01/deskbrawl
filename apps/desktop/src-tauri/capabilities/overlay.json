@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "overlay",
-  "description": "표시 전용 오버레이. 창 제어는 Rust가 담당하며 웹뷰에 네이티브 명령 권한을 부여하지 않습니다.",
+  "description": "표시 전용 오버레이의 효과 설정 조회·수신과 렌더 오류 보고만 허용합니다. 창 제어는 Rust가 담당합니다.",
   "windows": ["overlay"],
-  "permissions": []
+  "permissions": ["allow-overlay-reduced-effects", "allow-overlay-renderer-failed", "core:event:allow-listen", "core:event:allow-unlisten"]
 }
