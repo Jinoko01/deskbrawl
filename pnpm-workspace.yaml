@@ -1,5 +1,7 @@
 packages:
   - apps/desktop
+  - apps/server
   - packages/game-core
+  - packages/protocol
 patchedDependencies:
   pixi.js@8.22.0: patches/pixi.js@8.22.0.patch

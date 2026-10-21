@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model DeviceIdentity {
+  id           String    @id @default(uuid()) @db.Uuid
+  nickname     String    @db.VarChar(24)
+  secretHash   String    @db.VarChar(64)
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+  room         HostRoom?
+}
+
+model HostRoom {
+  id              String         @id @default(uuid()) @db.Uuid
+  ownerDeviceId   String         @unique @db.Uuid
+  owner           DeviceIdentity @relation(fields: [ownerDeviceId], references: [id])
+  maxParticipants Int            @default(2)
+  updatedAt       DateTime       @updatedAt
+  invite          InviteToken?
+}
+
+model InviteToken {
+  hostRoomId String   @id @db.Uuid
+  room       HostRoom @relation(fields: [hostRoomId], references: [id])
+  tokenHash  String   @unique @db.VarChar(64)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+}

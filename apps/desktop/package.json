@@ -11,14 +11,19 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "network:config": "node scripts/configure-network.mjs"
   },
   "dependencies": {
     "@deskbrawl/game-core": "workspace:*",
+    "@deskbrawl/protocol": "workspace:*",
+    "@tanstack/react-query": "5.104.5",
     "@tauri-apps/api": "2.12.4",
+    "@tauri-apps/plugin-deep-link": "2.6.2",
     "pixi.js": "8.22.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "socket.io-client": "4.8.4"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

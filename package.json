@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "pnpm --filter @deskbrawl/desktop tauri dev",
     "dev:web": "pnpm --filter @deskbrawl/desktop dev",
+    "dev:server": "pnpm --filter @deskbrawl/server dev",
     "build": "pnpm --filter @deskbrawl/desktop tauri build",
     "build:web": "pnpm --filter @deskbrawl/desktop build",
     "lint": "pnpm -r --if-present lint",
