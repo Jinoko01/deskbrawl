@@ -2,11 +2,21 @@
 
 use tauri::{Manager, WindowEvent};
 
+#[cfg(windows)]
+mod native_windows;
+mod overlay;
+
 fn main() -> tauri::Result<()> {
     tauri::Builder::default()
+        .setup(|app| {
+            overlay::setup(app)?;
+            Ok(())
+        })
         .on_window_event(|window, event| {
+            overlay::on_window_event(window, event);
             // A hidden overlay must not keep the app alive after main is closed.
             if window.label() == "main" && matches!(event, WindowEvent::Destroyed) {
+                overlay::shutdown(window.app_handle());
                 window.app_handle().exit(0);
             }
         })

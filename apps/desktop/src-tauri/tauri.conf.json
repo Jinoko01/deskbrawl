@@ -20,6 +20,7 @@
       },
       {
         "label": "overlay",
+        "create": false,
         "title": "DeskBrawl Overlay",
         "url": "overlay.html",
         "visible": false,
