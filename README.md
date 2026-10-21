@@ -1,7 +1,7 @@
 # DeskBrawl
 
 Tauri 2 + React + TypeScript + Vite 기반 데스크톱 게임 프로젝트입니다.
-현재는 M0의 **창 분리·입력 통과·포커스 안전장치·트레이 제어·효과 감소·모니터 대응**과 M1의 **로컬 이동·근접 공격·돌 투척·피격, WORK/PLAY 입력 분리와 조작키 설정**을 구현했습니다.
+현재는 M0의 **창·입력 안전장치**, M1의 **로컬 전투·WORK/PLAY·조작키 설정**과 M2의 **NestJS/PostgreSQL 서버·링크 방문·2인 동기화·방문 미리보기**를 구현했습니다. M2의 로컬 실행과 실제 PC 두 대 검증 범위는 [M2 개발 안내](docs/m2-development.md)와 [검증 기록](docs/m2-validation.md)을 참고합니다.
 `main`은 기존 React 화면을 표시하고, `overlay`는 별도 `overlay.html`을 사용하는 투명 최상위 창입니다. 숨김 상태로 생성한 뒤 Rust에서 클릭 통과·포커스 비활성 설정이 성공해야 표시합니다.
 `main`을 닫으면 숨겨진 오버레이까지 앱과 함께 종료됩니다. 오버레이만 닫으면 `main`은 유지됩니다.
 트레이에서 상태 확인·플레이 시작·오버레이 표시·숨김·종료가 가능합니다. 표시할 때마다 안전 설정을 다시 적용하며, 예상하지 않은 포커스 획득이나 설정 실패 시 숨깁니다. 숨김 실패 시 창 제거를 시도하고, 그것도 실패하면 앱을 종료합니다. 트레이의 표시 메뉴로 중지되거나 닫힌 오버레이를 복구할 수 있습니다.
@@ -13,7 +13,7 @@ Windows에서는 네이티브 클릭 통과·비활성 스타일을 확인하고
 어느 창에서든 **Ctrl+Shift+G**(기본값)를 누르면 메인 창이 앞으로 오면서 PLAY가 시작되고, 방향키로 모찌를 이동하고 Z로 근접 공격, X로 돌을 던집니다. 다시 단축키 또는 Esc를 누르면 WORK로 돌아가며 단축키 직전의 작업 창으로 포커스를 돌려줍니다. 메인 창 포커스 상실·최소화·숨김·오버레이 숨김에도 입력을 중단하며, 투명 오버레이는 포커스와 입력을 받지 않습니다. Ctrl·Alt와 함께 누른 키는 게임 입력으로 쓰지 않습니다. 로컬 민트는 공격 판정을 확인할 수 있는 상대 캐릭터입니다.
 
 메인 창의 **조작키 설정**에서 이동·공격·투척 키와 전환 단축키를 바꿀 수 있습니다. 중복 키, Esc, 수정키가 부족한 단축키는 저장 전에 안내하고, 다른 앱이 쓰는 단축키는 거부한 뒤 이전 단축키를 유지합니다. 설정은 앱 설정 디렉터리의 `controls` 파일에 저장되어 재실행 후에도 유지됩니다. 시작 시 단축키를 등록하지 못하면 메인 창에서 안내하며 트레이의 **플레이 시작**으로 대신할 수 있습니다. 효과 감소에서는 먼지 이펙트를 숨기고 게임은 그대로 진행합니다.
-M1의 순수 게임 코어는 `packages/game-core`에 있습니다. 고정 tick 이동·경계, 근접 공격·돌의 연속 충돌 판정, 넉백·기절·면역·효과 수명을 결정합니다. API와 검증 범위는 [게임 코어 안내](packages/game-core/README.md)를 참고합니다. 서버와 멀티플레이는 후속 단계입니다.
+순수 게임 코어는 `packages/game-core`에 있습니다. 고정 tick 이동·경계, 근접 공격·돌의 연속 충돌 판정, 넉백·기절·면역·효과 수명을 결정합니다. M2 서버도 같은 코어를 사용하고 최종 판정은 서버에서 실행합니다. API와 검증 범위는 [게임 코어 안내](packages/game-core/README.md)를 참고합니다.
 이 PC(Windows 11)에서 개발 앱 실행·한국어 표시·최대화/복원, 배포용 `deskbrawl.exe` 실행·종료, NSIS 설치 파일 생성과 설치·실행·제거까지 확인했습니다.
 Windows 11 실기기 결과와 예외는 [M0 검증 기록](docs/m0-windows11-validation.md)에 정리합니다. Windows 10 검증은 사용자 요청으로 이번 범위에서 제외했으며, 지원을 확정하지 않습니다.
 
@@ -31,6 +31,7 @@ Rust와 Visual C++ 도구는 JS 의존성 설치만으로 설치되지 않습니
 
 ```powershell
 pnpm install
+pnpm --filter @deskbrawl/server db:generate
 pnpm dev
 ```
 
@@ -56,8 +57,8 @@ cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 pnpm build
 ```
 
-- `pnpm check`: desktop과 game-core의 ESLint·strict TypeScript 검사, 웹 프로덕션 빌드.
-- `pnpm test`: game-core 단위 테스트와 desktop의 workspace 공개 진입점 연동 테스트를 한 번 실행합니다. `pnpm test:watch`는 두 패키지의 변경을 감시합니다. 테스트가 없으면 기본 실행은 실패합니다.
+- `pnpm check`: desktop·server·game-core·protocol의 ESLint·strict TypeScript 검사와 웹 프로덕션 빌드. 서버 타입 검사 전 Prisma Client 생성이 필요합니다.
+- `pnpm test`: game-core·protocol·desktop의 Vitest와 서버의 Jest 단위 테스트를 한 번 실행합니다. 실제 PostgreSQL/Socket.IO 통합 검증은 [M2 안내](docs/m2-development.md)의 별도 명령을 사용합니다.
 - Vitest는 Node 환경에서 실행하며 `test`, `expect` 등을 `vitest`에서 명시적으로 import합니다. React DOM 테스트 환경과 도구는 아직 추가하지 않았습니다.
 - `pnpm build`: 웹 빌드, Rust 컴파일, 로컬 Windows NSIS 설치 파일 생성. 서명·게시 작업은 하지 않습니다.
 - 설치 파일 위치: `apps/desktop/src-tauri/target/release/bundle/nsis/`.
@@ -115,6 +116,8 @@ apps/desktop/
   src-tauri/         Rust 진입점, 창 설정, 최소 capability
 packages/game-assets/ 기존 캐릭터·무기·돌·효과 에셋
 packages/game-core/   런타임 의존성 없는 순수 TypeScript 게임 상태·고정 tick 로직
+packages/protocol/    공유 Zod 스키마·REST/Socket.IO 계약
+apps/server/          NestJS·Prisma·서버 권위 시뮬레이션·통합 테스트
 docs/                기획·구현 계획·개발 가이드
 ```
 

@@ -404,13 +404,15 @@ deskbrawl/
 ### M2. 링크 기반 방문과 2인 동기화
 
 **할 일**
-- [ ] NestJS 프로젝트 초기화, `RoomsModule`·`InvitesModule`·`VisitsModule`·`SimulationModule` 생성
-- [ ] Nest REST API + Prisma/PostgreSQL로 기기/룸/초대 토큰 생성·해시 저장·재발급
+- [x] NestJS 프로젝트 초기화, `RoomsModule`·`InvitesModule`·`VisitsModule`·`SimulationModule` 생성
+- [x] Nest REST API + Prisma/PostgreSQL로 기기/룸/초대 토큰 생성·해시 저장·재발급
 - [ ] Tauri 딥링크 + 단일 인스턴스 동작 검증
-- [ ] Nest `VisitsGateway`에 `visit:join`, `visit:leave`, `world:snapshot`와 `player:input` 연결
-- [ ] 호스트 **최상위 투명 오버레이**와 방문자 미리보기의 월드 좌표·상태 동기화
+- [x] Nest `VisitsGateway`에 `visit:join`, `visit:leave`, `world:snapshot`와 `player:input` 연결
+- [x] 호스트 **최상위 투명 오버레이**와 방문자 미리보기의 월드 좌표·상태 동기화
 - [ ] Nest `SimulationEngine` 고정 tick + 공유 `game-core` 기반 서버 권위 공격·돌 판정 및 2 PC 동기화
-- [ ] 정원 초과·링크 무효·호스트 오프라인 안내
+- [x] 정원 초과·링크 무효·호스트 오프라인 안내
+
+2026-10-21: M2 서버·공유 프로토콜·클라이언트 방문 경로를 구현하고 실제 PostgreSQL/Socket.IO와 Windows WebView에서 로컬 다중 클라이언트 검증을 수행했다. 고정 tick과 서버 권위 판정은 구현했지만 실제 PC 두 대의 최종 동기화 인수 검증은 남아 있다. 딥링크의 실행 중 전달·꺼진 앱 시작은 실행 파일 URI 인자로 확인했으며 NSIS 설치 후 브라우저 클릭에 의한 scheme 등록 확인은 남아 있어 해당 체크를 유지한다. [실행 안내](m2-development.md)와 [검증 기록](m2-validation.md)을 따른다.
 
 **완료 기준:** A가 B의 링크를 클릭해 수락 없이 즉시 입장하고, A가 던진 돌에 B의 캐릭터가 맞으면 두 화면에서 동일한 넉백·기절이 보인다. 실제 화면 정보는 전송하지 않는다.
 
