@@ -13,6 +13,7 @@ use tauri::{
 const SHOW: &str = "overlay-show";
 const HIDE: &str = "overlay-hide";
 const EXIT: &str = "app-exit";
+const PLAY: &str = "local-play";
 const REDUCE_EFFECTS: &str = "reduce-effects";
 const VISIBLE: u8 = 0;
 const HIDDEN: u8 = 1;
@@ -35,6 +36,8 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, SHOW, "오버레이 표시", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, HIDE, "오버레이 숨김", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, EXIT, "종료", true, None::<&str>)?;
+    // Opening the tray menu already takes focus from main, so this item only starts PLAY.
+    let play = MenuItem::with_id(app, PLAY, "플레이 시작", cfg!(windows), None::<&str>)?;
     // Load the saved preference on the worker, never block the UI on filesystem I/O.
     let reduced_effects = true;
     let effects_menu = CheckMenuItem::with_id(
@@ -45,7 +48,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         reduced_effects,
         None::<&str>,
     )?;
-    let menu = Menu::with_items(app, &[&status, &show, &hide, &effects_menu, &exit])?;
+    let menu = Menu::with_items(app, &[&status, &play, &show, &hide, &effects_menu, &exit])?;
     let icon = app
         .default_window_icon()
         .ok_or_else(|| std::io::Error::other("Missing tray icon"))?
@@ -60,6 +63,18 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
             SHOW => dispatch(app, VISIBLE),
             HIDE => dispatch(app, HIDDEN),
             REDUCE_EFFECTS => toggle_effects(app),
+            #[cfg(windows)]
+            PLAY => {
+                let result = app
+                    .get_webview_window("main")
+                    .ok_or_else(|| std::io::Error::other("Missing main window").into())
+                    .and_then(|main| {
+                        crate::native_windows::toggle_play_from(&main.as_ref().window())
+                    });
+                if let Err(error) = result {
+                    eprintln!("Tray play failed: {error}");
+                }
+            }
             EXIT => {
                 shutdown(app);
                 app.exit(0);

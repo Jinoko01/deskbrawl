@@ -2,6 +2,7 @@
 
 use tauri::{Manager, WindowEvent};
 
+mod controls;
 mod local_game;
 #[cfg(windows)]
 mod native_windows;
@@ -14,17 +15,19 @@ fn main() -> tauri::Result<()> {
             overlay::overlay_renderer_failed,
             local_game::local_available,
             local_game::local_control,
-            local_game::local_overlay_status
+            local_game::local_overlay_status,
+            controls::local_controls,
+            controls::local_set_controls
         ])
         .setup(|app| {
             app.manage(local_game::LocalSession::default());
-            // A shortcut owned by another app must not block the overlay itself.
+            app.manage(controls::ControlState::default());
             #[cfg(windows)]
             if let Some(main) = app.get_webview_window("main") {
-                if let Err(error) = native_windows::watch_play_hotkey(&main.as_ref().window()) {
-                    eprintln!("Ctrl+Shift+G registration failed: {error}");
-                }
+                native_windows::watch_play_hotkey(&main.as_ref().window())?;
             }
+            // Registration waits for the saved shortcut; a failure leaves the tray fallback.
+            controls::load(app.handle());
             overlay::setup(app)?;
             Ok(())
         })

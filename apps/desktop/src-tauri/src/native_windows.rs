@@ -10,8 +10,7 @@ const SW_MINIMIZE: i32 = 6;
 const SW_RESTORE: i32 = 9;
 const WM_HOTKEY: u32 = 0x0312;
 const PLAY_HOTKEY: i32 = 1;
-const PLAY_HOTKEY_MODIFIERS: u32 = 0x0002 | 0x0004 | 0x4000; // CONTROL | SHIFT | NOREPEAT
-const PLAY_HOTKEY_KEY: u32 = 0x47; // G
+const MOD_NOREPEAT: u32 = 0x4000;
 
 #[link(name = "user32")]
 unsafe extern "system" {
@@ -145,25 +144,40 @@ unsafe extern "system" fn display_proc(
     unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
 }
 
-// The only global shortcut. It is registered to main's HWND, so WM_HOTKEY arrives
-// on main's UI thread, and Windows grants this process foreground rights for it.
+// The only global shortcut is registered to main's HWND, so WM_HOTKEY arrives on
+// main's UI thread, and Windows grants this process foreground rights for it.
 pub fn watch_play_hotkey(window: &Window) -> tauri::Result<()> {
     let hwnd = window.hwnd()?.0;
     let data = Box::into_raw(Box::new(window.app_handle().clone()));
     // SAFETY: Installation runs on main's UI thread once. Ownership of data
     // transfers to the subclass on success and ends at WM_NCDESTROY.
+    if unsafe { SetWindowSubclass(hwnd, hotkey_proc, 2, data as usize) } == 0 {
+        unsafe { drop(Box::from_raw(data)) };
+        return Err(std::io::Error::last_os_error().into());
+    }
+    Ok(())
+}
+
+// Replaces the toggle shortcut. On failure no shortcut stays registered; the
+// caller decides whether to restore the previous one. Must run on main's UI thread.
+pub fn register_play_hotkey(window: &Window, modifiers: u32, key: u32) -> tauri::Result<()> {
+    let hwnd = window.hwnd()?.0;
+    // SAFETY: hwnd is main's live HWND and this is its creating thread, as
+    // RegisterHotKey requires. Unregistering an absent id is harmless.
     unsafe {
-        if SetWindowSubclass(hwnd, hotkey_proc, 2, data as usize) == 0 {
-            drop(Box::from_raw(data));
+        UnregisterHotKey(hwnd, PLAY_HOTKEY);
+        if RegisterHotKey(hwnd, PLAY_HOTKEY, modifiers | MOD_NOREPEAT, key) == 0 {
             return Err(std::io::Error::last_os_error().into());
         }
-        if RegisterHotKey(hwnd, PLAY_HOTKEY, PLAY_HOTKEY_MODIFIERS, PLAY_HOTKEY_KEY) == 0 {
-            let error = std::io::Error::last_os_error();
-            RemoveWindowSubclass(hwnd, hotkey_proc, 2);
-            drop(Box::from_raw(data));
-            return Err(error.into());
-        }
     }
+    Ok(())
+}
+
+// The tray fallback for when the shortcut is unavailable. Must run on main's UI thread.
+pub fn toggle_play_from(window: &Window) -> tauri::Result<()> {
+    let hwnd = window.hwnd()?.0;
+    // SAFETY: hwnd is main's live HWND and this runs on its UI thread.
+    unsafe { toggle_play(window.app_handle(), hwnd) };
     Ok(())
 }
 
@@ -235,6 +249,13 @@ unsafe fn return_focus_to(main: *mut c_void, previous: isize) {
         // Minimizing hands focus to the next window instead of keeping game input.
         unsafe { ShowWindow(main, SW_MINIMIZE) };
     }
+}
+
+// A minimized window can remain the foreground window, yet the user cannot play in it.
+pub fn is_foreground(window: &Window) -> tauri::Result<bool> {
+    let hwnd = window.hwnd()?.0;
+    // SAFETY: hwnd is borrowed from the live Tauri window; both calls only read state.
+    Ok(unsafe { GetForegroundWindow() == hwnd && IsIconic(hwnd) == 0 })
 }
 
 pub fn return_focus(window: &Window, previous: isize) -> tauri::Result<()> {

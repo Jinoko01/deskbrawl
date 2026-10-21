@@ -6,6 +6,8 @@ fn main() {
             "local_available",
             "local_control",
             "local_overlay_status",
+            "local_controls",
+            "local_set_controls",
         ]),
     ))
     .unwrap_or_else(|error| {

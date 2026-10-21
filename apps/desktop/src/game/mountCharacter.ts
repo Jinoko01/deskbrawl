@@ -46,6 +46,7 @@ export function mountCharacter(
   let reducedEffects = true;
   let stopPreferences: (() => void) | undefined;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const decorative = new WeakSet<AnimatedSprite>();
 
   function release() {
     ready = false;
@@ -105,6 +106,8 @@ export function mountCharacter(
   function reduced(): boolean { return reducedEffects || reducedMotion.matches; }
 
   function syncSprite(sprite: AnimatedSprite): void {
+    // 효과 감소에서는 판정과 무관한 먼지만 숨긴다. 돌·피격·기절 표시는 게임 상태라서 유지한다.
+    sprite.visible = !(decorative.has(sprite) && reduced());
     if (document.hidden) sprite.stop();
     else if (reduced()) sprite.gotoAndStop(0);
     else if (sprite.loop || sprite.currentFrame < sprite.totalFrames - 1) sprite.play();
@@ -171,8 +174,11 @@ export function mountCharacter(
     const effectIds = new Set((snapshot.effects ?? []).map((effect) => effect.id));
     removeMissing(effects, effectIds);
     for (const effect of snapshot.effects ?? []) {
-      if (!effects.has(effect.id)) effects.set(effect.id,
-        makeSprite(effect.kind === "impact" ? impactFrames : dustFrames, `effect:${effect.id}`, false, 75));
+      if (!effects.has(effect.id)) {
+        const sprite = makeSprite(effect.kind === "impact" ? impactFrames : dustFrames, `effect:${effect.id}`, false, 75);
+        if (effect.kind === "dust") { decorative.add(sprite); syncSprite(sprite); }
+        effects.set(effect.id, sprite);
+      }
     }
     const names = snapshot.characters.map((frame) => frame.skin === "mochi" ? "모찌" : "민트");
     app.canvas.setAttribute("aria-label", names.length === 0 ? "표시된 캐릭터 없음" : `${names.join("와 ")} 캐릭터`);

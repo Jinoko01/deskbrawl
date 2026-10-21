@@ -7,6 +7,8 @@ export interface LocalCommand {
   readonly seq: number;
   readonly movement: PlayerInput["movement"];
   readonly action?: PlayerAction;
+  // WORK에만 붙인다. 사용자가 Esc로 끝낼 때만 이전 작업 창으로 포커스를 돌려준다.
+  readonly restore?: true;
 }
 
 export function localGameSupported(): boolean { return isTauri(); }

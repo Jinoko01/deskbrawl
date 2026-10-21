@@ -121,7 +121,20 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
             return Err("INVALID_LOCAL_INPUT");
         }
     }
+    // Only an explicit Esc asks to return to the work window. Other WORK exits
+    // (focus loss, resets) must never move focus.
+    let restore = match fields.get("restore") {
+        None => false,
+        Some(value) if kind == "work" && value.as_bool() == Some(true) => true,
+        Some(_) => return Err("INVALID_LOCAL_INPUT"),
+    };
     let app = window.app_handle();
+    // Tauri's cached focus flag can lag the WebView right after the shortcut
+    // activates main, so Windows asks the OS for the real foreground window.
+    #[cfg(windows)]
+    let focused = crate::native_windows::is_foreground(&window.as_ref().window())
+        .map_err(|_| "LOCAL_FOCUS_FAILED")?;
+    #[cfg(not(windows))]
     let focused = window.is_focused().map_err(|_| "LOCAL_FOCUS_FAILED")?;
     if kind != "work" {
         if !focused {
@@ -141,8 +154,7 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
             .store(true, Ordering::SeqCst),
         "work" => {
             let previous = take_previous(app);
-            // Esc returns to the work window; a WORK caused by focus loss must not move focus.
-            if focused && previous != 0 {
+            if restore && focused && previous != 0 {
                 #[cfg(windows)]
                 crate::native_windows::return_focus(&window.as_ref().window(), previous)
                     .map_err(|_| "LOCAL_FOCUS_FAILED")?;
@@ -153,27 +165,29 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
     Ok(())
 }
 
+// Ends PLAY because main can no longer receive game keys: input stops in the
+// overlay and main's webview returns to WORK.
+pub fn end_play(app: &AppHandle) {
+    let session = app.state::<LocalSession>();
+    session.playing.store(false, Ordering::SeqCst);
+    if let Err(error) = app.emit_to("overlay", "local-input", "stop") {
+        eprintln!("Local stop failed: {error}");
+    }
+    if let Err(error) = app.emit_to("main", "local-reset", session.ready.load(Ordering::SeqCst)) {
+        eprintln!("Local mode reset failed: {error}");
+    }
+}
+
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
-    if window.label() == "main" && matches!(event, WindowEvent::Focused(false)) {
-        window
-            .app_handle()
-            .state::<LocalSession>()
-            .playing
-            .store(false, Ordering::SeqCst);
-        if let Err(error) = window.emit_to("overlay", "local-input", "stop") {
-            eprintln!("Local stop failed: {error}");
-        }
-        if let Err(error) = window.emit_to(
-            "main",
-            "local-reset",
-            window
-                .app_handle()
-                .state::<LocalSession>()
-                .ready
-                .load(Ordering::SeqCst),
-        ) {
-            eprintln!("Local mode reset failed: {error}");
-        }
+    // While Windows activates main, focus can pass through the top-level window into
+    // the WebView child, so Tauri reports Focused(false) although main stays in front.
+    #[cfg(windows)]
+    let lost_focus = matches!(event, WindowEvent::Focused(false))
+        && !crate::native_windows::is_foreground(window).unwrap_or(false);
+    #[cfg(not(windows))]
+    let lost_focus = matches!(event, WindowEvent::Focused(false));
+    if window.label() == "main" && lost_focus {
+        end_play(window.app_handle());
     }
     if window.label() == "overlay" && matches!(event, WindowEvent::Destroyed) {
         window
