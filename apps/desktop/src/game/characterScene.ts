@@ -1,4 +1,4 @@
-import type { PlayerState, WorldBounds } from "@deskbrawl/game-core";
+import type { PlayerState, ProjectileState, WorldBounds, WorldEffect } from "@deskbrawl/game-core";
 
 export type CharacterSkin = "mochi" | "mint";
 
@@ -15,6 +15,8 @@ export interface CharacterFrame extends Pick<PlayerState, "id" | "position" | "f
 export interface CharacterSceneSnapshot {
   readonly bounds: WorldBounds;
   readonly characters: readonly CharacterFrame[];
+  readonly projectiles?: readonly ProjectileState[];
+  readonly effects?: readonly WorldEffect[];
 }
 
 // M0의 표시 크기를 유지한다. 제품의 최종 캐릭터 크기·충돌 반지름을 정하는 값은 아니다.

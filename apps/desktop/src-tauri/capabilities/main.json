@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "기본 창. 추가 네이티브 명령 권한은 아직 사용하지 않습니다.",
+  "description": "기본 조작 창의 로컬 입력 전달·준비 상태 조회와 모드 초기화 이벤트 수신만 허용합니다.",
   "windows": ["main"],
-  "permissions": []
+  "permissions": ["allow-local-available", "allow-local-control", "core:event:allow-listen", "core:event:allow-unlisten"]
 }

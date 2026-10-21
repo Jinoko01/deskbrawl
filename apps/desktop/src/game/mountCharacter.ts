@@ -1,4 +1,4 @@
-import { Application, ImageSource, Spritesheet, Texture } from "pixi.js";
+import { AnimatedSprite, Application, ImageSource, Spritesheet, Texture } from "pixi.js";
 import type { SpritesheetData } from "pixi.js";
 // Tauri의 script-src 'self'를 유지하면서 eval 없는 shader 경로를 사용한다.
 import "pixi.js/unsafe-eval";
@@ -8,6 +8,8 @@ import mintAtlas from "../../../../packages/game-assets/characters/mint-v2.json"
 import mintImage from "../../../../packages/game-assets/characters/mint-v2.png";
 import effectsAtlas from "../../../../packages/game-assets/effects/effects-v2.json";
 import effectsImage from "../../../../packages/game-assets/effects/effects-v2.png";
+import propsAtlas from "../../../../packages/game-assets/props/props-v2.json";
+import propsImage from "../../../../packages/game-assets/props/props-v2.png";
 import { reportRendererFailure, watchReducedEffects } from "../native/overlay";
 import { CHARACTER_SIZE_PX, initialCharacterScene } from "./characterScene";
 import type { CharacterSceneSnapshot, CharacterSkin } from "./characterScene";
@@ -32,7 +34,12 @@ export function mountCharacter(
   const sheets: Spritesheet[] = [];
   const animations = new Map<CharacterSkin, CharacterAnimations>();
   const views = new Map<string, { skin: CharacterSkin; view: ReturnType<typeof createCharacterView> }>();
+  const stones = new Map<string, AnimatedSprite>();
+  const effects = new Map<string, AnimatedSprite>();
   let stunFrames: Texture[] = [];
+  let stoneFrames: Texture[] = [];
+  let impactFrames: Texture[] = [];
+  let dustFrames: Texture[] = [];
   let supplied: CharacterSceneSnapshot | undefined;
   let current: CharacterSceneSnapshot | undefined;
   let observer: ResizeObserver | undefined;
@@ -53,10 +60,15 @@ export function mountCharacter(
       app.destroy(true, { children: true });
     }
     views.clear();
+    stones.clear();
+    effects.clear();
     animations.clear();
     for (const sheet of sheets) sheet.destroy(true);
     sheets.length = 0;
     stunFrames = [];
+    stoneFrames = [];
+    impactFrames = [];
+    dustFrames = [];
     supplied = undefined;
     current = undefined;
   }
@@ -83,6 +95,7 @@ export function mountCharacter(
     if (!ready || disposed || failed) return;
     try {
       for (const { view } of views.values()) view.syncMotion(reduced(), !document.hidden);
+      for (const sprite of [...stones.values(), ...effects.values()]) syncSprite(sprite);
       syncTicker();
       paint();
       app.render();
@@ -91,11 +104,38 @@ export function mountCharacter(
 
   function reduced(): boolean { return reducedEffects || reducedMotion.matches; }
 
+  function syncSprite(sprite: AnimatedSprite): void {
+    if (document.hidden) sprite.stop();
+    else if (reduced()) sprite.gotoAndStop(0);
+    else if (sprite.loop || sprite.currentFrame < sprite.totalFrames - 1) sprite.play();
+  }
+
+  function makeSprite(frames: Texture[], label: string, loop: boolean, frameMs: number): AnimatedSprite {
+    if (frames.length === 0) throw new Error(`${label} 프레임이 없습니다.`);
+    const sprite = new AnimatedSprite({ textures: frames, autoUpdate: false });
+    sprite.updateAnchor = true;
+    sprite.roundPixels = true;
+    sprite.eventMode = "none";
+    sprite.label = label;
+    sprite.loop = loop;
+    sprite.animationSpeed = 1000 / (60 * frameMs);
+    syncSprite(sprite);
+    app.stage.addChild(sprite);
+    return sprite;
+  }
+
+  function removeMissing(map: Map<string, AnimatedSprite>, ids: Set<string>): void {
+    for (const [id, sprite] of map) {
+      if (!ids.has(id)) { sprite.destroy(); map.delete(id); }
+    }
+  }
+
   function syncTicker() {
     if (!document.hidden && !reduced()) {
       for (const { view } of views.values()) {
         if (view.playing) { app.start(); return; }
       }
+      if ([...stones.values(), ...effects.values()].some((sprite) => sprite.playing)) { app.start(); return; }
     }
     app.stop();
   }
@@ -123,8 +163,20 @@ export function mountCharacter(
       }
       entry.view.apply(frame, reduced(), !document.hidden);
     }
+    const stoneIds = new Set((snapshot.projectiles ?? []).map((stone) => stone.id));
+    removeMissing(stones, stoneIds);
+    for (const stone of snapshot.projectiles ?? []) {
+      if (!stones.has(stone.id)) stones.set(stone.id, makeSprite(stoneFrames, `stone:${stone.id}`, true, 120));
+    }
+    const effectIds = new Set((snapshot.effects ?? []).map((effect) => effect.id));
+    removeMissing(effects, effectIds);
+    for (const effect of snapshot.effects ?? []) {
+      if (!effects.has(effect.id)) effects.set(effect.id,
+        makeSprite(effect.kind === "impact" ? impactFrames : dustFrames, `effect:${effect.id}`, false, 75));
+    }
     const names = snapshot.characters.map((frame) => frame.skin === "mochi" ? "모찌" : "민트");
     app.canvas.setAttribute("aria-label", names.length === 0 ? "표시된 캐릭터 없음" : `${names.join("와 ")} 캐릭터`);
+    app.canvas.setAttribute("aria-description", `${snapshot.characters.map((frame) => `${frame.skin === "mochi" ? "모찌" : "민트"}: ${frame.motion.kind}`).join(", ")}, 돌 ${snapshot.projectiles?.length ?? 0}개, 효과 ${snapshot.effects?.length ?? 0}개`);
   }
 
   function paint() {
@@ -136,6 +188,20 @@ export function mountCharacter(
     const size = Math.min(CHARACTER_SIZE_PX, width / 2, height) * scale;
     for (const frame of current.characters) {
       views.get(frame.id)?.view.layout(left + frame.position.x * scale, top + frame.position.y * scale, size);
+    }
+    for (const stone of current.projectiles ?? []) {
+      const sprite = stones.get(stone.id);
+      if (sprite !== undefined) {
+        sprite.position.set(Math.round(left + stone.position.x * scale), Math.round(top + stone.position.y * scale));
+        sprite.scale.set(32 * scale / sprite.texture.orig.height);
+      }
+    }
+    for (const effect of current.effects ?? []) {
+      const sprite = effects.get(effect.id);
+      if (sprite !== undefined) {
+        sprite.position.set(Math.round(left + effect.position.x * scale), Math.round(top + effect.position.y * scale));
+        sprite.scale.set(64 * scale / sprite.texture.orig.height);
+      }
     }
   }
 
@@ -195,15 +261,22 @@ export function mountCharacter(
       const mint = await loadSheet(mintAtlas, mintImage);
       if (disposed || failed || mint === undefined) return;
       animations.set("mint", characterAnimations(mint));
-      const effects = await loadSheet(effectsAtlas, effectsImage);
-      if (disposed || failed || effects === undefined) return;
-      stunFrames = effects.animations.stun ?? [];
+      const effectSheet = await loadSheet(effectsAtlas, effectsImage);
+      if (disposed || failed || effectSheet === undefined) return;
+      stunFrames = effectSheet.animations.stun ?? [];
       if (stunFrames.length === 0) throw new Error("기절 이펙트 프레임이 없습니다.");
+      impactFrames = effectSheet.animations.impact ?? [];
+      dustFrames = effectSheet.animations.dust ?? [];
+      const props = await loadSheet(propsAtlas, propsImage);
+      if (disposed || failed || props === undefined) return;
+      stoneFrames = props.animations["stone-gray"] ?? [];
+      if (impactFrames.length === 0 || dustFrames.length === 0 || stoneFrames.length === 0) throw new Error("전투 이펙트 프레임이 없습니다.");
       app.stage.eventMode = "none";
       app.ticker.maxFPS = 30;
       app.ticker.add((ticker) => {
         try {
           for (const { view } of views.values()) view.update(ticker);
+          for (const sprite of [...stones.values(), ...effects.values()]) if (sprite.playing) sprite.update(ticker);
           paint();
           syncTicker();
         } catch (error) { fail(error); }
@@ -246,6 +319,9 @@ export function mountCharacter(
             throw new Error("캐릭터 장면의 상태가 유효하지 않습니다.");
           }
           ids.add(frame.id);
+        }
+        for (const item of [...snapshot.projectiles ?? [], ...snapshot.effects ?? []]) {
+          if (!Number.isFinite(item.position.x) || !Number.isFinite(item.position.y)) throw new Error("전투 장면의 좌표가 유효하지 않습니다.");
         }
         supplied = snapshot;
         if (ready) { refresh(snapshot); syncMotion(); }

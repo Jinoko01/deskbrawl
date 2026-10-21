@@ -1,4 +1,5 @@
 import type { PlayerInput, WorldSetup, WorldState } from "./types";
+import { resolveCombat } from "./combat";
 
 function requirePositive(value: number, name: string): void {
   if (!Number.isFinite(value) || value <= 0) {
@@ -22,6 +23,18 @@ export function createWorld(setup: WorldSetup): WorldState {
   if (!Number.isFinite(rules.moveSpeedUnitsPerSecond * (rules.tickMs / 1000))) {
     throw new RangeError("Movement per tick must be finite.");
   }
+  if (rules.combat !== undefined) {
+    for (const [name, value] of Object.entries(rules.combat)) requirePositive(value, `combat.${name}`);
+    if (rules.combat.stoneRadius * 2 > Math.min(bounds.width, bounds.height)) {
+      throw new RangeError("The world must contain a stone.");
+    }
+    for (const speed of [rules.combat.stoneSpeedUnitsPerSecond, rules.combat.knockbackSpeedUnitsPerSecond]) {
+      if (!Number.isFinite(speed * (rules.tickMs / 1000))) throw new RangeError("Combat movement must be finite.");
+    }
+    if (rules.combat.knockbackMs > rules.combat.stunMs || rules.combat.invulnerabilityMs <= rules.combat.stunMs) {
+      throw new RangeError("Knockback must end during stun, and immunity must outlast stun.");
+    }
+  }
 
   const ids = new Set<string>();
   const players = setup.players.map(({ id, position }) => {
@@ -38,15 +51,19 @@ export function createWorld(setup: WorldSetup): WorldState {
     ) {
       throw new RangeError("The player collision area must start inside the world.");
     }
-    return { id, position: { x, y }, facing: { x: 1, y: 0 } };
+    return { id, position: { x, y }, facing: { x: 1, y: 0 },
+      knockbackVelocity: { x: 0, y: 0 }, knockbackUntilTick: 0, stunnedUntilTick: 0,
+      invulnerableUntilTick: 0, meleeReadyAtTick: 0, stoneReadyAtTick: 0,
+      lastAction: null, lastHitTick: null };
   });
 
   return {
     tick: 0,
     bounds: { ...bounds },
-    rules: { ...rules },
+    rules: rules.combat === undefined ? { ...rules } : { ...rules, combat: { ...rules.combat } },
     players,
     projectiles: [],
+    effects: [],
   };
 }
 
@@ -66,18 +83,35 @@ export function advance(world: WorldState, inputs: readonly PlayerInput[]): Worl
     if (![-1, 0, 1].includes(x) || ![-1, 0, 1].includes(y)) {
       throw new RangeError("Movement axes must be -1, 0 or 1.");
     }
+    if (input.action !== undefined && (world.rules.combat === undefined || !["melee", "stone"].includes(input.action))) {
+      throw new RangeError("The action is unavailable in this world.");
+    }
     byPlayer.set(input.playerId, input);
   }
 
   const { playerRadius: radius, moveSpeedUnitsPerSecond, tickMs } = world.rules;
   const distance = moveSpeedUnitsPerSecond * (tickMs / 1000);
+  const tick = world.tick + 1;
   const players = world.players.map((player) => {
+    if (tick < player.knockbackUntilTick) {
+      const nextX = player.position.x + player.knockbackVelocity.x * tickMs / 1000;
+      const nextY = player.position.y + player.knockbackVelocity.y * tickMs / 1000;
+      const x = Math.max(radius, Math.min(world.bounds.width - radius, nextX));
+      const y = Math.max(radius, Math.min(world.bounds.height - radius, nextY));
+      return { ...player, position: { x, y }, knockbackVelocity: {
+        x: x === nextX ? player.knockbackVelocity.x : 0,
+        y: y === nextY ? player.knockbackVelocity.y : 0,
+      } };
+    }
+    const settled = player.knockbackVelocity.x !== 0 || player.knockbackVelocity.y !== 0
+      ? { ...player, knockbackVelocity: { x: 0, y: 0 } } : player;
+    if (tick < player.stunnedUntilTick) return settled;
     const movement = byPlayer.get(player.id)?.movement;
-    if (movement === undefined || (movement.x === 0 && movement.y === 0)) return player;
+    if (movement === undefined || (movement.x === 0 && movement.y === 0)) return settled;
     const length = Math.hypot(movement.x, movement.y);
     const facing = { x: movement.x / length, y: movement.y / length };
     return {
-      ...player,
+      ...settled,
       facing,
       position: {
         x: Math.max(radius, Math.min(world.bounds.width - radius, player.position.x + facing.x * distance)),
@@ -85,5 +119,6 @@ export function advance(world: WorldState, inputs: readonly PlayerInput[]): Worl
       },
     };
   });
-  return { ...world, tick: world.tick + 1, players };
+  const next = { ...world, tick, players };
+  return world.rules.combat === undefined ? next : resolveCombat(next, byPlayer);
 }
