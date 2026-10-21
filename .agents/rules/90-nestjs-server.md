@@ -5,6 +5,12 @@ paths:
 
 # NestJS 서버
 
+- 서버 코드를 작성·수정하기 전에 `apps/server/README.md`, `apps/server/eslint.config.js`, `apps/server/.prettierrc.json`을 확인하고 해당 규칙을 따른다.
+- Controller·Service·Guard·Gateway·Filter는 역할별 파일과 NestJS 접미사로 구분한다. 기존 도메인 경계와 모듈 진입 경로를 유지하며, 한 파일에는 클래스 하나를 둔다.
+- 한 줄에 여러 문장을 압축하지 않는다. 조건문·반복문은 중괄호를 사용하고 중첩 삼항식은 명시적인 분기로 풀어 쓴다. 메서드와 처리 단계 사이에 빈 줄을 둔다.
+- 타입 전용 import와 함수 반환 타입을 명시하고, Promise의 실패·종료 경로를 처리한다. ESLint typed lint와 포맷 규칙을 비활성화해 통과시키지 않는다.
+- 수정 후 서버 `lint:fix`, `format:check`, `typecheck`, 관련 테스트를 실행한다. 인증·DB·실시간 유스케이스를 변경하면 격리 PostgreSQL·Socket.IO 통합 테스트도 실행한다.
+
 - 도메인별 Module을 구성하고 의존성은 NestJS DI로 주입한다. 새 컨테이너나 서비스 로케이터를 만들지 않는다.
 - REST Controller는 입력·인증 컨텍스트 전달·응답 매핑, Gateway는 연결·이벤트 경계를 담당한다. 핵심 유스케이스와 규칙은 Service·도메인 로직에 둔다.
 - REST와 Gateway가 같은 유스케이스를 호출할 때 인가·상태 전이 규칙이 달라지지 않도록 한다. 서로의 핸들러를 직접 호출하지 않는다.

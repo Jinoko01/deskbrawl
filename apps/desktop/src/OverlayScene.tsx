@@ -8,20 +8,29 @@ export function OverlayScene() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
-    if (host.current === null) return;
+    if (host.current === null) {
+      return;
+    }
     const element = host.current;
     let stopGame: (() => void) | undefined;
     const scene = mountCharacter(element, (next) => {
       setStatus(next);
-      if (next === "ready") stopGame = startLocalGame(element, scene, (error) => {
-        console.error("로컬 게임 실행 실패", error);
-        setStatus("error");
+      if (next === "ready") {
+        stopGame = startLocalGame(element, scene, (error) => {
+          console.error("로컬 게임 실행 실패", error);
+          setStatus("error");
+          stopGame?.();
+          void reportRendererFailure().catch((failure: unknown) => console.error("렌더 오류 보고 실패", failure));
+        });
+      }
+      if (next === "error") {
         stopGame?.();
-        void reportRendererFailure().catch((failure: unknown) => console.error("렌더 오류 보고 실패", failure));
-      });
-      if (next === "error") stopGame?.();
+      }
     });
-    return () => { stopGame?.(); scene.dispose(); };
+    return () => {
+      stopGame?.();
+      scene.dispose();
+    };
   }, []);
 
   return (

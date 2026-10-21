@@ -6,12 +6,31 @@ import { MultiplayerPanel } from "./MultiplayerPanel";
 
 export function App() {
   const multiplayer = useMultiplayer();
-  const { region, ready, playing, busy, error, supported, controls, controlsError, save } = useLocalControls(multiplayer.input);
+  const {
+    region,
+    ready,
+    playing,
+    busy,
+    error,
+    supported,
+    controls,
+    controlsError,
+    save,
+  } = useLocalControls(multiplayer.input);
   // Rust가 저장된 설정을 읽기 전에는 기본값을 실제 설정처럼 보여주지 않는다.
   const loaded = controls === undefined || controls.shortcut === "loading" ? undefined : controls;
   const shown = loaded?.controls ?? (supported ? undefined : DEFAULT_CONTROLS);
   const keys = shown?.keys;
   const shortcut = shown === undefined ? "전환 단축키" : shortcutLabel(shown.toggle);
+  let playStatus = "WORK · 오버레이 준비 중";
+  if (playing) {
+    const character = multiplayer.view.phase === "guest" ? "민트" : "모찌";
+    playStatus = `PLAY · ${character}를 조작 중`;
+  } else if (busy) {
+    playStatus = "PLAY 시작하는 중…";
+  } else if (ready) {
+    playStatus = "WORK · 플레이할 수 있음";
+  }
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center">
@@ -21,22 +40,28 @@ export function App() {
         <p className="mt-3 text-base leading-relaxed text-muted-foreground">
           작은 친구들이 찾아올 데스크톱.
         </p>
-        <div ref={region} tabIndex={playing ? 0 : -1} role="group"
-          aria-label="게임 조작 영역" className="mt-8 rounded-xl border border-border p-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground">
+        <div
+          ref={region}
+          tabIndex={playing ? 0 : -1}
+          role="group"
+          aria-label="게임 조작 영역"
+          className="mt-8 rounded-xl border border-border p-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+        >
           <p className="text-sm text-muted-foreground" role="status">
-            {playing ? `PLAY · ${multiplayer.view.phase === "guest" ? "민트" : "모찌"}를 조작 중` : busy ? "PLAY 시작하는 중…" : ready ? "WORK · 플레이할 수 있음" : "WORK · 오버레이 준비 중"}
+            {playStatus}
           </p>
           <p className="mt-3 text-sm leading-relaxed text-foreground">
-            {keys === undefined ? "조작키를 불러오는 중…"
+            {keys === undefined
+              ? "조작키를 불러오는 중…"
               : `${[keys.up, keys.left, keys.down, keys.right].map(keyLabel).join(" ")} 이동 · ${keyLabel(keys.melee)} 근접 공격 · ${keyLabel(keys.stone)} 돌 던지기`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            어느 창에서든 {shortcut}로 플레이·작업 모드를 전환합니다. Esc로도 작업 모드로 돌아갑니다.
+            {`어느 창에서든 ${shortcut}로 플레이·작업 모드를 전환합니다. Esc로도 작업 모드로 돌아갑니다.`}
           </p>
         </div>
         {loaded?.shortcut === "unavailable" && (
           <p className="mt-4 text-sm text-foreground" role="alert">
-            {shortcut} 단축키를 등록하지 못했습니다. 다른 앱이 쓰고 있을 수 있습니다. 아래에서 다른 단축키로 바꾸거나 트레이 메뉴의 ‘플레이 시작’을 사용하세요.
+            {`${shortcut} 단축키를 등록하지 못했습니다. 다른 앱이 쓰고 있을 수 있습니다. 아래에서 다른 단축키로 바꾸거나 트레이 메뉴의 ‘플레이 시작’을 사용하세요.`}
           </p>
         )}
         {loaded === undefined && supported && controlsError === undefined && (
@@ -46,7 +71,13 @@ export function App() {
         {controlsError && <p className="mt-4 text-sm text-foreground" role="alert">{controlsError}</p>}
         {error && <p className="mt-4 text-sm text-foreground" role="alert">{error}</p>}
         <MultiplayerPanel game={multiplayer} playing={playing || busy} />
-        {loaded !== undefined && <ControlSettings controls={loaded.controls} disabled={playing || busy} onSave={save} />}
+        {loaded !== undefined && (
+          <ControlSettings
+            controls={loaded.controls}
+            disabled={playing || busy}
+            onSave={save}
+          />
+        )}
       </div>
     </main>
   );

@@ -10,7 +10,7 @@ test("workspace 공개 진입점을 통해 직렬화한 월드의 시뮬레이�
   const first = advance(createWorld(setup), [
     { playerId: "local", movement: { x: 1, y: 0 } },
   ]);
-  const restored: typeof first = JSON.parse(JSON.stringify(first));
+  const restored = JSON.parse(JSON.stringify(first)) as typeof first;
   expect(advance(restored, [])).toEqual(advance(first, []));
   expect(restored.players[0]?.position).toEqual({ x: 110, y: 100 });
 });

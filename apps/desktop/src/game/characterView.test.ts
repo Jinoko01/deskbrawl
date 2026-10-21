@@ -1,5 +1,11 @@
 import { Rectangle, Texture, Ticker } from "pixi.js";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "vitest";
 import type { CharacterFrame, CharacterMotion } from "./characterScene";
 import { initialCharacterScene } from "./characterScene";
 import { createCharacterView } from "./characterView";
@@ -13,16 +19,24 @@ describe("캐릭터 표현", () => {
 
   function frames(count: number): Texture[] {
     return Array.from({ length: count }, () => {
-      const texture = new Texture({ source: Texture.EMPTY.source,
-        orig: new Rectangle(0, 0, 100, 100), defaultAnchor: { x: 0.5, y: 0.9 } });
+      const texture = new Texture({
+        source: Texture.EMPTY.source,
+        orig: new Rectangle(0, 0, 100, 100),
+        defaultAnchor: { x: 0.5, y: 0.9 },
+      });
       textures.push(texture);
       return texture;
     });
   }
 
   function state(motion: CharacterMotion): CharacterFrame {
-    return { id: "host", skin: "mochi", position: { x: 100, y: 100 },
-      facing: { x: 1, y: 0 }, motion };
+    return {
+      id: "host",
+      skin: "mochi",
+      position: { x: 100, y: 100 },
+      facing: { x: 1, y: 0 },
+      motion,
+    };
   }
 
   function step(elapsedMs: number): void {
@@ -35,14 +49,22 @@ describe("캐릭터 표현", () => {
   }
 
   beforeEach(() => {
-    animations = { idle: frames(4), walk: frames(4), melee: frames(4), throw: frames(2), hit: frames(2) };
+    animations = {
+      idle: frames(4),
+      walk: frames(4),
+      melee: frames(4),
+      throw: frames(2),
+      hit: frames(2),
+    };
     stunFrames = frames(4);
     view = createCharacterView(animations, stunFrames);
   });
 
   afterEach(() => {
     view.destroy();
-    for (const texture of textures) texture.destroy();
+    for (const texture of textures) {
+      texture.destroy();
+    }
     textures.length = 0;
   });
 

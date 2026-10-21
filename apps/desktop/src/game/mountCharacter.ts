@@ -1,4 +1,10 @@
-import { AnimatedSprite, Application, ImageSource, Spritesheet, Texture } from "pixi.js";
+import {
+  AnimatedSprite,
+  Application,
+  ImageSource,
+  Spritesheet,
+  Texture,
+} from "pixi.js";
 import type { SpritesheetData } from "pixi.js";
 // Tauri의 script-src 'self'를 유지하면서 eval 없는 shader 경로를 사용한다.
 import "pixi.js/unsafe-eval";
@@ -17,7 +23,7 @@ import { createCharacterView } from "./characterView";
 import type { CharacterAnimations } from "./characterView";
 
 export interface MountedCharacterScene {
-  update(snapshot: CharacterSceneSnapshot): void;
+  update: (snapshot: CharacterSceneSnapshot) => void;
   dispose(): void;
 }
 
@@ -65,7 +71,9 @@ export function mountCharacter(
     stones.clear();
     effects.clear();
     animations.clear();
-    for (const sheet of sheets) sheet.destroy(true);
+    for (const sheet of sheets) {
+      sheet.destroy(true);
+    }
     sheets.length = 0;
     stunFrames = [];
     stoneFrames = [];
@@ -76,15 +84,21 @@ export function mountCharacter(
   }
 
   function fail(error: unknown) {
-    if (failed) return;
+    if (failed) {
+      return;
+    }
     failed = true;
-    if (!initializing) release();
+    if (!initializing) {
+      release();
+    }
     if (!disposed) {
       console.error("오버레이 캐릭터 렌더링 실패", error);
       onStatus("error");
-      if (target === "overlay") void reportRendererFailure().catch((failure: unknown) => {
-        console.error("오버레이 렌더 오류 보고 실패", failure);
-      });
+      if (target === "overlay") {
+        void reportRendererFailure().catch((failure: unknown) => {
+          console.error("오버레이 렌더 오류 보고 실패", failure);
+        });
+      }
     }
   }
 
@@ -94,28 +108,44 @@ export function mountCharacter(
   }
 
   function syncMotion() {
-    if (!ready || disposed || failed) return;
+    if (!ready || disposed || failed) {
+      return;
+    }
     try {
-      for (const { view } of views.values()) view.syncMotion(reduced(), !document.hidden);
-      for (const sprite of [...stones.values(), ...effects.values()]) syncSprite(sprite);
+      for (const { view } of views.values()) {
+        view.syncMotion(reduced(), !document.hidden);
+      }
+      for (const sprite of [...stones.values(), ...effects.values()]) {
+        syncSprite(sprite);
+      }
       syncTicker();
       paint();
       app.render();
-    } catch (error) { fail(error); }
+    } catch (error) {
+      fail(error);
+    }
   }
 
-  function reduced(): boolean { return reducedEffects || reducedMotion.matches; }
+  function reduced(): boolean {
+    return reducedEffects || reducedMotion.matches;
+  }
 
   function syncSprite(sprite: AnimatedSprite): void {
     // 효과 감소에서는 판정과 무관한 먼지만 숨긴다. 돌·피격·기절 표시는 게임 상태라서 유지한다.
     sprite.visible = !(decorative.has(sprite) && reduced());
-    if (document.hidden) sprite.stop();
-    else if (reduced()) sprite.gotoAndStop(0);
-    else if (sprite.loop || sprite.currentFrame < sprite.totalFrames - 1) sprite.play();
+    if (document.hidden) {
+      sprite.stop();
+    } else if (reduced()) {
+      sprite.gotoAndStop(0);
+    } else if (sprite.loop || sprite.currentFrame < sprite.totalFrames - 1) {
+      sprite.play();
+    }
   }
 
   function makeSprite(frames: Texture[], label: string, loop: boolean, frameMs: number): AnimatedSprite {
-    if (frames.length === 0) throw new Error(`${label} 프레임이 없습니다.`);
+    if (frames.length === 0) {
+      throw new Error(`${label} 프레임이 없습니다.`);
+    }
     const sprite = new AnimatedSprite({ textures: frames, autoUpdate: false });
     sprite.updateAnchor = true;
     sprite.roundPixels = true;
@@ -130,16 +160,25 @@ export function mountCharacter(
 
   function removeMissing(map: Map<string, AnimatedSprite>, ids: Set<string>): void {
     for (const [id, sprite] of map) {
-      if (!ids.has(id)) { sprite.destroy(); map.delete(id); }
+      if (!ids.has(id)) {
+        sprite.destroy();
+        map.delete(id);
+      }
     }
   }
 
   function syncTicker() {
     if (!document.hidden && !reduced()) {
       for (const { view } of views.values()) {
-        if (view.playing) { app.start(); return; }
+        if (view.playing) {
+          app.start();
+          return;
+        }
       }
-      if ([...stones.values(), ...effects.values()].some((sprite) => sprite.playing)) { app.start(); return; }
+      if ([...stones.values(), ...effects.values()].some((sprite) => sprite.playing)) {
+        app.start();
+        return;
+      }
     }
     app.stop();
   }
@@ -148,7 +187,10 @@ export function mountCharacter(
     current = snapshot;
     const ids = new Set(snapshot.characters.map((frame) => frame.id));
     for (const [id, entry] of views) {
-      if (!ids.has(id)) { entry.view.destroy(); views.delete(id); }
+      if (!ids.has(id)) {
+        entry.view.destroy();
+        views.delete(id);
+      }
     }
     for (const frame of snapshot.characters) {
       let entry = views.get(frame.id);
@@ -159,7 +201,9 @@ export function mountCharacter(
       }
       if (entry === undefined) {
         const frames = animations.get(frame.skin);
-        if (frames === undefined) throw new Error("캐릭터 에셋이 없습니다.");
+        if (frames === undefined) {
+          throw new Error("캐릭터 에셋이 없습니다.");
+        }
         const view = createCharacterView(frames, stunFrames);
         entry = { skin: frame.skin, view };
         views.set(frame.id, entry);
@@ -170,14 +214,19 @@ export function mountCharacter(
     const stoneIds = new Set((snapshot.projectiles ?? []).map((stone) => stone.id));
     removeMissing(stones, stoneIds);
     for (const stone of snapshot.projectiles ?? []) {
-      if (!stones.has(stone.id)) stones.set(stone.id, makeSprite(stoneFrames, `stone:${stone.id}`, true, 120));
+      if (!stones.has(stone.id)) {
+        stones.set(stone.id, makeSprite(stoneFrames, `stone:${stone.id}`, true, 120));
+      }
     }
     const effectIds = new Set((snapshot.effects ?? []).map((effect) => effect.id));
     removeMissing(effects, effectIds);
     for (const effect of snapshot.effects ?? []) {
       if (!effects.has(effect.id)) {
         const sprite = makeSprite(effect.kind === "impact" ? impactFrames : dustFrames, `effect:${effect.id}`, false, 75);
-        if (effect.kind === "dust") { decorative.add(sprite); syncSprite(sprite); }
+        if (effect.kind === "dust") {
+          decorative.add(sprite);
+          syncSprite(sprite);
+        }
         effects.set(effect.id, sprite);
       }
     }
@@ -187,7 +236,9 @@ export function mountCharacter(
   }
 
   function paint() {
-    if (current === undefined) return;
+    if (current === undefined) {
+      return;
+    }
     const { width, height } = current.bounds;
     const scale = Math.min(app.screen.width / width, app.screen.height / height);
     const left = (app.screen.width - width * scale) / 2;
@@ -213,21 +264,27 @@ export function mountCharacter(
   }
 
   function draw() {
-    if (!ready || disposed || failed) return;
+    if (!ready || disposed || failed) {
+      return;
+    }
     try {
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
       app.renderer.resize(width, height, window.devicePixelRatio || 1);
       refresh(supplied ?? initialCharacterScene(width, height));
       syncMotion();
-    } catch (error) { fail(error); }
+    } catch (error) {
+      fail(error);
+    }
   }
 
   async function loadSheet(atlas: SpritesheetData, imageUrl: string): Promise<Spritesheet | undefined> {
     const image = new Image();
     image.src = imageUrl;
     await image.decode();
-    if (disposed || failed) return;
+    if (disposed || failed) {
+      return;
+    }
     // 이 장면만 소유한 texture를 사용한다. 다른 장면의 공유 Assets 캐시는 파괴하지 않는다.
     const sheet = new Spritesheet(new Texture({
       source: new ImageSource({ resource: image, scaleMode: "nearest" }),
@@ -240,11 +297,18 @@ export function mountCharacter(
   function characterAnimations(sheet: Spritesheet): CharacterAnimations {
     function frames(name: string): Texture[] {
       const textures = sheet.animations[name];
-      if (textures === undefined || textures.length === 0) throw new Error(`${name} 프레임이 없습니다.`);
+      if (textures === undefined || textures.length === 0) {
+        throw new Error(`${name} 프레임이 없습니다.`);
+      }
       return textures;
     }
-    return { idle: frames("idle"), walk: frames("walk"), melee: frames("melee"),
-      throw: frames("throw"), hit: frames("hit") };
+    return {
+      idle: frames("idle"),
+      walk: frames("walk"),
+      melee: frames("melee"),
+      throw: frames("throw"),
+      hit: frames("hit"),
+    };
   }
 
   async function start() {
@@ -260,33 +324,55 @@ export function mountCharacter(
         resolution: window.devicePixelRatio || 1,
       });
       initialized = true;
-      if (disposed || failed) return;
+      if (disposed || failed) {
+        return;
+      }
 
       const mochi = await loadSheet(mochiAtlas, mochiImage);
-      if (disposed || failed || mochi === undefined) return;
+      if (disposed || failed || mochi === undefined) {
+        return;
+      }
       animations.set("mochi", characterAnimations(mochi));
       const mint = await loadSheet(mintAtlas, mintImage);
-      if (disposed || failed || mint === undefined) return;
+      if (disposed || failed || mint === undefined) {
+        return;
+      }
       animations.set("mint", characterAnimations(mint));
       const effectSheet = await loadSheet(effectsAtlas, effectsImage);
-      if (disposed || failed || effectSheet === undefined) return;
+      if (disposed || failed || effectSheet === undefined) {
+        return;
+      }
       stunFrames = effectSheet.animations.stun ?? [];
-      if (stunFrames.length === 0) throw new Error("기절 이펙트 프레임이 없습니다.");
+      if (stunFrames.length === 0) {
+        throw new Error("기절 이펙트 프레임이 없습니다.");
+      }
       impactFrames = effectSheet.animations.impact ?? [];
       dustFrames = effectSheet.animations.dust ?? [];
       const props = await loadSheet(propsAtlas, propsImage);
-      if (disposed || failed || props === undefined) return;
+      if (disposed || failed || props === undefined) {
+        return;
+      }
       stoneFrames = props.animations["stone-gray"] ?? [];
-      if (impactFrames.length === 0 || dustFrames.length === 0 || stoneFrames.length === 0) throw new Error("전투 이펙트 프레임이 없습니다.");
+      if (impactFrames.length === 0 || dustFrames.length === 0 || stoneFrames.length === 0) {
+        throw new Error("전투 이펙트 프레임이 없습니다.");
+      }
       app.stage.eventMode = "none";
       app.ticker.maxFPS = 30;
       app.ticker.add((ticker) => {
         try {
-          for (const { view } of views.values()) view.update(ticker);
-          for (const sprite of [...stones.values(), ...effects.values()]) if (sprite.playing) sprite.update(ticker);
+          for (const { view } of views.values()) {
+            view.update(ticker);
+          }
+          for (const sprite of [...stones.values(), ...effects.values()]) {
+            if (sprite.playing) {
+              sprite.update(ticker);
+            }
+          }
           paint();
           syncTicker();
-        } catch (error) { fail(error); }
+        } catch (error) {
+          fail(error);
+        }
       });
       app.canvas.setAttribute("role", "img");
       app.canvas.addEventListener("webglcontextlost", onContextLost);
@@ -302,19 +388,25 @@ export function mountCharacter(
         reducedEffects = reduced;
         syncMotion();
       }, fail, target);
-      if (ready && !disposed && !failed) onStatus("ready");
+      if (ready && !disposed && !failed) {
+        onStatus("ready");
+      }
     } catch (error) {
       fail(error);
     } finally {
       initializing = false;
-      if (disposed || failed) release();
+      if (disposed || failed) {
+        release();
+      }
     }
   }
 
   void start();
   return {
     update(snapshot) {
-      if (disposed || failed) return;
+      if (disposed || failed) {
+        return;
+      }
       try {
         const { width, height } = snapshot.bounds;
         if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
@@ -328,16 +420,25 @@ export function mountCharacter(
           ids.add(frame.id);
         }
         for (const item of [...snapshot.projectiles ?? [], ...snapshot.effects ?? []]) {
-          if (!Number.isFinite(item.position.x) || !Number.isFinite(item.position.y)) throw new Error("전투 장면의 좌표가 유효하지 않습니다.");
+          if (!Number.isFinite(item.position.x) || !Number.isFinite(item.position.y)) {
+            throw new Error("전투 장면의 좌표가 유효하지 않습니다.");
+          }
         }
         supplied = snapshot;
-        if (ready) { refresh(snapshot); syncMotion(); }
-      } catch (error) { fail(error); }
+        if (ready) {
+          refresh(snapshot);
+          syncMotion();
+        }
+      } catch (error) {
+        fail(error);
+      }
     },
     dispose() {
       disposed = true;
       // 초기화·decode·atlas parse 도중에는 await가 끝난 후 자원을 정리한다.
-      if (!initializing) release();
+      if (!initializing) {
+        release();
+      }
     },
   };
 }

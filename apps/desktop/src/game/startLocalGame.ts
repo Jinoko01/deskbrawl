@@ -15,39 +15,66 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
   let unlisten: (() => void) | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
   function visibility() {
-    if (document.hidden) game.pause();
+    if (document.hidden) {
+      game.pause();
+    }
     void reportLocalReady(!document.hidden).catch(onError);
   }
   void (async () => {
     try {
-      const stop = await watchLocalCommands((command) => { if (mode === "local") game.command(command); });
-      if (disposed) { stop(); return; }
+      const stop = await watchLocalCommands((command) => {
+        if (mode === "local") {
+          game.command(command);
+        }
+      });
+      if (disposed) {
+        stop();
+        return;
+      }
       unlisten = stop;
       const stopState = await watchNetwork((state) => {
         mode = state.mode;
-        if (mode === "local") return;
+        if (mode === "local") {
+          return;
+        }
         game.pause();
-        if (state.mode === "host" && state.snapshot !== null) network.receive(state.snapshot);
-        else {
+        if (state.mode === "host" && state.snapshot !== null) {
+          network.receive(state.snapshot);
+        } else {
           network.dispose();
           scene.update({ bounds: game.world.bounds, characters: [] });
         }
       });
-      if (disposed) { stopState(); return; }
+      if (disposed) {
+        stopState();
+        return;
+      }
       stopNetwork = stopState;
       document.addEventListener("visibilitychange", visibility);
       timer = setInterval(() => {
-        if (document.hidden || mode !== "local") return;
-        try { game.advanceTime(performance.now()); }
-        catch (error) { game.pause(); onError(error); }
+        if (document.hidden || mode !== "local") {
+          return;
+        }
+        try {
+          game.advanceTime(performance.now());
+        } catch (error) {
+          game.pause();
+          onError(error);
+        }
       }, game.world.rules.tickMs);
       visibility();
-    } catch (error) { if (!disposed) onError(error); }
+    } catch (error) {
+      if (!disposed) {
+        onError(error);
+      }
+    }
   })();
   return () => {
     disposed = true;
     game.pause();
-    if (timer !== undefined) clearInterval(timer);
+    if (timer !== undefined) {
+      clearInterval(timer);
+    }
     document.removeEventListener("visibilitychange", visibility);
     unlisten?.();
     stopNetwork?.();

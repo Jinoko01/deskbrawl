@@ -7,7 +7,11 @@ export type CharacterAnimations = Record<AnimationName, Texture[]>;
 
 // 에셋에 기록된 감상용 간격을 표현에만 사용한다. 공격 판정·기절 종료는 결정하지 않는다.
 const FRAME_MS: Record<AnimationName, number> = {
-  idle: 220, walk: 120, melee: 100, throw: 150, hit: 220,
+  idle: 220,
+  walk: 120,
+  melee: 100,
+  throw: 150,
+  hit: 220,
 };
 
 function actionId(motion: CharacterMotion): string | undefined {
@@ -29,30 +33,42 @@ export function createCharacterView(animations: CharacterAnimations, stunFrames:
   let current: CharacterFrame | undefined;
   let completed = false;
   let horizontalDirection = 1;
-  body.onComplete = () => { completed = true; };
+  body.onComplete = () => {
+    completed = true;
+  };
 
   function syncMotion(reduced: boolean, visible: boolean): void {
-    if (current === undefined) return;
+    if (current === undefined) {
+      return;
+    }
     if (!visible) {
       body.stop();
       stun.stop();
     } else if (reduced) {
-      const pose = current.motion.kind === "stun" ? body.totalFrames - 1
-        : body.loop ? 0 : Math.floor(body.totalFrames / 2);
+      let pose = body.loop ? 0 : Math.floor(body.totalFrames / 2);
+      if (current.motion.kind === "stun") {
+        pose = body.totalFrames - 1;
+      }
       body.gotoAndStop(pose);
       stun.gotoAndStop(0);
     } else {
-      if (current.motion.kind !== "stun" && !completed) body.play();
-      if (stun.visible) stun.play();
+      if (current.motion.kind !== "stun" && !completed) {
+        body.play();
+      }
+      if (stun.visible) {
+        stun.play();
+      }
     }
   }
 
   function apply(frame: CharacterFrame, reduced: boolean, visible: boolean): void {
-    const changed = current === undefined || current.motion.kind !== frame.motion.kind
+    const changed = current?.motion.kind !== frame.motion.kind
       || actionId(current.motion) !== actionId(frame.motion);
     current = frame;
     container.label = `character:${frame.id}`;
-    if (frame.facing.x !== 0) horizontalDirection = frame.facing.x < 0 ? -1 : 1;
+    if (frame.facing.x !== 0) {
+      horizontalDirection = frame.facing.x < 0 ? -1 : 1;
+    }
     if (changed) {
       const name = frame.motion.kind === "stun" ? "hit" : frame.motion.kind;
       body.textures = animations[name];
@@ -82,10 +98,18 @@ export function createCharacterView(animations: CharacterAnimations, stunFrames:
     syncMotion,
     layout,
     update(ticker: Ticker): void {
-      if (body.playing) body.update(ticker);
-      if (stun.visible && stun.playing) stun.update(ticker);
+      if (body.playing) {
+        body.update(ticker);
+      }
+      if (stun.visible && stun.playing) {
+        stun.update(ticker);
+      }
     },
-    get playing(): boolean { return body.playing || (stun.visible && stun.playing); },
-    destroy(): void { container.destroy({ children: true }); },
+    get playing(): boolean {
+      return body.playing || (stun.visible && stun.playing);
+    },
+    destroy(): void {
+      container.destroy({ children: true });
+    },
   };
 }

@@ -1,9 +1,14 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { createLocalGame } from "./localGame";
 import type { LocalCommand } from "../native/localGame";
 
 function command(kind: LocalCommand["kind"], seq: number, x: -1 | 0 | 1, action?: LocalCommand["action"]): LocalCommand {
-  return { kind, seq, movement: { x, y: 0 }, ...(action ? { action } : {}) };
+  return {
+    kind,
+    seq,
+    movement: { x, y: 0 },
+    ...(action ? { action } : {}),
+  };
 }
 
 test("PLAY의 최신 입력만 고정 tick에 적용하고 WORK에서 이동을 멈춘다", () => {
@@ -25,7 +30,9 @@ test("PLAY의 최신 입력만 고정 tick에 적용하고 WORK에서 이동을 
 
 test("긴 시계 공백과 일시 정지는 눌린 키와 예약 공격을 버린다", () => {
   let gaps = 0;
-  const game = createLocalGame(800, 600, () => {}, () => { gaps++; });
+  const game = createLocalGame(800, 600, vi.fn(), () => {
+    gaps++;
+  });
   game.advanceTime(0);
   game.command(command("play", 1, 0));
   game.command(command("input", 2, 1, "stone"));
@@ -51,7 +58,9 @@ test("돌과 피격 상태를 장면에 전달하고 같은 상태의 중복 렌
   game.advanceTime(0);
   game.command(command("play", 1, 0));
   game.command(command("input", 2, 0, "stone"));
-  for (let time = 50; time <= 250; time += 50) game.advanceTime(time);
+  for (let time = 50; time <= 250; time += 50) {
+    game.advanceTime(time);
+  }
   expect(scenes.some((scene) => scene.stones > 0)).toBe(true);
   expect(scenes.some((scene) => scene.guestHit)).toBe(true);
   const count = scenes.length;

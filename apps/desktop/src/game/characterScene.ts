@@ -1,4 +1,9 @@
-import type { PlayerState, ProjectileState, WorldBounds, WorldEffect } from "@deskbrawl/game-core";
+import type {
+  PlayerState,
+  ProjectileState,
+  WorldBounds,
+  WorldEffect,
+} from "@deskbrawl/game-core";
 
 export type CharacterSkin = "mochi" | "mint";
 
@@ -23,15 +28,28 @@ export interface CharacterSceneSnapshot {
 export const CHARACTER_SIZE_PX = 96;
 
 export function sameCharacterScene(a: CharacterSceneSnapshot | undefined, b: CharacterSceneSnapshot): boolean {
-  if (a === undefined || a.bounds.width !== b.bounds.width || a.bounds.height !== b.bounds.height || a.characters.length !== b.characters.length || a.projectiles?.length !== b.projectiles?.length || a.effects?.length !== b.effects?.length) return false;
+  if (
+    a?.bounds.width !== b.bounds.width
+    || a.bounds.height !== b.bounds.height
+    || a.characters.length !== b.characters.length
+    || a.projectiles?.length !== b.projectiles?.length
+    || a.effects?.length !== b.effects?.length
+  ) {
+    return false;
+  }
   return a.characters.every((frame, index) => {
     const other = b.characters[index];
-    return other !== undefined && frame.id === other.id && frame.skin === other.skin && frame.position.x === other.position.x && frame.position.y === other.position.y
-      && frame.facing.x === other.facing.x && frame.facing.y === other.facing.y && frame.motion.kind === other.motion.kind
+    return frame.id === other?.id
+      && frame.skin === other.skin
+      && frame.position.x === other.position.x
+      && frame.position.y === other.position.y
+      && frame.facing.x === other.facing.x
+      && frame.facing.y === other.facing.y
+      && frame.motion.kind === other.motion.kind
       && ("actionId" in frame.motion ? frame.motion.actionId : undefined) === ("actionId" in other.motion ? other.motion.actionId : undefined);
   }) && (a.projectiles ?? []).every((stone, index) => {
     const other = b.projectiles?.[index];
-    return other !== undefined && stone.id === other.id && stone.position.x === other.position.x && stone.position.y === other.position.y;
+    return stone.id === other?.id && stone.position.x === other.position.x && stone.position.y === other.position.y;
   }) && (a.effects ?? []).every((effect, index) => effect.id === b.effects?.[index]?.id);
 }
 
@@ -41,10 +59,20 @@ export function initialCharacterScene(width: number, height: number): CharacterS
   return {
     bounds: { width, height },
     characters: [
-      { id: "host", skin: "mochi", position: { x: width / 2 - offset, y: height / 2 },
-        facing: { x: 1, y: 0 }, motion: { kind: "idle" } },
-      { id: "guest", skin: "mint", position: { x: width / 2 + offset, y: height / 2 },
-        facing: { x: -1, y: 0 }, motion: { kind: "idle" } },
+      {
+        id: "host",
+        skin: "mochi",
+        position: { x: width / 2 - offset, y: height / 2 },
+        facing: { x: 1, y: 0 },
+        motion: { kind: "idle" },
+      },
+      {
+        id: "guest",
+        skin: "mint",
+        position: { x: width / 2 + offset, y: height / 2 },
+        facing: { x: -1, y: 0 },
+        motion: { kind: "idle" },
+      },
     ],
   };
 }

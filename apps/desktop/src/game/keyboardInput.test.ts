@@ -35,7 +35,14 @@ test("수정키와 함께 누른 키는 앱 단축키로 남기고 게임 입력
 test("바꾼 조작키로 입력하고 변경 시 눌린 키를 비운다", () => {
   const input = createKeyboardInput();
   input.press("ArrowRight", false);
-  input.setKeys({ up: "KeyW", left: "KeyA", down: "KeyS", right: "KeyD", melee: "KeyJ", stone: "KeyK" });
+  input.setKeys({
+    up: "KeyW",
+    left: "KeyA",
+    down: "KeyS",
+    right: "KeyD",
+    melee: "KeyJ",
+    stone: "KeyK",
+  });
   expect(input.movement()).toEqual({ x: 0, y: 0 });
   expect(input.press("ArrowRight", false).handled).toBe(false);
   expect(input.press("KeyZ", false).handled).toBe(false);
