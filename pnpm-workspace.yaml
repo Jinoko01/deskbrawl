@@ -1,2 +1,4 @@
 packages:
   - apps/desktop
+patchedDependencies:
+  pixi.js@8.22.0: patches/pixi.js@8.22.0.patch

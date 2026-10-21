@@ -1,0 +1,13 @@
+diff --git a/lib/scene/text-bitmap/AbstractBitmapFont.d.ts b/lib/scene/text-bitmap/AbstractBitmapFont.d.ts
+index 0e75825f8c476302ad4bab38fd17756b3fdca93c..33609621fea1f5356b35fa5d19abd65968c43255 100644
+--- a/lib/scene/text-bitmap/AbstractBitmapFont.d.ts
++++ b/lib/scene/text-bitmap/AbstractBitmapFont.d.ts
+@@ -98,7 +98,7 @@ export declare abstract class AbstractBitmapFont<FontType> extends EventEmitter<
+      */
+     readonly baseLineOffset: BitmapFontData['baseLineOffset'];
+     /** The range and type of the distance field for this font. */
+-    readonly distanceField: BitmapFontData['distanceField'];
++    readonly distanceField: NonNullable<BitmapFontData['distanceField']>;
+     /** The map of base page textures (i.e., sheets of glyphs). */
+     readonly pages: {
+         texture: Texture;
