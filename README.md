@@ -1,8 +1,10 @@
 # DeskBrawl
 
 Tauri 2 + React + TypeScript + Vite 기반 데스크톱 게임 프로젝트입니다.
-현재는 M0의 첫 작업인 **기본 앱 창과 개발·빌드 설정**을 구성했습니다.
-오버레이, PixiJS 렌더링, 입력 통과, 트레이와 서버는 후속 작업입니다.
+현재는 M0의 **기본 앱과 `main`·`overlay` 창 분리**를 구성했습니다.
+`main`은 기존 React 화면을 표시하고, `overlay`는 별도 `overlay.html`을 사용하는 투명 최상위 창으로 숨긴 상태에서 생성됩니다.
+오버레이는 네이티브 명령 권한이 없으며, `main`을 닫으면 숨겨진 오버레이까지 앱과 함께 종료됩니다. 오버레이만 닫으면 `main`은 유지됩니다.
+클릭 통과와 안전장치가 준비된 뒤 표시 제어를 연결합니다. PixiJS 렌더링, 입력 통과, 트레이와 서버는 후속 작업입니다.
 이 PC(Windows 11)에서 개발 앱 실행·한국어 표시·최대화/복원, 배포용 `deskbrawl.exe` 실행·종료, NSIS 설치 파일 생성과 설치·실행·제거까지 확인했습니다.
 구현 계획 M0에서는 프로젝트 생성·Windows 패키징 항목만 완료 처리했습니다. Windows 10 실기기 검증은 TBD입니다.
 
@@ -51,9 +53,17 @@ pnpm build
 - 네이티브 도구가 준비되면 `pnpm dev`로 화면 표시, 창 크기 변경, 닫기와 재실행을 확인하고 `pnpm build`로 설치 파일 생성을 검증합니다. Windows 10/11 호환성 및 최소 창 크기·DPI 정책은 아직 TBD입니다.
 
 TypeScript는 현재 ESLint TypeScript 도구의 지원 범위에 맞춰 6.0.3을 사용합니다.
-네이티브 명령·플러그인이 없으므로 capability 권한 목록은 비어 있습니다.
+네이티브 명령·플러그인이 없으므로 `main`·`overlay` 각각의 capability 권한 목록은 비어 있습니다.
 개발용 CSP만 Vite의 React 갱신 스크립트·스타일 주입과 로컬 WebSocket을 허용하며, 배포용 CSP에는 해당 예외가 없습니다.
 UI는 Tailwind 의미 기반 토큰을 사용하며, shadcn/ui 컴포넌트는 실제 컨트롤이 필요한 단계에서 추가합니다.
+
+Windows에서 `pnpm build` 후 창 생성·숨김·네이티브 스타일·종료 순서를 검증하려면:
+
+```powershell
+pwsh -File apps/desktop/scripts/test-window-lifecycle.ps1
+```
+
+이 검증은 실제 Windows 창을 두 번 실행합니다. 오버레이만 닫아도 `main`이 유지되는지, `main`을 닫으면 숨겨진 오버레이 때문에 프로세스가 남지 않는지 확인합니다. 클릭 통과·투명 합성·DPI 검증은 별도 후속 범위입니다.
 
 ## 구조
 

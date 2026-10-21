@@ -17,6 +17,21 @@
         "width": 800,
         "height": 600,
         "resizable": true
+      },
+      {
+        "label": "overlay",
+        "title": "DeskBrawl Overlay",
+        "url": "overlay.html",
+        "visible": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "focusable": false,
+        "shadow": false,
+        "resizable": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {

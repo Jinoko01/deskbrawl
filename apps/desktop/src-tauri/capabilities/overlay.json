@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay",
+  "description": "표시 전용 오버레이. 창 제어는 Rust가 담당하며 웹뷰에 네이티브 명령 권한을 부여하지 않습니다.",
+  "windows": ["overlay"],
+  "permissions": []
+}
