@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>DeskBrawl M0 Input Probe</title>
+  <style>
+    body { font: 18px/1.5 sans-serif; background: #e2e8f0; color: #0f172a; min-height: 2200px; margin: 24px; }
+    #counts { position: fixed; left: 24px; top: 70px; padding: 12px; background: white; }
+    textarea { position: fixed; width: 320px; height: 130px; left: calc(50% - 160px); top: calc(50% - 65px); font: 20px monospace; border: 3px solid #334155; }
+  </style>
+  <h1>DeskBrawl M0 Input Probe</h1>
+  <p>Disposable native Chrome input receiver. No network or saved user content.</p>
+  <output id="counts" role="status"></output>
+  <textarea aria-label="M0 controlled editor" spellcheck="false"></textarea>
+  <script>
+    const counts = { left: 0, right: 0, drag: 0, wheel: 0, keys: 0, scroll: 0 };
+    const output = document.querySelector('#counts');
+    function report() { output.textContent = JSON.stringify(counts); }
+    document.addEventListener('pointerdown', (event) => {
+      if (event.button === 0) counts.left++;
+      if (event.button === 2) counts.right++;
+      report();
+    });
+    document.addEventListener('pointermove', (event) => {
+      if (event.buttons & 1) { counts.drag++; report(); }
+    });
+    document.addEventListener('contextmenu', (event) => event.preventDefault());
+    document.addEventListener('wheel', () => { counts.wheel++; report(); }, { passive: true });
+    document.addEventListener('keydown', () => { counts.keys++; report(); });
+    window.addEventListener('scroll', () => { counts.scroll++; report(); });
+    report();
+  </script>
+</html>

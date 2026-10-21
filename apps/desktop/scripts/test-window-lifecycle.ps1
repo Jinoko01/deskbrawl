@@ -73,6 +73,32 @@ namespace DeskBrawl {
         private static extern IntPtr WindowFromPoint(Point point);
         [DllImport("user32.dll")]
         private static extern IntPtr GetAncestor(IntPtr window, uint flags);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint RegisterWindowMessage(string name);
+        [DllImport("user32.dll")]
+        private static extern uint GetMenuState(IntPtr menu, uint item, uint flags);
+
+        public static bool MenuChecked(IntPtr popup, uint command) {
+            var menu = SendMessage(popup, 0x01E1, IntPtr.Zero, IntPtr.Zero);
+            return (GetMenuState(menu, command, 0) & 8) != 0;
+        }
+
+        public static void NotifyDisplayChange(IntPtr window) {
+            PostMessage(window, 0x007E, new IntPtr(32), IntPtr.Zero);
+        }
+
+        public static void NotifyShellRestart(IntPtr window) {
+            PostMessage(window, RegisterWindowMessage("TaskbarCreated"), IntPtr.Zero, IntPtr.Zero);
+        }
+
+        public static bool CoversPrimaryMonitor(IntPtr window) {
+            Rect rect;
+            return GetWindowRect(window, out rect) && rect.Left == 0 && rect.Top == 0
+                && rect.Right == GetSystemMetrics(0) && rect.Bottom == GetSystemMetrics(1);
+        }
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int index);
 
         public static IntPtr Find(int processId, string title) {
             return FindWindow(processId, title, false);
@@ -211,6 +237,8 @@ foreach ($scenario in @('main', 'overlay', 'tray')) {
         Assert (-not [DeskBrawl.WindowTest]::HasNoFrame($main)) 'Main must retain its normal frame.'
         Assert ([DeskBrawl.WindowTest]::HasNoFrame($overlay)) 'Overlay must have no frame outside its client area.'
         Assert ([DeskBrawl.WindowTest]::IsWindowVisible($overlay)) 'Frame recalculation must preserve overlay visibility.'
+        Assert ([DeskBrawl.WindowTest]::CoversPrimaryMonitor($overlay)) 'Overlay must cover the complete primary monitor.'
+        Assert (($extendedStyle -band 0x00040000) -eq 0) 'Overlay must not appear as a normal taskbar window.'
         Assert (($style -band 0x00040000) -eq 0) 'Overlay must not be resizable.'
         Assert (($extendedStyle -band 0x00000008) -ne 0) 'Overlay must be topmost.'
         Assert (($extendedStyle -band 0x08000000) -ne 0) 'Overlay must not activate.'
@@ -219,6 +247,21 @@ foreach ($scenario in @('main', 'overlay', 'tray')) {
         $commands = Get-TrayCommands $app
         $tray = [DeskBrawl.WindowTest]::FindClass($app.Id, 'tray_icon_app')
         Assert ($commands.ContainsKey('오버레이 표시') -and $commands.ContainsKey('오버레이 숨김') -and $commands.ContainsKey('종료')) 'Tray commands must exist.'
+        Assert ($commands.ContainsKey('효과 감소')) 'Reduced effects preference must be available.'
+        foreach ($change in @('display', 'shell')) {
+            if ($change -eq 'display') { [DeskBrawl.WindowTest]::NotifyDisplayChange($overlay) }
+            else { [DeskBrawl.WindowTest]::NotifyShellRestart($overlay) }
+            Wait-Until { -not [DeskBrawl.WindowTest]::IsWindowVisible($overlay) } 'Display/shell changes must hide the overlay safely.'
+            $foreground = [DeskBrawl.WindowTest]::GetForegroundWindow()
+            [DeskBrawl.WindowTest]::Command($tray, $commands['오버레이 표시'])
+            Wait-Until {
+                $current = [DeskBrawl.WindowTest]::Find($app.Id, 'DeskBrawl Overlay')
+                $current -ne [IntPtr]::Zero -and [DeskBrawl.WindowTest]::IsWindowVisible($current)
+            } 'Tray must recreate after display/shell change.'
+            $overlay = [DeskBrawl.WindowTest]::Find($app.Id, 'DeskBrawl Overlay')
+            Assert ([DeskBrawl.WindowTest]::CoversPrimaryMonitor($overlay)) 'Recovered overlay must remeasure the primary monitor.'
+            Assert ([DeskBrawl.WindowTest]::GetForegroundWindow() -eq $foreground) 'Display recovery must preserve focus.'
+        }
         [DeskBrawl.WindowTest]::Command($tray, $commands['오버레이 숨김'])
         Wait-Until { -not [DeskBrawl.WindowTest]::IsWindowVisible($overlay) } 'Tray hide failed.'
         $foregroundBeforeShow = [DeskBrawl.WindowTest]::GetForegroundWindow()

@@ -10,6 +10,11 @@ export async function testOverlayRendering() {
   const originalInit = Application.prototype.init;
   const originalDestroy = Application.prototype.destroy;
   const originalDecode = Image.prototype.decode;
+  const originalMatchMedia = window.matchMedia;
+  const motion = new EventTarget();
+  motion.matches = false;
+  window.matchMedia = (query) => query === "(prefers-reduced-motion: reduce)"
+    ? motion : originalMatchMedia.call(window, query);
   let destroyed = 0;
   let currentApp;
   let cleanup = () => {};
@@ -31,7 +36,7 @@ export async function testOverlayRendering() {
     const deadline = performance.now() + 10_000;
     while (!predicate()) {
       if (performance.now() > deadline) throw new Error("렌더링 검증 시간 초과");
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => setTimeout(resolve, 16));
     }
   }
 
@@ -50,7 +55,16 @@ export async function testOverlayRendering() {
       const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
       check(gl.getContextAttributes().alpha, "알파 채널 비활성");
       check(gl.getParameter(gl.COLOR_CLEAR_VALUE)[3] === 0, "배경 알파가 0이 아님");
-      check(!currentApp.ticker.started, "정지 장면에 프레임 루프가 실행 중");
+      check(currentApp.ticker.started === !document.hidden, "문서 가시성과 대기 루프 상태 불일치");
+      if (!document.hidden) {
+        const now = performance.now();
+        for (let step = 1; step <= 4; step += 1) currentApp.ticker.update(now + step * 100);
+        check(currentApp.stage.children[0].currentFrame > 0, "대기 프레임이 진행되지 않음");
+      }
+      motion.matches = true;
+      motion.dispatchEvent(new Event("change"));
+      check(!currentApp.ticker.started && currentApp.stage.children[0].currentFrame === 0,
+        "동작 줄이기에서 대기 애니메이션이 정지하지 않음");
       const { pixels, width, height } = currentApp.renderer.extract.pixels({
         target: currentApp.stage,
         frame: currentApp.screen,
@@ -69,6 +83,7 @@ export async function testOverlayRendering() {
       check(host.childElementCount === 0, "해제 후 canvas 잔류");
       host.style.width = "320px";
       host.style.height = "200px";
+      motion.matches = false;
     }
 
     let releaseInit;
@@ -94,6 +109,7 @@ export async function testOverlayRendering() {
     await mount("error");
     check(host.childElementCount === 0 && destroyed === 5, "실패 후 자원 잔류");
     Image.prototype.decode = originalDecode;
+    window.matchMedia = originalMatchMedia;
     Application.prototype.init = captureInit;
     let contextStatus = "loading";
     cleanup = mountCharacter(host, (value) => { contextStatus = value; });
@@ -112,6 +128,7 @@ export async function testOverlayRendering() {
     Application.prototype.init = originalInit;
     Application.prototype.destroy = originalDestroy;
     Image.prototype.decode = originalDecode;
+    window.matchMedia = originalMatchMedia;
     host.remove();
   }
 }
