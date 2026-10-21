@@ -13,3 +13,4 @@ export type {
   WorldState,
 } from "./types";
 export { advance, createWorld } from "./world";
+export { DEFAULT_COMBAT } from "./defaults";

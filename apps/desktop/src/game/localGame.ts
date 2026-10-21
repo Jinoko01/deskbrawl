@@ -1,16 +1,11 @@
-import { advance, createWorld } from "@deskbrawl/game-core";
-import type { CombatRules, PlayerAction, PlayerInput, WorldState } from "@deskbrawl/game-core";
+import { advance, createWorld, DEFAULT_COMBAT } from "@deskbrawl/game-core";
+import type { PlayerAction, PlayerInput, WorldState } from "@deskbrawl/game-core";
 import type { LocalCommand } from "../native/localGame";
 import type { CharacterMotion, CharacterSceneSnapshot } from "./characterScene";
-import { initialCharacterScene } from "./characterScene";
+import { initialCharacterScene, sameCharacterScene } from "./characterScene";
 
 // 로컬 검증용 조정값이다. 제품 확정값은 추후 실기기 검증으로 결정한다.
-export const LOCAL_COMBAT: CombatRules = {
-  meleeReach: 72, meleeCooldownMs: 600, stoneCooldownMs: 900,
-  stoneSpeedUnitsPerSecond: 650, stoneRadius: 8, stoneLifetimeMs: 1500,
-  stunMs: 400, invulnerabilityMs: 500, knockbackMs: 200,
-  knockbackSpeedUnitsPerSecond: 450, effectMs: 300,
-};
+export const LOCAL_COMBAT = DEFAULT_COMBAT;
 
 function motion(world: WorldState, player: WorldState["players"][number], moving: boolean): CharacterMotion {
   if (world.tick < player.knockbackUntilTick) return { kind: "hit", actionId: `${player.id}:hit:${player.lastHitTick}` };
@@ -20,19 +15,6 @@ function motion(world: WorldState, player: WorldState["players"][number], moving
     return { kind: last.kind === "melee" ? "melee" : "throw", actionId: `${player.id}:${last.tick}` };
   }
   return { kind: moving ? "walk" : "idle" };
-}
-
-function sameScene(a: CharacterSceneSnapshot | undefined, b: CharacterSceneSnapshot): boolean {
-  if (a === undefined || a.characters.length !== b.characters.length || a.projectiles?.length !== b.projectiles?.length || a.effects?.length !== b.effects?.length) return false;
-  return a.characters.every((frame, index) => {
-    const other = b.characters[index];
-    return other !== undefined && frame.id === other.id && frame.position.x === other.position.x && frame.position.y === other.position.y
-      && frame.facing.x === other.facing.x && frame.facing.y === other.facing.y && frame.motion.kind === other.motion.kind
-      && ("actionId" in frame.motion ? frame.motion.actionId : undefined) === ("actionId" in other.motion ? other.motion.actionId : undefined);
-  }) && (a.projectiles ?? []).every((stone, index) => {
-    const other = b.projectiles?.[index];
-    return other !== undefined && stone.id === other.id && stone.position.x === other.position.x && stone.position.y === other.position.y;
-  }) && (a.effects ?? []).every((effect, index) => effect.id === b.effects?.[index]?.id);
 }
 
 export function createLocalGame(width: number, height: number, render: (snapshot: CharacterSceneSnapshot) => void,
@@ -59,7 +41,7 @@ export function createLocalGame(width: number, height: number, render: (snapshot
         skin: player.id === "host" ? "mochi" : "mint",
         motion: motion(world, player, player.position.x !== before.players[index]?.position.x || player.position.y !== before.players[index]?.position.y) })),
       projectiles: world.projectiles, effects: world.effects };
-    if (!sameScene(previousScene, snapshot)) { previousScene = snapshot; render(snapshot); }
+    if (!sameCharacterScene(previousScene, snapshot)) { previousScene = snapshot; render(snapshot); }
   }
   publish(world);
   return {
