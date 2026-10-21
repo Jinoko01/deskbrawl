@@ -115,15 +115,13 @@ async function testLocalGame(main) {
   control("hide");
   await until(() => main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available').then(value => !value)"), "Hidden overlay still accepted input");
   control("show");
-  await until(() => main.evaluate("document.querySelector('button')?.disabled === false"), "Local controls did not become ready");
-  if (!await main.evaluate("document.hasFocus()")) {
-    console.log("SKIP: native PLAY input requires an interactive foreground main window");
-    return;
-  }
-  await main.evaluate("document.querySelector('button').click()");
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY') || !!document.querySelector('[role=alert]')"), "PLAY did not start");
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('플레이할 수 있음')"), "Local controls did not become ready");
+  control("play");
+  const started = await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·') || !!document.querySelector('[role=alert]')"), "PLAY did not start")
+    .then(() => true, (error) => error);
   const failure = await main.evaluate("document.querySelector('[role=alert]')?.textContent ?? ''");
-  if (failure === "플레이 시작 실패: MAIN_NOT_FOCUSED") {
+  if (started !== true || failure === "플레이 시작 실패: MAIN_NOT_FOCUSED") {
+    if (await main.evaluate("document.hasFocus()")) throw started === true ? new Error(failure) : started;
     assert.equal(await main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), true);
     console.log("SKIP: native PLAY input requires an interactive foreground main window");
     return;
@@ -142,7 +140,12 @@ async function testLocalGame(main) {
   await key(main, "Escape", "Escape", true);
   await key(main, "Escape", "Escape", false);
   await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Escape did not return to WORK");
-  console.log("PASS: local PLAY/WORK, arrow movement, melee, stone lifecycle, IPC scope and Escape");
+  control("play");
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Ctrl+Shift+G did not enter PLAY again");
+  control("play");
+  await until(() => main.evaluate("!document.hasFocus() && document.querySelector('[role=status]')?.textContent?.includes('WORK')"),
+    "Ctrl+Shift+G did not return focus and WORK");
+  console.log("PASS: Ctrl+Shift+G PLAY/WORK, arrow movement, melee, stone lifecycle, IPC scope and Escape");
 }
 
 async function launch() {

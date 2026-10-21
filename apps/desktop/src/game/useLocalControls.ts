@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { PlayerInput } from "@deskbrawl/game-core";
-import { localAvailable, localGameSupported, sendLocalCommand, watchLocalReset } from "../native/localGame";
+import { localAvailable, localGameSupported, sendLocalCommand, watchLocalPlay, watchLocalReset } from "../native/localGame";
 import type { LocalCommand } from "../native/localGame";
 import { createKeyboardInput } from "./keyboardInput";
 
@@ -8,8 +8,6 @@ const zero = { x: 0, y: 0 } as const;
 
 export function useLocalControls() {
   const region = useRef<HTMLDivElement>(null);
-  const start = useRef<() => void>(() => {});
-  const work = useRef<() => void>(() => {});
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -28,6 +26,8 @@ export function useLocalControls() {
     let statusEvent = false;
     let queue = Promise.resolve();
     let unlisten: (() => void) | undefined;
+    let unlistenPlay: (() => void) | undefined;
+    let awaitingFocus: (() => void) | undefined;
 
     function enqueue(kind: LocalCommand["kind"], movement: PlayerInput["movement"] = zero, action?: LocalCommand["action"]): Promise<void> {
       const command: LocalCommand = { kind, seq: ++sequence, movement, ...(action ? { action } : {}) };
@@ -37,6 +37,7 @@ export function useLocalControls() {
     }
 
     function leave(): void {
+      awaitingFocus?.();
       revision++;
       const wasActive = active || pending;
       active = false;
@@ -55,7 +56,7 @@ export function useLocalControls() {
       if (live) { setReady(nextReady); if (nextReady) setError(undefined); }
     }
 
-    start.current = () => {
+    function start(): void {
       if (!available || active || pending || !document.hasFocus() || document.hidden) return;
       pending = true;
       setBusy(true);
@@ -73,8 +74,22 @@ export function useLocalControls() {
         setError(`플레이 시작 실패: ${String(cause)}`);
         leave();
       });
-    };
-    work.current = leave;
+    }
+
+    // 단축키로 조작 창이 앞으로 와도 WebView의 focus는 늦게 도착할 수 있다.
+    function requestPlay(): void {
+      if (active || pending) return;
+      awaitingFocus?.();
+      if (document.hasFocus()) { start(); return; }
+      const timeout = setTimeout(() => awaitingFocus?.(), 1000);
+      function onFocus(): void { awaitingFocus?.(); start(); }
+      awaitingFocus = () => {
+        clearTimeout(timeout);
+        window.removeEventListener("focus", onFocus);
+        awaitingFocus = undefined;
+      };
+      window.addEventListener("focus", onFocus);
+    }
 
     function onKeyDown(event: KeyboardEvent): void {
       if (!active) return;
@@ -105,6 +120,9 @@ export function useLocalControls() {
         const stop = await watchLocalReset(reset);
         if (!live) { stop(); return; }
         unlisten = stop;
+        const stopPlay = await watchLocalPlay(requestPlay);
+        if (!live) { stopPlay(); return; }
+        unlistenPlay = stopPlay;
         const initial = await localAvailable();
         if (live && !statusEvent) { available = initial; setReady(initial); }
       } catch (cause) {
@@ -115,15 +133,13 @@ export function useLocalControls() {
       leave();
       live = false;
       unlisten?.();
+      unlistenPlay?.();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", leave);
       document.removeEventListener("visibilitychange", onVisibility);
-      start.current = () => {};
-      work.current = () => {};
     };
   }, [supported]);
 
-  return { region, ready, playing, busy, error, supported,
-    start: () => start.current(), work: () => work.current() };
+  return { region, ready, playing, busy, error, supported };
 }

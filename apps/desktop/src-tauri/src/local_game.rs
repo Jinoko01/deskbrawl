@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use tauri::{
     ipc::{InvokeBody, Request},
     AppHandle, Emitter, Manager, WebviewWindow, Window, WindowEvent,
@@ -7,6 +7,33 @@ use tauri::{
 #[derive(Default)]
 pub struct LocalSession {
     ready: AtomicBool,
+    // An accepted PLAY that has not ended through WORK or main losing focus.
+    playing: AtomicBool,
+    // The work window that had focus before the PLAY shortcut; 0 when unknown.
+    previous: AtomicIsize,
+}
+
+pub fn playing(app: &AppHandle) -> bool {
+    app.state::<LocalSession>().playing.load(Ordering::SeqCst)
+}
+
+pub fn remember_previous(app: &AppHandle, window: isize) {
+    app.state::<LocalSession>()
+        .previous
+        .store(window, Ordering::SeqCst);
+}
+
+pub fn take_previous(app: &AppHandle) -> isize {
+    let session = app.state::<LocalSession>();
+    session.playing.store(false, Ordering::SeqCst);
+    session.previous.swap(0, Ordering::SeqCst)
+}
+
+// main has just been brought to the foreground; its webview starts PLAY once focused.
+pub fn request_play(app: &AppHandle) {
+    if let Err(error) = app.emit_to("main", "local-play", ()) {
+        eprintln!("Local play request failed: {error}");
+    }
 }
 
 fn visible(app: &AppHandle) -> bool {
@@ -17,6 +44,9 @@ fn visible(app: &AppHandle) -> bool {
 
 pub fn on_overlay_visibility(app: &AppHandle, shown: bool) {
     if !shown {
+        app.state::<LocalSession>()
+            .playing
+            .store(false, Ordering::SeqCst);
         if let Err(error) = app.emit_to("overlay", "local-input", "stop") {
             eprintln!("Local stop failed: {error}");
         }
@@ -92,8 +122,9 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
         }
     }
     let app = window.app_handle();
+    let focused = window.is_focused().map_err(|_| "LOCAL_FOCUS_FAILED")?;
     if kind != "work" {
-        if !window.is_focused().map_err(|_| "LOCAL_FOCUS_FAILED")? {
+        if !focused {
             return Err("MAIN_NOT_FOCUSED");
         }
         if !app.state::<LocalSession>().ready.load(Ordering::SeqCst) || !visible(app) {
@@ -102,11 +133,33 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
     }
     window
         .emit_to("overlay", "local-input", value.clone())
-        .map_err(|_| "LOCAL_EVENT_FAILED")
+        .map_err(|_| "LOCAL_EVENT_FAILED")?;
+    match kind {
+        "play" => app
+            .state::<LocalSession>()
+            .playing
+            .store(true, Ordering::SeqCst),
+        "work" => {
+            let previous = take_previous(app);
+            // Esc returns to the work window; a WORK caused by focus loss must not move focus.
+            if focused && previous != 0 {
+                #[cfg(windows)]
+                crate::native_windows::return_focus(&window.as_ref().window(), previous)
+                    .map_err(|_| "LOCAL_FOCUS_FAILED")?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     if window.label() == "main" && matches!(event, WindowEvent::Focused(false)) {
+        window
+            .app_handle()
+            .state::<LocalSession>()
+            .playing
+            .store(false, Ordering::SeqCst);
         if let Err(error) = window.emit_to("overlay", "local-input", "stop") {
             eprintln!("Local stop failed: {error}");
         }

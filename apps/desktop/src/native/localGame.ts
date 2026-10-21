@@ -50,6 +50,12 @@ export async function watchLocalCommands(onCommand: (command: LocalCommand | "st
   });
 }
 
+// Ctrl+Shift+G가 조작 창을 앞으로 가져온 뒤 PLAY 시작을 요청한다.
+export async function watchLocalPlay(onPlay: () => void): Promise<() => void> {
+  if (!isTauri()) return () => {};
+  return listen("local-play", () => onPlay());
+}
+
 export async function watchLocalReset(onReset: (ready: boolean) => void): Promise<() => void> {
   if (!isTauri()) return () => {};
   return listen<unknown>("local-reset", ({ payload }) => {

@@ -6,12 +6,23 @@ const GWL_EXSTYLE: i32 = -20;
 const SAFE_EXTENDED_STYLE: u32 = 0x0808_00a0; // NOACTIVATE | LAYERED | TRANSPARENT | TOOLWINDOW
 const SW_HIDE: i32 = 0;
 const SW_SHOWNOACTIVATE: i32 = 4;
+const SW_MINIMIZE: i32 = 6;
+const SW_RESTORE: i32 = 9;
+const WM_HOTKEY: u32 = 0x0312;
+const PLAY_HOTKEY: i32 = 1;
+const PLAY_HOTKEY_MODIFIERS: u32 = 0x0002 | 0x0004 | 0x4000; // CONTROL | SHIFT | NOREPEAT
+const PLAY_HOTKEY_KEY: u32 = 0x47; // G
 
 #[link(name = "user32")]
 unsafe extern "system" {
     fn GetWindowLongW(window: *mut c_void, index: i32) -> i32;
     fn SetWindowLongW(window: *mut c_void, index: i32, value: i32) -> i32;
     fn GetForegroundWindow() -> *mut c_void;
+    fn SetForegroundWindow(window: *mut c_void) -> i32;
+    fn IsWindow(window: *mut c_void) -> i32;
+    fn IsIconic(window: *mut c_void) -> i32;
+    fn RegisterHotKey(window: *mut c_void, id: i32, modifiers: u32, key: u32) -> i32;
+    fn UnregisterHotKey(window: *mut c_void, id: i32) -> i32;
     fn ShowWindow(window: *mut c_void, command: i32) -> i32;
     fn IsWindowVisible(window: *mut c_void) -> i32;
     fn DestroyWindow(window: *mut c_void) -> i32;
@@ -132,6 +143,105 @@ unsafe extern "system" fn display_proc(
         }
     }
     unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
+}
+
+// The only global shortcut. It is registered to main's HWND, so WM_HOTKEY arrives
+// on main's UI thread, and Windows grants this process foreground rights for it.
+pub fn watch_play_hotkey(window: &Window) -> tauri::Result<()> {
+    let hwnd = window.hwnd()?.0;
+    let data = Box::into_raw(Box::new(window.app_handle().clone()));
+    // SAFETY: Installation runs on main's UI thread once. Ownership of data
+    // transfers to the subclass on success and ends at WM_NCDESTROY.
+    unsafe {
+        if SetWindowSubclass(hwnd, hotkey_proc, 2, data as usize) == 0 {
+            drop(Box::from_raw(data));
+            return Err(std::io::Error::last_os_error().into());
+        }
+        if RegisterHotKey(hwnd, PLAY_HOTKEY, PLAY_HOTKEY_MODIFIERS, PLAY_HOTKEY_KEY) == 0 {
+            let error = std::io::Error::last_os_error();
+            RemoveWindowSubclass(hwnd, hotkey_proc, 2);
+            drop(Box::from_raw(data));
+            return Err(error.into());
+        }
+    }
+    Ok(())
+}
+
+unsafe extern "system" fn hotkey_proc(
+    hwnd: *mut c_void,
+    message: u32,
+    wparam: usize,
+    lparam: isize,
+    id: usize,
+    data: usize,
+) -> isize {
+    // SAFETY: data belongs to this subclass until its WM_NCDESTROY callback;
+    // callbacks are serialized on main's UI thread, and never unwind.
+    let app = unsafe { &*(data as *const tauri::AppHandle) };
+    if message == WM_HOTKEY && wparam == PLAY_HOTKEY as usize {
+        unsafe { toggle_play(app, hwnd) };
+        return 0;
+    }
+    if message == 0x0082 {
+        unsafe {
+            UnregisterHotKey(hwnd, PLAY_HOTKEY);
+            RemoveWindowSubclass(hwnd, hotkey_proc, id);
+            drop(Box::from_raw(data as *mut tauri::AppHandle));
+        }
+    }
+    unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
+}
+
+// SAFETY: main is the live main HWND and this runs on its UI thread.
+unsafe fn toggle_play(app: &tauri::AppHandle, main: *mut c_void) {
+    let foreground = unsafe { GetForegroundWindow() };
+    if foreground == main && crate::local_game::playing(app) {
+        unsafe { return_focus_to(main, crate::local_game::take_previous(app)) };
+        return;
+    }
+    // Remember the work window to return to; none when main was already in front.
+    crate::local_game::remember_previous(
+        app,
+        if foreground == main {
+            0
+        } else {
+            foreground as isize
+        },
+    );
+    unsafe {
+        if IsIconic(main) != 0 {
+            ShowWindow(main, SW_RESTORE);
+        }
+        if SetForegroundWindow(main) == 0 {
+            eprintln!("Could not focus the control window for PLAY");
+            return;
+        }
+    }
+    crate::local_game::request_play(app);
+}
+
+// SAFETY: main must be the live main HWND, called on its UI thread while it is foreground.
+// previous is an untrusted handle value that may have been destroyed since; it is only
+// validated and activated, never dereferenced.
+unsafe fn return_focus_to(main: *mut c_void, previous: isize) {
+    let target = previous as *mut c_void;
+    let restored = previous != 0
+        && unsafe {
+            IsWindow(target) != 0
+                && IsWindowVisible(target) != 0
+                && SetForegroundWindow(target) != 0
+        };
+    if !restored {
+        // Minimizing hands focus to the next window instead of keeping game input.
+        unsafe { ShowWindow(main, SW_MINIMIZE) };
+    }
+}
+
+pub fn return_focus(window: &Window, previous: isize) -> tauri::Result<()> {
+    let hwnd = window.hwnd()?.0;
+    // SAFETY: Callers run on main's UI thread while main is foreground.
+    unsafe { return_focus_to(hwnd, previous) };
+    Ok(())
 }
 
 pub fn verify(window: &Window) -> tauri::Result<()> {

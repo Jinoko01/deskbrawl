@@ -18,6 +18,13 @@ fn main() -> tauri::Result<()> {
         ])
         .setup(|app| {
             app.manage(local_game::LocalSession::default());
+            // A shortcut owned by another app must not block the overlay itself.
+            #[cfg(windows)]
+            if let Some(main) = app.get_webview_window("main") {
+                if let Err(error) = native_windows::watch_play_hotkey(&main.as_ref().window()) {
+                    eprintln!("Ctrl+Shift+G registration failed: {error}");
+                }
+            }
             overlay::setup(app)?;
             Ok(())
         })
