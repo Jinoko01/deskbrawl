@@ -104,6 +104,16 @@ export async function testOverlayRendering() {
         check(first.x === 80 && body.scale.x < 0, "효과 감소 중 위치·방향 갱신 실패");
         check(second.children[1].visible && !currentApp.ticker.started, "효과 감소 중 기절 상태 표현 실패");
         check(second.children[0].currentFrame === 1, "기절 시 마지막 피격 자세 누락");
+        scene.update({ ...snapshot,
+          projectiles: [{ id: "stone-1", ownerId: "host", position: { x: 140, y: 110 }, velocity: { x: 1, y: 0 }, expiresAtTick: 10 }],
+          effects: [{ id: "impact-1", kind: "impact", position: { x: 230, y: 110 }, startedAtTick: 1, expiresAtTick: 5 }],
+        });
+        check(currentApp.stage.children.length === 4, "돌과 피격 효과가 표시되지 않음");
+        check(currentApp.stage.children.some((item) => item.label === "stone:stone-1" && item.x === 140), "돌 좌표가 반영되지 않음");
+        check(currentApp.stage.children.some((item) => item.label === "effect:impact-1"), "피격 효과가 표시되지 않음");
+        check(!currentApp.ticker.started, "효과 감소 중 돌과 피격 애니메이션이 재생됨");
+        scene.update(snapshot);
+        check(currentApp.stage.children.length === 2, "만료된 돌과 피격 효과가 정리되지 않음");
         snapshot.characters = snapshot.characters.map((frame) => ({ ...frame, motion: { kind: "melee", actionId: "one" } }));
         scene.update(snapshot);
         motion.matches = false;

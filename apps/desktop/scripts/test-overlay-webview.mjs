@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 
 // --dev는 Vite와 Tauri 개발 빌드가 준비된 경우에만 소스 기반 WebGL 검증도 실행한다.
 const development = process.argv.includes("--dev");
+const localGame = process.argv.includes("--local");
 const executable = fileURLToPath(new URL(`../src-tauri/target/${development ? "debug" : "release"}/deskbrawl.exe`, import.meta.url));
 const controller = fileURLToPath(new URL("./overlay-test-control.ps1", import.meta.url));
 const profileRoot = resolve(fileURLToPath(new URL("../node_modules/.cache", import.meta.url)));
@@ -99,6 +100,51 @@ async function setPreference(value) {
   await until(async () => await preference() === value, "Tray preference did not reach Rust");
 }
 
+async function key(main, code, key, down) {
+  const virtualKey = code === "ArrowRight" ? 39 : code === "KeyZ" ? 90 : code === "KeyX" ? 88 : 27;
+  await main.rpc("Input.dispatchKeyEvent", { type: down ? "keyDown" : "keyUp", key, code,
+    windowsVirtualKeyCode: virtualKey, nativeVirtualKeyCode: virtualKey });
+}
+
+async function testLocalGame(main) {
+  const deny = "command => window.__TAURI_INTERNALS__.invoke(command, {kind:'play',seq:1,movement:{x:0,y:0},ready:true}).then(() => false, () => true)";
+  assert.equal(await overlay.evaluate(`(${deny})('local_control')`), true, "Overlay must not control the local game");
+  assert.equal(await main.evaluate(`(${deny})('local_overlay_status')`), true, "Main must not claim overlay readiness");
+  assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_control',{kind:'play',seq:0,movement:{x:0,y:0}}).then(() => false, () => true)"), true,
+    "Invalid input must be rejected");
+  control("hide");
+  await until(() => main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available').then(value => !value)"), "Hidden overlay still accepted input");
+  control("show");
+  await until(() => main.evaluate("document.querySelector('button')?.disabled === false"), "Local controls did not become ready");
+  if (!await main.evaluate("document.hasFocus()")) {
+    console.log("SKIP: native PLAY input requires an interactive foreground main window");
+    return;
+  }
+  await main.evaluate("document.querySelector('button').click()");
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY') || !!document.querySelector('[role=alert]')"), "PLAY did not start");
+  const failure = await main.evaluate("document.querySelector('[role=alert]')?.textContent ?? ''");
+  if (failure === "플레이 시작 실패: MAIN_NOT_FOCUSED") {
+    assert.equal(await main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), true);
+    console.log("SKIP: native PLAY input requires an interactive foreground main window");
+    return;
+  }
+  assert.equal(failure, "", "Local play failed");
+  await key(main, "ArrowRight", "ArrowRight", true);
+  await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('모찌: walk')"), "Movement did not reach the overlay");
+  await key(main, "ArrowRight", "ArrowRight", false);
+  await key(main, "KeyZ", "z", true);
+  await key(main, "KeyZ", "z", false);
+  await until(() => overlay.evaluate("/민트: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Melee hit did not reach the overlay");
+  await key(main, "KeyX", "x", true);
+  await key(main, "KeyX", "x", false);
+  await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('돌 1개')"), "Stone did not reach the overlay");
+  await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('돌 0개')"), "Stone was not cleaned up");
+  await key(main, "Escape", "Escape", true);
+  await key(main, "Escape", "Escape", false);
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Escape did not return to WORK");
+  console.log("PASS: local PLAY/WORK, arrow movement, melee, stone lifecycle, IPC scope and Escape");
+}
+
 async function launch() {
   app = spawn(executable, [], { windowsHide: true, env: { ...process.env,
     WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
@@ -117,11 +163,14 @@ try {
   const main = await connect(mainTarget);
   assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('overlay_reduced_effects').then(() => false, () => true)"), true,
     "Main must be denied the overlay-only command");
+  if (localGame) await testLocalGame(main);
   await overlay.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   await setPreference(false);
   if (development) {
     assert.equal(await overlay.evaluate("location.origin"), "http://127.0.0.1:1420",
       "Source renderer tests require the local Tauri development URL");
+    const { data: controllerImage } = await main.rpc("Page.captureScreenshot", { format: "png" });
+    writeFileSync(join(profileRoot, "m1-controller.png"), Buffer.from(controllerImage, "base64"));
     const { cssLayoutViewport: viewport } = await overlay.rpc("Page.getLayoutMetrics");
     const { data } = await overlay.rpc("Page.captureScreenshot", { format: "png", clip: {
       x: Math.max(0, viewport.clientWidth / 2 - 180), y: Math.max(0, viewport.clientHeight / 2 - 100),

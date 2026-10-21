@@ -316,10 +316,12 @@ fn request_show(app: &AppHandle) -> tauri::Result<()> {
     if app.state::<Control>().intent.load(Ordering::SeqCst) != VISIBLE {
         return request_hide(app);
     }
+    crate::local_game::on_overlay_visibility(app, true);
     app.state::<Control>().status.set_text("오버레이: 표시 중")
 }
 
 fn request_hide(app: &AppHandle) -> tauri::Result<()> {
+    crate::local_game::on_overlay_visibility(app, false);
     if let Some(window) = app.get_webview_window("overlay") {
         conceal(&window)?;
     }

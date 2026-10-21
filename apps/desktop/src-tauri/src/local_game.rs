@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     ipc::{InvokeBody, Request},
-    Emitter, Manager, WebviewWindow, Window, WindowEvent,
+    AppHandle, Emitter, Manager, WebviewWindow, Window, WindowEvent,
 };
 
 #[derive(Default)]
@@ -9,16 +9,31 @@ pub struct LocalSession {
     ready: AtomicBool,
 }
 
+fn visible(app: &AppHandle) -> bool {
+    app.get_webview_window("overlay")
+        .and_then(|overlay| overlay.is_visible().ok())
+        .unwrap_or(false)
+}
+
+pub fn on_overlay_visibility(app: &AppHandle, shown: bool) {
+    if !shown {
+        if let Err(error) = app.emit_to("overlay", "local-input", "stop") {
+            eprintln!("Local stop failed: {error}");
+        }
+    }
+    let ready = shown && app.state::<LocalSession>().ready.load(Ordering::SeqCst);
+    if let Err(error) = app.emit_to("main", "local-reset", ready) {
+        eprintln!("Local mode reset failed: {error}");
+    }
+}
+
 #[tauri::command]
 pub fn local_available(window: WebviewWindow) -> Result<bool, &'static str> {
     if window.label() != "main" {
         return Err("MAIN_ONLY");
     }
-    Ok(window
-        .app_handle()
-        .state::<LocalSession>()
-        .ready
-        .load(Ordering::SeqCst))
+    let app = window.app_handle();
+    Ok(app.state::<LocalSession>().ready.load(Ordering::SeqCst) && visible(app))
 }
 
 #[tauri::command]
@@ -32,7 +47,7 @@ pub fn local_overlay_status(window: WebviewWindow, ready: bool) -> Result<(), &'
         .ready
         .store(ready, Ordering::SeqCst);
     window
-        .emit_to("main", "local-reset", ready)
+        .emit_to("main", "local-reset", ready && visible(window.app_handle()))
         .map_err(|_| "LOCAL_EVENT_FAILED")
 }
 
@@ -81,7 +96,7 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
         if !window.is_focused().map_err(|_| "LOCAL_FOCUS_FAILED")? {
             return Err("MAIN_NOT_FOCUSED");
         }
-        if !app.state::<LocalSession>().ready.load(Ordering::SeqCst) {
+        if !app.state::<LocalSession>().ready.load(Ordering::SeqCst) || !visible(app) {
             return Err("OVERLAY_NOT_READY");
         }
     }
