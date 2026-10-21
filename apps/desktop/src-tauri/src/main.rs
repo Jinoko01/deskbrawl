@@ -6,21 +6,41 @@ mod controls;
 mod local_game;
 #[cfg(windows)]
 mod native_windows;
+mod network;
 mod overlay;
 
 fn main() -> tauri::Result<()> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(main) = app.get_webview_window("main") {
+                if let Err(error) = main
+                    .unminimize()
+                    .and_then(|_| main.show())
+                    .and_then(|_| main.set_focus())
+                {
+                    eprintln!("Could not show DeskBrawl: {error}");
+                }
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(tauri::generate_handler![
             overlay::overlay_reduced_effects,
+            overlay::preview_reduced_effects,
             overlay::overlay_renderer_failed,
             local_game::local_available,
             local_game::local_control,
             local_game::local_overlay_status,
             controls::local_controls,
-            controls::local_set_controls
+            controls::local_set_controls,
+            network::network_publish,
+            network::network_read,
+            network::network_bounds,
+            network::credential_read,
+            network::credential_write
         ])
         .setup(|app| {
             app.manage(local_game::LocalSession::default());
+            app.manage(network::NetworkState::default());
             app.manage(controls::ControlState::default());
             #[cfg(windows)]
             if let Some(main) = app.get_webview_window("main") {

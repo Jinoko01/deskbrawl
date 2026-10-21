@@ -136,9 +136,7 @@ fn toggle_effects(app: &AppHandle) {
             )?;
             control.reduced_effects.store(value, Ordering::SeqCst);
             control.effects_menu.set_checked(value)?;
-            if let Some(window) = app.get_webview_window("overlay") {
-                window.emit("overlay-effects-changed", value)?;
-            }
+            app.emit("overlay-effects-changed", value)?;
             Ok(())
         })();
         if result.is_err() {
@@ -166,6 +164,7 @@ fn load_preferences(app: &AppHandle) -> tauri::Result<()> {
         };
         control.reduced_effects.store(value, Ordering::SeqCst);
         control.effects_menu.set_checked(value)?;
+        app.emit("overlay-effects-changed", value)?;
     }
     Ok(())
 }
@@ -181,6 +180,18 @@ fn require_overlay(window: &WebviewWindow) -> Result<(), &'static str> {
 #[tauri::command]
 pub fn overlay_reduced_effects(window: WebviewWindow) -> Result<bool, &'static str> {
     require_overlay(&window)?;
+    Ok(window
+        .app_handle()
+        .state::<Control>()
+        .reduced_effects
+        .load(Ordering::SeqCst))
+}
+
+#[tauri::command]
+pub fn preview_reduced_effects(window: WebviewWindow) -> Result<bool, &'static str> {
+    if window.label() != "main" {
+        return Err("MAIN_ONLY");
+    }
     Ok(window
         .app_handle()
         .state::<Control>()

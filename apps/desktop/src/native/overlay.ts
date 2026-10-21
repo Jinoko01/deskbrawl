@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 export function watchReducedEffects(
   onChange: (reduced: boolean) => void,
   onError: (error: unknown) => void,
+  target: "overlay" | "preview" = "overlay",
 ): () => void {
   if (!isTauri()) { onChange(false); return () => {}; }
   let disposed = false;
@@ -19,7 +20,7 @@ export function watchReducedEffects(
       });
       if (disposed) { stop(); return; }
       unlisten = stop;
-      const reduced = await invoke<unknown>("overlay_reduced_effects");
+      const reduced = await invoke<unknown>(target === "overlay" ? "overlay_reduced_effects" : "preview_reduced_effects");
       if (typeof reduced !== "boolean") throw new Error("Invalid effects preference");
       // A live event received during the initial query wins over that snapshot.
       if (!disposed && !changed) onChange(reduced);
