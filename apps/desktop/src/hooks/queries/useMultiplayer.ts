@@ -26,11 +26,14 @@ import {
 import type { LocalCommand } from "../../native/localGame";
 import { createVisitClient } from "../../realtime/visitClient";
 import type { VisitClient } from "../../realtime/visitClient";
+import {
+  publishInviteLink, readFocus, setNativeFocus, watchFocus,
+} from "../../native/focus";
 
 interface MultiplayerView {
   phase: "local" | "connecting" | "host" | "guest" | "error";
   error?: string;
-  members: string[];
+  members: Snapshot["members"];
 }
 
 const SESSION_REUSE_MARGIN_MS = 60_000;
@@ -46,6 +49,10 @@ export function useMultiplayer() {
   const operation = useRef<Promise<void> | undefined>(undefined);
   const pendingInvite = useRef<string | undefined>(undefined);
   const everConnected = useRef(false);
+  const [focused, setFocused] = useState(false);
+  const [focusLoaded, setFocusLoaded] = useState(false);
+  const focusValue = useRef(false);
+  const focusQueue = useRef<Promise<void>>(Promise.resolve());
   const mode = useRef<"host" | "guest">("host");
   const abort = useRef<AbortController | undefined>(undefined);
   const queryClient = useQueryClient();
@@ -70,6 +77,7 @@ export function useMultiplayer() {
     client.current?.dispose();
     client.current = undefined;
     current.current = undefined;
+    void publishInviteLink(null).catch((failure: unknown) => console.error("트레이 링크 정리 실패", failure));
     setView({ phase: "error", error: error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST, members: [] });
     if (everConnected.current) {
       void publishNetwork({ mode: "offline", snapshot: null }).catch((failure: unknown) => {
@@ -85,8 +93,7 @@ export function useMultiplayer() {
     for (const listener of listeners.current) {
       listener(snapshot);
     }
-    const names = snapshot.members.map((member) => `${member.role === "host" ? "호스트" : "방문자"} · ${member.nickname}`);
-    setView((previous) => previous.members.join("\n") === names.join("\n") ? previous : { ...previous, members: names });
+    setView((previous) => JSON.stringify(previous.members) === JSON.stringify(snapshot.members) ? previous : { ...previous, members: snapshot.members });
     void publishNetwork({ mode: mode.current, snapshot }).catch((error: unknown) => report(error));
   }
   async function authenticate(nickname: string): Promise<Session> {
@@ -114,6 +121,9 @@ export function useMultiplayer() {
     return result;
   }
   async function enter(token: string | undefined, nickname: string): Promise<void> {
+    if (token !== undefined && focusValue.current) {
+      throw new Error(ERROR_MESSAGES.ROOM_UNAVAILABLE);
+    }
     if (operation.current !== undefined) {
       pendingInvite.current = token ?? pendingInvite.current;
       return operation.current;
@@ -123,6 +133,7 @@ export function useMultiplayer() {
         setView({ phase: "connecting", members: [] });
         client.current?.dispose();
         client.current = undefined;
+        await publishInviteLink(null);
         const auth = await authenticate(nickname);
         if (!live.current) {
           return;
@@ -136,11 +147,14 @@ export function useMultiplayer() {
           return;
         }
         const joined: Joined = token === undefined
-          ? await connection.enter("room:host", { version: 1, bounds: await hostBounds() })
+          ? await connection.enter("room:host", { version: 1, bounds: await hostBounds(), focused: focusValue.current })
           : await connection.enter("visit:join", { version: 1, token });
         everConnected.current = true;
         if (live.current) {
           setView((previous) => ({ ...previous, phase: joined.role }));
+          if (joined.role === "host" && invite.data !== undefined) {
+            await publishInviteLink(invite.data.link);
+          }
         }
       } catch (error) {
         report(error);
@@ -193,6 +207,11 @@ export function useMultiplayer() {
       }
       return rotateInvite(session.current);
     },
+    onSuccess: async (data) => {
+      if (live.current && mode.current === "host" && client.current !== undefined) {
+        await publishInviteLink(data.link);
+      }
+    },
     retry: false,
   });
   const revoke = useMutation({
@@ -202,7 +221,67 @@ export function useMultiplayer() {
       }
       return revokeInvite(session.current);
     },
-    onSuccess: () => invite.reset(),
+    onSuccess: async () => {
+      invite.reset();
+      await publishInviteLink(null);
+    },
+    retry: false,
+  });
+
+  async function synchronizeFocus(next: boolean): Promise<void> {
+    if (focusValue.current === next) {
+      return focusQueue.current;
+    }
+    focusValue.current = next;
+    setFocused(next);
+    if (next) {
+      client.current?.pauseInput();
+    }
+    const task = focusQueue.current.catch(() => {
+      // 이전 전환의 오류는 mutation이 표시하고, 다음 전환은 계속 처리한다.
+    }).then(async () => {
+      await operation.current?.catch(() => {
+        // enter가 연결 오류를 표시하고 자원을 정리한다.
+      });
+      if (!live.current || focusValue.current !== next || client.current === undefined) {
+        return;
+      }
+      if (mode.current === "guest" && next) {
+        await client.current.leave();
+        await enter(undefined, "친구");
+      } else if (mode.current === "host") {
+        await client.current.setFocused(next);
+      }
+    });
+    focusQueue.current = task;
+    return task;
+  }
+  const focus = useMutation({
+    mutationFn: async (next: boolean) => {
+      await setNativeFocus(next);
+      await synchronizeFocus(next);
+    },
+    onError: report,
+    retry: false,
+  });
+  const kick = useMutation({
+    mutationFn: async (targetPlayerId: string) => {
+      if (client.current === undefined) {
+        throw new Error(ERROR_MESSAGES.CONNECTION_LOST);
+      }
+      await client.current.kick(targetPlayerId);
+    },
+    onError: report,
+    retry: false,
+  });
+  const clearVisitors = useMutation({
+    mutationFn: async () => {
+      if (client.current === undefined) {
+        throw new Error(ERROR_MESSAGES.CONNECTION_LOST);
+      }
+      await client.current.clearVisitors();
+    },
+    onError: report,
     retry: false,
   });
 
@@ -217,6 +296,7 @@ export function useMultiplayer() {
     }
   });
   const watchFailed = useEffectEvent((error: unknown) => report(error));
+  const focusChanged = useEffectEvent((value: boolean) => focus.mutate(value));
   const subscribe = useCallback((listener: (snapshot: Snapshot) => void): (() => void) => {
     listeners.current.add(listener);
     if (current.current !== undefined) {
@@ -231,27 +311,50 @@ export function useMultiplayer() {
     let active = true;
     const subscribers = listeners.current;
     let stop: (() => void) | undefined;
-    void watchInvites((link) => {
-      if (active) {
-        acceptInvite(link);
-      }
-    })
-      .then((unlisten) => {
+    let stopFocus: (() => void) | undefined;
+    void (async () => {
+      let focusEvent = false;
+      const unwatchFocus = await watchFocus((value) => {
         if (active) {
-          stop = unlisten;
-        } else {
-          unlisten();
-        }
-      }).catch((error: unknown) => {
-        if (active) {
-          watchFailed(error);
+          focusEvent = true;
+          focusChanged(value);
         }
       });
+      if (!active) {
+        unwatchFocus();
+        return;
+      }
+      stopFocus = unwatchFocus;
+      const initial = await readFocus();
+      if (!active) {
+        return;
+      }
+      if (!focusEvent) {
+        focusValue.current = initial;
+        setFocused(initial);
+      }
+      setFocusLoaded(true);
+      const unlisten = await watchInvites((link) => {
+        if (active) {
+          acceptInvite(link);
+        }
+      });
+      if (active) {
+        stop = unlisten;
+      } else {
+        unlisten();
+      }
+    })().catch((error: unknown) => {
+      if (active) {
+        watchFailed(error);
+      }
+    });
     return () => {
       active = false;
       live.current = false;
       abort.current?.abort();
       stop?.();
+      stopFocus?.();
       client.current?.dispose();
       client.current = undefined;
       session.current = undefined;
@@ -268,6 +371,11 @@ export function useMultiplayer() {
     returning,
     invite,
     revoke,
+    focused,
+    focusLoaded,
+    focus,
+    kick,
+    clearVisitors,
     input: (command: LocalCommand): void => {
       client.current?.input(command);
     },

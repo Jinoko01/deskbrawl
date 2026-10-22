@@ -15,20 +15,23 @@ const CONNECTION_LABELS = {
   guest: "친구 공간 방문 중",
   connecting: "공간에 연결하는 중…",
   local: "로컬 플레이 · 서버 공간에 연결해 주세요.",
-  error: "로컬 플레이 · 서버 공간에 연결해 주세요.",
+  error: "공간에 연결되지 않았어요. 다시 연결해 주세요.",
 } as const;
 
 export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
   const [nickname, setNickname] = useState("친구");
   const [link, setLink] = useState("");
   const [copy, setCopy] = useState<string>();
-  const busy = playing || game.view.phase === "connecting" || game.connect.isPending || game.join.isPending || game.returning.isPending;
+  const connectionBusy = !game.focusLoaded || game.view.phase === "connecting" || game.connect.isPending || game.join.isPending || game.returning.isPending;
+  const controlBusy = connectionBusy || game.focus.isPending || game.kick.isPending || game.clearVisitors.isPending;
+  const busy = playing || controlBusy;
   const hosting = game.view.phase === "host";
   const guest = game.view.phase === "guest";
   const error = game.join.error ?? game.invite.error ?? game.revoke.error ?? game.returning.error;
   const invitation = game.invite.data;
   const inviteBusy = busy || game.invite.isPending || game.revoke.isPending;
   const inviteLabel = invitation ? "링크 재발급" : "방문 링크 생성";
+  const visitors = game.view.members.filter((member) => member.role === "guest");
 
   function copyInviteLink(): void {
     if (invitation === undefined) {
@@ -47,6 +50,21 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
         {`서버: ${SERVER_ORIGIN}`}
       </p>
       <p className="mt-2 text-sm" role="status">{CONNECTION_LABELS[game.view.phase]}</p>
+      <div className="mt-3 space-y-2">
+        <button
+          className={button}
+          aria-pressed={game.focused}
+          disabled={connectionBusy || game.focus.isPending}
+          onClick={() => game.focus.mutate(!game.focused)}
+        >
+          {game.focus.isPending ? "집중 모드 전환 중…" : `집중 모드 ${game.focused ? "끄기" : "켜기"}`}
+        </button>
+        {game.focused && (
+          <p className="text-sm text-muted-foreground" role="status">
+            캐릭터를 숨기고 새 방문을 차단했어요. 해제하면 기존 링크로 다시 방문할 수 있어요.
+          </p>
+        )}
+      </div>
       {!hosting && !guest && (
         <form
           className="mt-3 flex flex-wrap gap-2"
@@ -77,14 +95,34 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
       )}
       {game.view.members.length > 0 && (
         <ul className="mt-3 space-y-1 text-sm">
-          {game.view.members.map((name, index) => (
-            <li key={`${index}:${name}`}>{name}</li>
+          {game.view.members.map((member) => (
+            <li key={member.playerId} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 break-all">{`${member.role === "host" ? "호스트" : "방문자"} · ${member.nickname}`}</span>
+              {hosting && member.role === "guest" && (
+                <button
+                  className={button}
+                  aria-label={`${member.nickname} 내보내기`}
+                  disabled={controlBusy}
+                  onClick={() => game.kick.mutate(member.playerId)}
+                >
+                  {game.kick.isPending && game.kick.variables === member.playerId ? "내보내는 중…" : "내보내기"}
+                </button>
+              )}
+            </li>
           ))}
         </ul>
       )}
       {hosting && (
         <div className="mt-3 space-y-3">
           <p className="text-xs text-muted-foreground">링크를 가진 누구나 승인 없이 방문할 수 있어요. 호스트 포함 2명까지 입장합니다.</p>
+          <button
+            className={button}
+            disabled={controlBusy || visitors.length === 0}
+            onClick={() => game.clearVisitors.mutate()}
+          >
+            {game.clearVisitors.isPending ? "내보내는 중…" : "모두 내보내기"}
+          </button>
+          {visitors.length === 0 && <p className="text-xs text-muted-foreground">현재 방문자가 없어요.</p>}
           <div className="flex flex-wrap gap-2">
             <button
               className={button}
@@ -143,7 +181,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
               maxLength={2048}
               value={link}
               required
-              disabled={busy}
+              disabled={busy || game.focused}
               onChange={(event) => setLink(event.target.value)}
               placeholder="deskbrawl://join/… 또는 서버 방문 링크"
             />
@@ -151,7 +189,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
           <button
             type="submit"
             className={button}
-            disabled={busy}
+            disabled={busy || game.focused}
           >
             방문하기
           </button>

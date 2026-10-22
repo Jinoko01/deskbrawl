@@ -168,7 +168,9 @@ pub fn focused(app: &AppHandle) -> bool {
 
 fn set_focus(app: &AppHandle, next: bool) -> tauri::Result<()> {
     let control = app.state::<Control>();
-    control.focused.store(next, Ordering::SeqCst);
+    if control.focused.swap(next, Ordering::SeqCst) == next {
+        return Ok(());
+    }
     crate::local_game::end_play(app);
     dispatch(app, if next { HIDDEN } else { VISIBLE });
     // Notify main even if the native menu update fails: network admission must still close.

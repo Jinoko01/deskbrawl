@@ -23,7 +23,9 @@ export function App() {
   const keys = shown?.keys;
   const shortcut = shown === undefined ? "전환 단축키" : shortcutLabel(shown.toggle);
   let playStatus = "WORK · 오버레이 준비 중";
-  if (playing) {
+  if (multiplayer.focused) {
+    playStatus = "FOCUS · 캐릭터 숨김 · 방문 차단";
+  } else if (playing) {
     const character = multiplayer.view.phase === "guest" ? "민트" : "모찌";
     playStatus = `PLAY · ${character}를 조작 중`;
   } else if (busy) {

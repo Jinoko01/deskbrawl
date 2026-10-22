@@ -77,7 +77,7 @@ export function createSnapshotView(render: (scene: CharacterSceneSnapshot) => vo
   }
   return {
     receive(snapshot: Snapshot): void {
-      if (snapshot.worldId === current?.worldId && snapshot.world.tick <= current.world.tick) {
+      if (snapshot.worldId === current?.worldId && snapshot.world.tick < current.world.tick) {
         return;
       }
       cancelAnimationFrame(animation);

@@ -34,6 +34,17 @@ function fixture() {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe("network presentation", () => {
+  it("removes departed characters even when membership changes without advancing a tick", () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const render = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+    const buffer = createSnapshotView(render);
+    const first = fixture();
+    buffer.receive(first);
+    buffer.receive({ ...first, members: [], world: { ...first.world, players: [] } });
+    expect(render.mock.calls.at(-1)?.[0].characters).toEqual([]);
+    buffer.dispose();
+  });
   it("keeps authoritative stun and hit IDs without calculating combat on the client", () => {
     const initial = fixture();
     const player = initial.world.players[0];
