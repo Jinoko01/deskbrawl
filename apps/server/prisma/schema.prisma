@@ -21,7 +21,7 @@ model HostRoom {
   id              String         @id @default(uuid()) @db.Uuid
   ownerDeviceId   String         @unique @db.Uuid
   owner           DeviceIdentity @relation(fields: [ownerDeviceId], references: [id])
-  maxParticipants Int            @default(2)
+  maxParticipants Int            @default(6)
   updatedAt       DateTime       @updatedAt
   invite          InviteToken?
 }

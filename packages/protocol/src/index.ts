@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const idSchema = z.uuid();
 export const nicknameSchema = z.string().trim().min(1).max(24);
 export const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
@@ -27,10 +27,11 @@ export const registerSchema = z.object({ nickname: nicknameSchema }).strict();
 export const credentialSchema = z.object({ deviceId: idSchema, secret: tokenSchema }).strict();
 export const sessionSchema = z.object({ deviceId: idSchema, accessToken: z.string().min(1).max(4096), expiresAt: tick }).strict();
 export const registrationSchema = sessionSchema.extend({ secret: tokenSchema });
-export const roomSchema = z.object({ id: idSchema, ownerDeviceId: idSchema, maxParticipants: z.literal(2) }).strict();
+export const roomSchema = z.object({ id: idSchema, ownerDeviceId: idSchema, maxParticipants: z.literal(6) }).strict();
 export const inviteSchema = z.object({ link: z.url(), expiresAt: tick }).strict();
 export const hostSchema = z.object({ version: z.literal(PROTOCOL_VERSION), bounds: boundsSchema, focused: z.boolean().optional() }).strict();
 export const joinSchema = z.object({ version: z.literal(PROTOCOL_VERSION), token: tokenSchema }).strict();
+export const resumeSchema = z.object({ version: z.literal(PROTOCOL_VERSION), visitId: idSchema, resumeToken: tokenSchema }).strict();
 export const leaveSchema = z.object({ visitId: idSchema }).strict();
 const hostControlSchema = leaveSchema.extend({ commandId: idSchema });
 export const focusSchema = hostControlSchema.extend({ focused: z.boolean() });
@@ -38,6 +39,8 @@ export const kickSchema = hostControlSchema.extend({ targetPlayerId: idSchema })
 export const clearVisitorsSchema = hostControlSchema;
 export type RoomControl = z.infer<typeof focusSchema> | z.infer<typeof kickSchema> | z.infer<typeof clearVisitorsSchema>;
 export const inputSchema = leaveSchema.extend({ seq: tick.min(1), movement: movementSchema });
+export const playerChatSchema = leaveSchema.extend({ seq: tick.min(1), current: z.string().max(50), previous: z.string().max(50) });
+export const chatSchema = z.object({ playerId: idSchema, current: z.string().max(50), previous: z.string().max(50), updatedAt: tick }).strict();
 export const playerActionSchema = leaveSchema.extend({ actionId: idSchema, action: actionSchema });
 const positive = z.number().finite().positive().max(100_000);
 const combat = z.object({ meleeReach: positive, meleeCooldownMs: positive, stoneCooldownMs: positive,
@@ -50,18 +53,19 @@ const projectile = z.object({ id: z.string().max(160), ownerId: idSchema, positi
 const effect = z.object({ id: z.string().max(200), kind: z.enum(["impact", "dust"]), position: vector, startedAtTick: tick, expiresAtTick: tick }).strict();
 export const worldSchema = z.object({ tick, bounds: boundsSchema,
   rules: z.object({ tickMs: positive, moveSpeedUnitsPerSecond: positive, playerRadius: positive, combat: combat.optional() }).strict(),
-  players: z.array(player).max(2), projectiles: z.array(projectile).max(32), effects: z.array(effect).max(64) }).strict();
+  players: z.array(player).max(6), projectiles: z.array(projectile).max(32), effects: z.array(effect).max(64) }).strict();
 export const memberSchema = z.object({ playerId: idSchema, nickname: nicknameSchema, role: z.enum(["host", "guest"]) }).strict();
 export const snapshotSchema = z.object({ version: z.literal(PROTOCOL_VERSION), roomId: idSchema, worldId: idSchema,
-  world: worldSchema, members: z.array(memberSchema).max(2), lastProcessedSeq: z.record(idSchema, tick) }).strict();
+  world: worldSchema, chats: z.array(chatSchema).max(6).default([]), members: z.array(memberSchema).max(6), lastProcessedSeq: z.record(idSchema, tick) }).strict();
 export const joinedSchema = z.object({ ok: z.literal(true), roomId: idSchema, worldId: idSchema, visitId: idSchema,
-  playerId: idSchema, role: z.enum(["host", "guest"]), snapshot: snapshotSchema }).strict();
+  playerId: idSchema, resumeToken: tokenSchema, role: z.enum(["host", "guest"]), snapshot: snapshotSchema }).strict();
 export const joinedAckSchema = z.union([joinedSchema, errorSchema]);
 export const commandAckSchema = z.union([okSchema, errorSchema]);
-export const bridgeSchema = z.object({ mode: z.enum(["local", "host", "guest", "offline"]), snapshot: snapshotSchema.nullable() }).strict();
+export const bridgeSchema = z.object({ mode: z.enum(["local", "host", "guest", "recovering", "offline"]), snapshot: snapshotSchema.nullable() }).strict();
 export type Snapshot = z.infer<typeof snapshotSchema>;
 export type Joined = z.infer<typeof joinedSchema>;
 export type Input = z.infer<typeof inputSchema>;
+export type Chat = z.infer<typeof playerChatSchema>;
 export type Action = z.infer<typeof playerActionSchema>;
 export type Credential = z.infer<typeof credentialSchema>;
 export type Session = z.infer<typeof sessionSchema>;

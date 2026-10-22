@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearVisitorsSchema, focusSchema, hostSchema, inputSchema, joinSchema, kickSchema, parseInviteLink, playerActionSchema } from "./index";
+import { chatSchema, playerChatSchema, bridgeSchema, resumeSchema, roomSchema, snapshotSchema, worldSchema, clearVisitorsSchema, focusSchema, hostSchema, inputSchema, joinSchema, kickSchema, parseInviteLink, playerActionSchema } from "./index";
 
 const token = "a".repeat(43);
 const visitId = "123e4567-e89b-42d3-a456-426614174000";
@@ -17,7 +17,7 @@ describe("M2 trust boundaries", () => {
     expect(inputSchema.safeParse({ visitId, seq: 1, movement: { x: 2, y: 0 } }).success).toBe(false);
     expect(inputSchema.safeParse({ visitId, seq: 1, movement: { x: 0, y: 0 }, position: { x: 900, y: 0 } }).success).toBe(false);
     expect(joinSchema.safeParse({ version: 0, token }).success).toBe(false);
-    expect(hostSchema.safeParse({ version: 1, bounds: { width: 1e9, height: 720 } }).success).toBe(false);
+    expect(hostSchema.safeParse({ version: 2, bounds: { width: 1e9, height: 720 } }).success).toBe(false);
     expect(playerActionSchema.safeParse({ visitId, actionId: visitId, action: "stone", targetId: visitId }).success).toBe(false);
   });
 });
@@ -32,6 +32,36 @@ describe("M3 host controls", () => {
     expect(focusSchema.safeParse({ visitId, focused: true }).success).toBe(false);
     expect(kickSchema.safeParse({ ...control, targetPlayerId: "nickname" }).success).toBe(false);
     expect(clearVisitorsSchema.safeParse({ ...control, hostId: visitId }).success).toBe(false);
-    expect(hostSchema.parse({ version: 1, bounds: { width: 1280, height: 720 } }).focused).toBeUndefined();
+    expect(hostSchema.parse({ version: 2, bounds: { width: 1280, height: 720 } }).focused).toBeUndefined();
   });
+});
+
+
+describe("M4 recovery and capacity contracts", () => {
+  it("requires the version, session ID and opaque resume token without extra fields", () => {
+    expect(resumeSchema.parse({ version: 2, visitId, resumeToken: token }).visitId).toBe(visitId);
+    for (const body of [
+      { version: 1, visitId, resumeToken: token },
+      { version: 2, visitId, resumeToken: "short" },
+      { version: 2, visitId, resumeToken: token, deviceId: visitId },
+    ]) expect(resumeSchema.safeParse(body).success).toBe(false);
+    expect(roomSchema.parse({ id: visitId, ownerDeviceId: visitId, maxParticipants: 6 }).maxParticipants).toBe(6);
+    expect(roomSchema.safeParse({ id: visitId, ownerDeviceId: visitId, maxParticipants: 2 }).success).toBe(false);
+    expect(bridgeSchema.parse({ mode: "recovering", snapshot: null }).mode).toBe("recovering");
+    const player = { id: visitId, position: { x: 0, y: 0 }, facing: { x: 1, y: 0 }, knockbackVelocity: { x: 0, y: 0 }, knockbackUntilTick: 0, stunnedUntilTick: 0, invulnerableUntilTick: 0, meleeReadyAtTick: 0, stoneReadyAtTick: 0, lastAction: null, lastHitTick: null };
+    expect(worldSchema.shape.players.safeParse(Array.from({ length: 6 }, () => player)).success).toBe(true);
+    expect(worldSchema.shape.players.safeParse(Array.from({ length: 7 }, () => player)).success).toBe(false);
+    expect(snapshotSchema.shape.chats.parse(undefined)).toEqual([]);
+  });
+});
+
+
+it("validates ephemeral two-line chats without allowing another sender or unbounded content", () => {
+  const chat = { visitId, seq: 1, current: "한글 입력 중", previous: "이전 말풍선" };
+  expect(playerChatSchema.parse(chat)).toEqual(chat);
+  expect(playerChatSchema.safeParse({ ...chat, current: "x".repeat(51) }).success).toBe(false);
+  expect(playerChatSchema.safeParse({ ...chat, previous: "x".repeat(51) }).success).toBe(false);
+  expect(playerChatSchema.safeParse({ ...chat, seq: 0 }).success).toBe(false);
+  expect(playerChatSchema.safeParse({ ...chat, playerId: visitId }).success).toBe(false);
+  expect(chatSchema.safeParse({ playerId: visitId, current: "", previous: "", updatedAt: -1 }).success).toBe(false);
 });
