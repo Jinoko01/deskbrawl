@@ -9,12 +9,15 @@ const member = (role) => ({
   role,
   socketId: randomUUID(),
   visitId: randomUUID(),
+  resumeToken: 'a'.repeat(43),
+  disconnectExpiresAt: undefined,
   movement: { x: 0, y: 0 },
   seq: 0,
   appliedSeq: 0,
   inputAtTick: 0,
   action: undefined,
   actionIds: [],
+  chatSeq: 0,
 });
 
 test('fixed ticks apply queued input, reject old sessions and stop stale held input', () => {
@@ -38,6 +41,8 @@ test('fixed ticks apply queued input, reject old sessions and stop stale held in
   expect(() =>
     engine.input(room, host, {
       visitId: randomUUID(),
+      resumeToken: 'a'.repeat(43),
+      disconnectExpiresAt: undefined,
       seq: 3,
       movement: { x: 1, y: 0 },
     }),
@@ -117,4 +122,97 @@ test('focus cancels queued movement and attacks and rejects input until resumed'
   );
   expect(room.world.projectiles).toHaveLength(0);
   expect(host.action).toBeUndefined();
+});
+
+test('six spawns remain separated on minimum bounds and a moved player cannot block the fixed entry slots', () => {
+  const engine = new SimulationEngine();
+  const host = member('host');
+  const room = engine.open(randomUUID(), { width: 320, height: 200 }, host);
+  for (let i = 0; i < 5; i++) {
+    engine.add(room, member('guest'));
+  }
+  for (const a of room.world.players) {
+    expect(a.position.x).toBeGreaterThanOrEqual(24);
+    expect(a.position.y).toBeGreaterThanOrEqual(24);
+    for (const b of room.world.players) {
+      if (a.id !== b.id) {
+        expect(
+          Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y),
+        ).toBeGreaterThanOrEqual(48);
+      }
+    }
+  }
+  engine.remove(room, room.world.players[5].id);
+  const occupied = [
+    { x: 88, y: 68 },
+    { x: 232, y: 68 },
+    { x: 88, y: 164 },
+    { x: 232, y: 164 },
+    { x: 160, y: 100 },
+  ];
+  room.world.players.forEach((player, index) => {
+    player.position = occupied[index];
+  });
+  engine.add(room, member('guest'));
+  expect(room.world.players).toHaveLength(6);
+  const added = room.world.players[5];
+  expect(added.position).toEqual({ x: 24, y: 24 });
+  const desktop = engine.open(
+    randomUUID(),
+    { width: 1280, height: 720 },
+    member('host'),
+  );
+  for (let index = 0; index < 5; index++) {
+    engine.add(desktop, member('guest'));
+  }
+  expect(desktop.world.players[0].position).toEqual({ x: 568, y: 360 });
+  expect(desktop.world.players[1].position).toEqual({ x: 712, y: 360 });
+  expect(
+    [...new Set(desktop.world.players.map((player) => player.position.y))].sort(
+      (a, b) => a - b,
+    ),
+  ).toEqual([232, 360, 488]);
+});
+
+test('chat updates keep one current and previous line, ignore old sequence, expire and clear on focus', () => {
+  const engine = new SimulationEngine();
+  const host = member('host');
+  const room = engine.open(randomUUID(), { width: 1280, height: 720 }, host);
+  const message = {
+    visitId: host.visitId,
+    seq: 2,
+    current: 'typing',
+    previous: 'sent',
+  };
+  engine.chat(room, host, message, 1000);
+  engine.chat(room, host, { ...message, seq: 1, current: 'old' }, 2000);
+  expect(engine.snapshot(room).chats).toEqual([
+    {
+      playerId: host.playerId,
+      current: 'typing',
+      previous: 'sent',
+      updatedAt: 1000,
+    },
+  ]);
+  expect(() =>
+    engine.chat(room, host, { ...message, visitId: randomUUID() }, 2000),
+  ).toThrow('SESSION_ENDED');
+  engine.expireChats(room, 8999);
+  expect(engine.snapshot(room).chats).toHaveLength(1);
+  engine.expireChats(room, 9000);
+  expect(engine.snapshot(room).chats).toHaveLength(0);
+  engine.chat(room, host, { ...message, seq: 3 }, 10000);
+  engine.chat(
+    room,
+    host,
+    { ...message, seq: 4, current: '', previous: '' },
+    10000,
+  );
+  expect(engine.snapshot(room).chats).toHaveLength(0);
+  engine.chat(room, host, { ...message, seq: 5 }, 11000);
+  engine.focus(room, true);
+  expect(engine.snapshot(room).chats).toHaveLength(0);
+  expect(() => engine.chat(room, host, { ...message, seq: 6 }, 12000)).toThrow(
+    'ROOM_UNAVAILABLE',
+  );
 });

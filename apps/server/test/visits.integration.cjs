@@ -38,16 +38,19 @@ afterAll(async () => {
   if (app) {
     const { Database } = await import('../dist/app.mjs');
     const db = app.get(Database);
-    await db.inviteToken.deleteMany({
-      where: { room: { ownerDeviceId: { in: createdDevices } } },
-    });
-    await db.hostRoom.deleteMany({
-      where: { ownerDeviceId: { in: createdDevices } },
-    });
-    await db.deviceIdentity.deleteMany({
-      where: { id: { in: createdDevices } },
-    });
-    await app.close();
+    try {
+      await db.inviteToken.deleteMany({
+        where: { room: { ownerDeviceId: { in: createdDevices } } },
+      });
+      await db.hostRoom.deleteMany({
+        where: { ownerDeviceId: { in: createdDevices } },
+      });
+      await db.deviceIdentity.deleteMany({
+        where: { id: { in: createdDevices } },
+      });
+    } finally {
+      await app.close();
+    }
   }
 });
 const apiFor = (user) => ({
@@ -70,7 +73,7 @@ async function connect(user, extra = {}) {
     reconnection: false,
     forceNew: true,
     autoConnect: false,
-    auth: { version: 1, token: user.accessToken },
+    auth: { version: 2, token: user.accessToken },
     ...extra,
   });
   sockets.push(socket);
@@ -107,14 +110,14 @@ async function openPair(focused = false) {
   const hs = await connect(host);
   const gs = await connect(guest);
   const hosted = await ack(hs, 'room:host', {
-    version: 1,
+    version: 2,
     bounds: { width: 1280, height: 720 },
     focused,
   });
   expect(hosted.ok).toBe(true);
   const invitation = (await apiFor(host).post('/v1/rooms/me/invites')).body;
   const join = {
-    version: 1,
+    version: 2,
     token: new URL(invitation.link).pathname.slice(6),
   };
   return { host, guest, hs, gs, hosted, join };
@@ -244,7 +247,7 @@ test('focus closes existing visits, blocks joins and input, keeps links, and ser
   await ending;
   expect((await ack(gs, 'visit:join', join)).code).toBe('INVALID_INVITE');
   const replacement = {
-    version: 1,
+    version: 2,
     token: new URL(rotated.body.link).pathname.slice(6),
   };
   // Use a new transport to keep the test's join rate below the public limit.
@@ -305,7 +308,7 @@ test('REST authentication, private identity, origin checks, invitation rotation 
   );
   const socket = await connect(host);
   const hosted = await ack(socket, 'room:host', {
-    version: 1,
+    version: 2,
     bounds: { width: 1280, height: 720 },
   });
   expect(hosted.ok).toBe(true);
@@ -315,18 +318,18 @@ test('REST authentication, private identity, origin checks, invitation rotation 
   const gs = await connect(guest);
   const token = (link) => new URL(link).pathname.slice(6);
   expect(
-    (await ack(gs, 'visit:join', { version: 1, token: token(first.link) }))
+    (await ack(gs, 'visit:join', { version: 2, token: token(first.link) }))
       .code,
   ).toBe('INVALID_INVITE');
   const joined = await ack(gs, 'visit:join', {
-    version: 1,
+    version: 2,
     token: token(second.link),
   });
   expect(joined.ok).toBe(true);
   expect(JSON.stringify(joined.snapshot)).not.toContain(host.secret);
   await apiFor(host).delete('/v1/rooms/me/invites/current');
   const repeated = await ack(gs, 'visit:join', {
-    version: 1,
+    version: 2,
     token: token(second.link),
   });
   expect(repeated.code).toBe('INVALID_INVITE');
@@ -343,7 +346,7 @@ test('REST authentication, private identity, origin checks, invitation rotation 
   socket.disconnect();
 });
 
-test('two clients share authoritative hits, enforce capacity and room isolation, and close on host disconnect', async () => {
+test('two clients share authoritative hits, enforce room isolation, and close on explicit host leave', async () => {
   const host = await register('모찌'),
     guest = await register('민트'),
     third = await register('세번째');
@@ -353,12 +356,12 @@ test('two clients share authoritative hits, enforce capacity and room isolation,
   const outsideSnapshots = [];
   ts.on('world:snapshot', (snapshot) => outsideSnapshots.push(snapshot));
   const hosted = await ack(hs, 'room:host', {
-    version: 1,
+    version: 2,
     bounds: { width: 1280, height: 720 },
   });
   const invitation = (await apiFor(host).post('/v1/rooms/me/invites')).body;
   const join = {
-    version: 1,
+    version: 2,
     token: new URL(invitation.link).pathname.slice(6),
   };
   expect((await ack(hs, 'visit:join', join)).code).toBe('SELF_VISIT');
@@ -367,7 +370,6 @@ test('two clients share authoritative hits, enforce capacity and room isolation,
   const repeated = await ack(gs, 'visit:join', join);
   expect(repeated.visitId).toBe(entered.visitId);
   expect(repeated.snapshot.world.players).toHaveLength(2);
-  expect((await ack(ts, 'visit:join', join)).code).toBe('ROOM_FULL');
   expect(
     (
       await ack(gs, 'player:input', {
@@ -406,6 +408,9 @@ test('two clients share authoritative hits, enforce capacity and room isolation,
   ).toBeGreaterThan(a.world.tick);
   expect(outsideSnapshots).toHaveLength(0);
   const closed = until(gs, 'room:closed', () => true);
+  expect((await ack(hs, 'visit:leave', { visitId: hosted.visitId })).ok).toBe(
+    true,
+  );
   hs.disconnect();
   expect((await closed).code).toBe('HOST_OFFLINE');
   expect(
