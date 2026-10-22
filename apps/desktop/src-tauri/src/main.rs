@@ -2,6 +2,7 @@
 
 use tauri::{Manager, WindowEvent};
 
+mod clipboard;
 mod controls;
 mod local_game;
 #[cfg(windows)]
@@ -27,6 +28,9 @@ fn main() -> tauri::Result<()> {
             overlay::overlay_reduced_effects,
             overlay::preview_reduced_effects,
             overlay::overlay_renderer_failed,
+            overlay::focus_read,
+            overlay::focus_set,
+            overlay::invite_publish,
             local_game::local_available,
             local_game::local_control,
             local_game::local_overlay_status,
@@ -54,7 +58,16 @@ fn main() -> tauri::Result<()> {
         .on_window_event(|window, event| {
             overlay::on_window_event(window, event);
             local_game::on_window_event(window, event);
-            // A hidden overlay must not keep the app alive after main is closed.
+            if window.label() == "main" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    local_game::end_play(window.app_handle());
+                    if let Err(error) = window.hide() {
+                        eprintln!("Could not hide home: {error}");
+                    }
+                }
+            }
+            // An unexpected WebView destruction must not leave an invisible app behind.
             if window.label() == "main" && matches!(event, WindowEvent::Destroyed) {
                 overlay::shutdown(window.app_handle());
                 window.app_handle().exit(0);

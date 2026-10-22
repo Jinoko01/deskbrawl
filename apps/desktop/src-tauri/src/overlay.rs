@@ -15,6 +15,9 @@ const HIDE: &str = "overlay-hide";
 const EXIT: &str = "app-exit";
 const PLAY: &str = "local-play";
 const REDUCE_EFFECTS: &str = "reduce-effects";
+const HOME: &str = "home-open";
+const FOCUS: &str = "focus-toggle";
+const COPY_LINK: &str = "invite-copy";
 const VISIBLE: u8 = 0;
 const HIDDEN: u8 = 1;
 const SUSPENDED: u8 = 2;
@@ -26,6 +29,10 @@ struct Control {
     recreate_required: AtomicBool,
     preferences_loaded: AtomicBool,
     reduced_effects: AtomicBool,
+    focused: AtomicBool,
+    focus_menu: CheckMenuItem<tauri::Wry>,
+    copy_menu: MenuItem<tauri::Wry>,
+    invite_link: Mutex<Option<String>>,
     effects_menu: CheckMenuItem<tauri::Wry>,
     operation: Mutex<()>,
     status: MenuItem<tauri::Wry>,
@@ -33,6 +40,9 @@ struct Control {
 
 pub fn setup(app: &mut App) -> tauri::Result<()> {
     let status = MenuItem::new(app, "오버레이: 준비 중", false, None::<&str>)?;
+    let home = MenuItem::with_id(app, HOME, "홈 열기", true, None::<&str>)?;
+    let copy_menu = MenuItem::with_id(app, COPY_LINK, "링크 복사", false, None::<&str>)?;
+    let focus_menu = CheckMenuItem::with_id(app, FOCUS, "집중 모드", true, false, None::<&str>)?;
     let show = MenuItem::with_id(app, SHOW, "오버레이 표시", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, HIDE, "오버레이 숨김", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, EXIT, "종료", true, None::<&str>)?;
@@ -48,7 +58,20 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         reduced_effects,
         None::<&str>,
     )?;
-    let menu = Menu::with_items(app, &[&status, &play, &show, &hide, &effects_menu, &exit])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &status,
+            &home,
+            &copy_menu,
+            &focus_menu,
+            &play,
+            &show,
+            &hide,
+            &effects_menu,
+            &exit,
+        ],
+    )?;
     let icon = app
         .default_window_icon()
         .ok_or_else(|| std::io::Error::other("Missing tray icon"))?
@@ -60,6 +83,43 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
+            HOME => {
+                if let Some(main) = app.get_webview_window("main") {
+                    if let Err(error) = main
+                        .unminimize()
+                        .and_then(|_| main.show())
+                        .and_then(|_| main.set_focus())
+                    {
+                        eprintln!("Could not open home: {error}");
+                    }
+                }
+            }
+            FOCUS => {
+                if let Err(error) = set_focus(app, !focused(app)) {
+                    eprintln!("Could not change focus mode: {error}");
+                }
+            }
+            COPY_LINK => {
+                let result = (|| -> tauri::Result<()> {
+                    let link = app
+                        .state::<Control>()
+                        .invite_link
+                        .lock()
+                        .map_err(|_| std::io::Error::other("Invite state unavailable"))?
+                        .clone();
+                    if let (Some(link), Some(main)) = (link, app.get_webview_window("main")) {
+                        crate::clipboard::copy_text(&main.as_ref().window(), &link)?;
+                    }
+                    Ok(())
+                })();
+                if let Err(error) = result {
+                    eprintln!("Could not copy invite: {error}");
+                    let _ = app
+                        .state::<Control>()
+                        .status
+                        .set_text("링크 복사 실패 — 홈에서 다시 시도");
+                }
+            }
             SHOW => dispatch(app, VISIBLE),
             HIDE => dispatch(app, HIDDEN),
             REDUCE_EFFECTS => toggle_effects(app),
@@ -89,11 +149,86 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         recreate_required: AtomicBool::new(false),
         preferences_loaded: AtomicBool::new(false),
         reduced_effects: AtomicBool::new(reduced_effects),
+        focused: AtomicBool::new(false),
+        focus_menu,
+        copy_menu,
+        invite_link: Mutex::new(None),
         effects_menu,
         operation: Mutex::new(()),
         status,
     });
     dispatch(app.handle(), VISIBLE);
+    Ok(())
+}
+
+pub fn focused(app: &AppHandle) -> bool {
+    app.try_state::<Control>()
+        .is_some_and(|control| control.focused.load(Ordering::SeqCst))
+}
+
+fn set_focus(app: &AppHandle, next: bool) -> tauri::Result<()> {
+    let control = app.state::<Control>();
+    control.focused.store(next, Ordering::SeqCst);
+    crate::local_game::end_play(app);
+    dispatch(app, if next { HIDDEN } else { VISIBLE });
+    // Notify main even if the native menu update fails: network admission must still close.
+    let event = app.emit_to("main", "focus-changed", next);
+    control.focus_menu.set_checked(next)?;
+    event
+}
+
+#[tauri::command]
+pub fn focus_read(window: WebviewWindow) -> Result<bool, &'static str> {
+    if window.label() != "main" {
+        return Err("MAIN_ONLY");
+    }
+    Ok(focused(window.app_handle()))
+}
+
+#[tauri::command]
+pub fn focus_set(window: WebviewWindow, focused: bool) -> Result<(), &'static str> {
+    if window.label() != "main" {
+        return Err("MAIN_ONLY");
+    }
+    set_focus(window.app_handle(), focused).map_err(|_| "FOCUS_CHANGE_FAILED")
+}
+
+fn validate_invite_link(link: &str) -> Result<(), &'static str> {
+    let url = tauri::Url::parse(link).map_err(|_| "INVALID_INVITE")?;
+    let token = url.path().strip_prefix("/join/").ok_or("INVALID_INVITE")?;
+    if link.len() > 2048
+        || !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || token.len() != 43
+        || !token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("INVALID_INVITE");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn invite_publish(window: WebviewWindow, link: Option<String>) -> Result<(), &'static str> {
+    if window.label() != "main" {
+        return Err("MAIN_ONLY");
+    }
+    if let Some(value) = &link {
+        validate_invite_link(value)?;
+    }
+    let control = window.state::<Control>();
+    control
+        .copy_menu
+        .set_enabled(link.is_some())
+        .map_err(|_| "INVITE_STATE_FAILED")?;
+    *control
+        .invite_link
+        .lock()
+        .map_err(|_| "INVITE_STATE_FAILED")? = link;
     Ok(())
 }
 
@@ -292,6 +427,9 @@ fn dispatch(app: &AppHandle, intent: u8) {
     if control.intent.load(Ordering::SeqCst) == EXITING {
         return;
     }
+    if intent == VISIBLE && focused(app) {
+        return;
+    }
     control.intent.store(intent, Ordering::SeqCst);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -313,6 +451,9 @@ fn dispatch(app: &AppHandle, intent: u8) {
 }
 
 fn request_show(app: &AppHandle) -> tauri::Result<()> {
+    if focused(app) {
+        return request_hide(app);
+    }
     load_preferences(app)?;
     let control = app.state::<Control>();
     if control.recreate_required.load(Ordering::SeqCst) {
@@ -334,12 +475,12 @@ fn request_show(app: &AppHandle) -> tauri::Result<()> {
         None => create(app)?,
     };
     // A hide or focus-safety request received during creation takes priority.
-    if app.state::<Control>().intent.load(Ordering::SeqCst) != VISIBLE {
+    if app.state::<Control>().intent.load(Ordering::SeqCst) != VISIBLE || focused(app) {
         return request_hide(app);
     }
     fit_primary_monitor(&window)?;
     show_safely(&window)?;
-    if app.state::<Control>().intent.load(Ordering::SeqCst) != VISIBLE {
+    if app.state::<Control>().intent.load(Ordering::SeqCst) != VISIBLE || focused(app) {
         return request_hide(app);
     }
     crate::local_game::on_overlay_visibility(app, true);
@@ -516,6 +657,21 @@ fn conceal(window: &impl SafeWindow) -> tauri::Result<()> {
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn tray_invites_accept_only_bounded_http_join_links() {
+        let token = "a".repeat(43);
+        assert!(validate_invite_link(&format!("https://game.example/join/{token}")).is_ok());
+        for link in [
+            format!("file:///join/{token}"),
+            format!("https://user:secret@game.example/join/{token}"),
+            format!("https://game.example/join/{token}?next=bad"),
+            format!("https://game.example/join/{token}#secret"),
+            "https://game.example/join/short".to_owned(),
+        ] {
+            assert!(validate_invite_link(&link).is_err());
+        }
+    }
 
     #[test]
     fn monitor_geometry_rejects_unusable_dimensions_and_dpi() {

@@ -13,6 +13,15 @@ impl Default for NetworkState {
     }
 }
 
+pub fn play_allowed(app: &tauri::AppHandle) -> bool {
+    app.state::<NetworkState>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|state| serde_json::from_str::<serde_json::Value>(&state).ok())
+        .is_some_and(|state| state["mode"] != "offline")
+}
+
 #[tauri::command]
 pub fn network_publish(window: WebviewWindow, request: Request<'_>) -> Result<(), &'static str> {
     if window.label() != "main" {

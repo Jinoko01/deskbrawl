@@ -63,7 +63,10 @@ pub fn local_available(window: WebviewWindow) -> Result<bool, &'static str> {
         return Err("MAIN_ONLY");
     }
     let app = window.app_handle();
-    Ok(app.state::<LocalSession>().ready.load(Ordering::SeqCst) && visible(app))
+    Ok(app.state::<LocalSession>().ready.load(Ordering::SeqCst)
+        && visible(app)
+        && !crate::overlay::focused(app)
+        && crate::network::play_allowed(app))
 }
 
 #[tauri::command]
@@ -77,7 +80,14 @@ pub fn local_overlay_status(window: WebviewWindow, ready: bool) -> Result<(), &'
         .ready
         .store(ready, Ordering::SeqCst);
     window
-        .emit_to("main", "local-reset", ready && visible(window.app_handle()))
+        .emit_to(
+            "main",
+            "local-reset",
+            ready
+                && visible(window.app_handle())
+                && !crate::overlay::focused(window.app_handle())
+                && crate::network::play_allowed(window.app_handle()),
+        )
         .map_err(|_| "LOCAL_EVENT_FAILED")
 }
 
@@ -137,6 +147,9 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
     #[cfg(not(windows))]
     let focused = window.is_focused().map_err(|_| "LOCAL_FOCUS_FAILED")?;
     if kind != "work" {
+        if crate::overlay::focused(app) || !crate::network::play_allowed(app) {
+            return Err("PLAY_UNAVAILABLE");
+        }
         if !focused {
             return Err("MAIN_NOT_FOCUSED");
         }
@@ -173,7 +186,14 @@ pub fn end_play(app: &AppHandle) {
     if let Err(error) = app.emit_to("overlay", "local-input", "stop") {
         eprintln!("Local stop failed: {error}");
     }
-    if let Err(error) = app.emit_to("main", "local-reset", session.ready.load(Ordering::SeqCst)) {
+    if let Err(error) = app.emit_to(
+        "main",
+        "local-reset",
+        session.ready.load(Ordering::SeqCst)
+            && visible(app)
+            && !crate::overlay::focused(app)
+            && crate::network::play_allowed(app),
+    ) {
         eprintln!("Local mode reset failed: {error}");
     }
 }

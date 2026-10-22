@@ -208,6 +208,9 @@ unsafe extern "system" fn hotkey_proc(
 
 // SAFETY: main is the live main HWND and this runs on its UI thread.
 unsafe fn toggle_play(app: &tauri::AppHandle, main: *mut c_void) {
+    if crate::overlay::focused(app) || !crate::network::play_allowed(app) {
+        return;
+    }
     let foreground = unsafe { GetForegroundWindow() };
     if foreground == main && crate::local_game::playing(app) {
         unsafe { return_focus_to(main, crate::local_game::take_previous(app)) };
@@ -223,7 +226,7 @@ unsafe fn toggle_play(app: &tauri::AppHandle, main: *mut c_void) {
         },
     );
     unsafe {
-        if IsIconic(main) != 0 {
+        if IsIconic(main) != 0 || IsWindowVisible(main) == 0 {
             ShowWindow(main, SW_RESTORE);
         }
         if SetForegroundWindow(main) == 0 {
