@@ -15,6 +15,8 @@ export type CharacterMotion =
 export interface CharacterFrame extends Pick<PlayerState, "id" | "position" | "facing"> {
   readonly skin: CharacterSkin;
   readonly motion: CharacterMotion;
+  readonly nickname?: string;
+  readonly chat?: { readonly current: string; readonly previous: string; readonly opacity: number };
 }
 
 export interface CharacterSceneSnapshot {
@@ -41,6 +43,10 @@ export function sameCharacterScene(a: CharacterSceneSnapshot | undefined, b: Cha
     const other = b.characters[index];
     return frame.id === other?.id
       && frame.skin === other.skin
+      && frame.nickname === other.nickname
+      && frame.chat?.current === other.chat?.current
+      && frame.chat?.previous === other.chat?.previous
+      && frame.chat?.opacity === other.chat?.opacity
       && frame.position.x === other.position.x
       && frame.position.y === other.position.y
       && frame.facing.x === other.facing.x

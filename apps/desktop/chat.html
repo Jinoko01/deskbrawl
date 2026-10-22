@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="ko">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>DeskBrawl 채팅</title></head>
+  <body>
+    <form class="h-dvh rounded-xl border border-border bg-card p-3" aria-label="캐릭터 채팅">
+      <p id="previous" class="truncate text-xs text-muted-foreground"></p>
+      <input id="message" aria-label="채팅 내용 · 입력 중 바로 공유" maxlength="50" autocomplete="off" class="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-sm focus-visible:outline-2" placeholder="입력 중 바로 공유…" />
+      <p id="status" class="mt-1 text-xs text-muted-foreground" role="status">Enter 이전 줄 · Esc 닫기 · 50자</p>
+    </form>
+    <script type="module" src="/src/chat.ts"></script>
+  </body>
+</html>

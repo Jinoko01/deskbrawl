@@ -4,6 +4,9 @@ import {
   ImageSource,
   Spritesheet,
   Texture,
+  Text,
+  Graphics,
+  Container,
 } from "pixi.js";
 import type { SpritesheetData } from "pixi.js";
 // Tauri의 script-src 'self'를 유지하면서 eval 없는 shader 경로를 사용한다.
@@ -43,6 +46,7 @@ export function mountCharacter(
   const views = new Map<string, { skin: CharacterSkin; view: ReturnType<typeof createCharacterView> }>();
   const stones = new Map<string, AnimatedSprite>();
   const effects = new Map<string, AnimatedSprite>();
+  const captions = new Map<string, { container: Container; label: Text; bubble: Text; background: Graphics }>();
   let stunFrames: Texture[] = [];
   let stoneFrames: Texture[] = [];
   let impactFrames: Texture[] = [];
@@ -70,6 +74,7 @@ export function mountCharacter(
     views.clear();
     stones.clear();
     effects.clear();
+    captions.clear();
     animations.clear();
     for (const sheet of sheets) {
       sheet.destroy(true);
@@ -189,6 +194,8 @@ export function mountCharacter(
     for (const [id, entry] of views) {
       if (!ids.has(id)) {
         entry.view.destroy();
+        captions.get(id)?.container.destroy({ children: true });
+        captions.delete(id);
         views.delete(id);
       }
     }
@@ -208,8 +215,35 @@ export function mountCharacter(
         entry = { skin: frame.skin, view };
         views.set(frame.id, entry);
         app.stage.addChild(view.container);
+        const container = new Container();
+        const label = new Text({
+          text: "",
+          style: {
+            fontFamily: "Segoe UI, Malgun Gothic, sans-serif", fontSize: 13, fill: 0xffffff, stroke: { color: 0x171923, width: 3 },
+          },
+        });
+        label.anchor.set(0.5, 0);
+        const bubble = new Text({
+          text: "",
+          style: {
+            fontFamily: "Segoe UI, Malgun Gothic, sans-serif", fontSize: 15, fill: 0x171923, wordWrap: true, wordWrapWidth: 220, breakWords: true, lineHeight: 20,
+          },
+        });
+        bubble.anchor.set(0.5, 1);
+        const background = new Graphics();
+        container.addChild(label, background, bubble);
+        app.stage.addChild(container);
+        captions.set(frame.id, {
+          container, label, bubble, background,
+        });
       }
       entry.view.apply(frame, reduced(), !document.hidden);
+      const caption = captions.get(frame.id);
+      if (caption !== undefined) {
+        caption.label.text = frame.nickname ?? "";
+        caption.bubble.text = [frame.chat?.previous, frame.chat?.current].filter(Boolean).join("\n");
+        caption.bubble.alpha = caption.background.alpha = frame.chat?.opacity ?? 1;
+      }
     }
     const stoneIds = new Set((snapshot.projectiles ?? []).map((stone) => stone.id));
     removeMissing(stones, stoneIds);
@@ -246,6 +280,21 @@ export function mountCharacter(
     const size = Math.min(CHARACTER_SIZE_PX, width / 2, height) * scale;
     for (const frame of current.characters) {
       views.get(frame.id)?.view.layout(left + frame.position.x * scale, top + frame.position.y * scale, size);
+      const caption = captions.get(frame.id);
+      if (caption !== undefined) {
+        const x = Math.round(left + frame.position.x * scale);
+        const y = Math.round(top + frame.position.y * scale);
+        caption.label.position.set(x, y + size / 2);
+        const width = caption.bubble.width + 20;
+        const height = caption.bubble.height + 14;
+        const bubbleX = Math.max(width / 2 + 4, Math.min(app.screen.width - width / 2 - 4, x));
+        const bubbleY = Math.max(height + 4, y - size / 2 - 12);
+        caption.bubble.position.set(bubbleX, bubbleY - 7);
+        caption.background.clear();
+        if (caption.bubble.text !== "") {
+          caption.background.roundRect(bubbleX - width / 2, bubbleY - height, width, height, 9).fill(0xffffff);
+        }
+      }
     }
     for (const stone of current.projectiles ?? []) {
       const sprite = stones.get(stone.id);

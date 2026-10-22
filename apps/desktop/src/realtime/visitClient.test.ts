@@ -11,10 +11,12 @@ const transport = vi.hoisted(() => {
   type Reply = (error: Error | null, body: unknown) => void;
   const listeners = new Map<string, (body: unknown) => void>();
   const sent: { event: string; body: unknown; reply: Reply }[] = [];
+  const manager = new Map<string, () => void>();
   const emit = vi.fn((event: string, body: unknown, reply: Reply) => sent.push({ event, body, reply }));
   return {
     listeners,
     sent,
+    manager,
     socket: {
       connected: true,
       on: vi.fn((event: string, listener: (body: unknown) => void) => listeners.set(event, listener)),
@@ -23,6 +25,7 @@ const transport = vi.hoisted(() => {
       connect: vi.fn(),
       disconnect: vi.fn(),
       removeAllListeners: vi.fn(() => listeners.clear()),
+      io: { on: vi.fn((event: string, fn: () => void) => manager.set(event, fn)), off: vi.fn((event: string) => manager.delete(event)) },
     },
   };
 });
@@ -34,6 +37,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   transport.sent.length = 0;
   transport.listeners.clear();
+  transport.manager.clear();
+  transport.socket.connected = true;
 });
 afterEach(() => {
   clients.splice(0).forEach((client) => client.dispose());
@@ -63,10 +68,11 @@ async function host(focused = false) {
     roomId,
     worldId,
     visitId: randomUUID(),
+    resumeToken: "a".repeat(43),
     playerId,
     role: "host",
     snapshot: {
-      version: 1,
+      version: 2,
       roomId,
       worldId,
       world: { ...world, tick: 3 },
@@ -76,13 +82,14 @@ async function host(focused = false) {
   });
   const receive = vi.fn();
   const ended = vi.fn();
-  const client = createVisitClient({ deviceId: playerId, accessToken: "test", expiresAt: Date.now() + 3600000 }, receive, ended);
+  const recovery = vi.fn();
+  const client = createVisitClient({ deviceId: playerId, accessToken: "test", expiresAt: Date.now() + 3600000 }, receive, ended, recovery);
   clients.push(client);
-  const entering = client.enter("room:host", { version: 1, bounds: world.bounds, focused });
+  const entering = client.enter("room:host", { version: 2, bounds: world.bounds, focused });
   pending("room:host").reply(null, joined);
   await entering;
   return {
-    client, joined, receive, ended, guestId,
+    client, joined, receive, ended, guestId, recovery,
   };
 }
 
@@ -146,4 +153,82 @@ it("accepts membership changes at the current tick but rejects older snapshots",
   expect(receive).toHaveBeenLastCalledWith(snapshot);
   transport.listeners.get("world:snapshot")?.({ ...snapshot, world: { ...snapshot.world, tick: 2 } });
   expect(receive).toHaveBeenCalledTimes(2);
+});
+
+it("resumes the same world with a rotated visit and full snapshot, discarding held keys and stale errors", async () => {
+  const {
+    client, joined, ended, recovery, receive,
+  } = await host();
+  client.input({
+    kind: "input", seq: 1, movement: { x: 1, y: 0 }, action: "stone",
+  });
+  const stale = pending("player:action");
+  transport.socket.connected = false;
+  transport.listeners.get("disconnect")?.("transport close");
+  expect(recovery).toHaveBeenLastCalledWith("reconnecting");
+  stale.reply(new Error("old connection"), undefined);
+  await Promise.resolve();
+  expect(ended).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(100);
+  const count = transport.sent.length;
+  client.input({
+    kind: "input", seq: 2, movement: { x: 1, y: 0 }, action: "stone",
+  });
+  client.chat("offline draft", "");
+  expect(transport.sent).toHaveLength(count);
+  transport.socket.connected = true;
+  transport.listeners.get("connect")?.(undefined);
+  expect(pending("visit:resume").body).toEqual({ version: 2, visitId: joined.visitId, resumeToken: joined.resumeToken });
+  const resumed = {
+    ...joined, visitId: randomUUID(), resumeToken: "b".repeat(43), snapshot: { ...joined.snapshot, world: { ...joined.snapshot.world, tick: 99 } },
+  };
+  pending("visit:resume").reply(null, resumed);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(recovery).toHaveBeenLastCalledWith("recovered");
+  expect(receive).toHaveBeenLastCalledWith(resumed.snapshot);
+  await vi.advanceTimersByTimeAsync(50);
+  expect(pending("player:input").body).toMatchObject({ visitId: resumed.visitId, seq: 1, movement: { x: 0, y: 0 } });
+  expect(transport.sent.filter((entry) => entry.event === "player:action")).toHaveLength(1);
+  expect(transport.sent.filter((entry) => entry.event === "player:chat")).toHaveLength(0);
+});
+
+it("ends once after bounded reconnect failure and rejects a different world on resume", async () => {
+  const { ended } = await host();
+  transport.listeners.get("disconnect")?.("transport close");
+  transport.manager.get("reconnect_failed")?.();
+  transport.manager.get("reconnect_failed")?.();
+  expect(ended).toHaveBeenCalledOnce();
+  expect(transport.manager.has("reconnect_failed")).toBe(false);
+  const next = await host();
+  transport.listeners.get("disconnect")?.("transport close");
+  transport.listeners.get("connect")?.(undefined);
+  pending("visit:resume").reply(null, { ...next.joined, worldId: randomUUID() });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(next.ended).toHaveBeenCalledOnce();
+});
+
+it("coalesces live drafts, clears them explicitly, and never replays offline text", async () => {
+  const { client, joined } = await host();
+  client.chat("ㅎ", "");
+  client.chat("한글", "");
+  await vi.advanceTimersByTimeAsync(50);
+  expect(pending("player:chat").body).toEqual({
+    visitId: joined.visitId, seq: 1, current: "한글", previous: "",
+  });
+  pending("player:chat").reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(0);
+  client.chat("", "한글");
+  await vi.advanceTimersByTimeAsync(50);
+  pending("player:chat").reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(0);
+  client.chat("", "");
+  await vi.advanceTimersByTimeAsync(50);
+  expect(pending("player:chat").body).toMatchObject({ seq: 3, current: "", previous: "" });
+});
+
+it("terminates recovery when the server refuses namespace authentication", async () => {
+  const { ended } = await host();
+  transport.listeners.get("disconnect")?.("transport close");
+  transport.listeners.get("connect_error")?.(new Error("Unauthorized"));
+  expect(ended).toHaveBeenCalledExactlyOnceWith(ERROR_MESSAGES.CONNECTION_LOST);
 });

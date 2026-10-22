@@ -2,9 +2,12 @@
 
 use tauri::{Manager, WindowEvent};
 
+mod chat;
 mod clipboard;
 mod controls;
 mod local_game;
+#[cfg(windows)]
+mod native_keyboard;
 #[cfg(windows)]
 mod native_windows;
 mod network;
@@ -31,6 +34,10 @@ fn main() -> tauri::Result<()> {
             overlay::focus_read,
             overlay::focus_set,
             overlay::invite_publish,
+            overlay::app_exit,
+            chat::chat_open,
+            chat::chat_update,
+            chat::chat_close,
             local_game::local_available,
             local_game::local_control,
             local_game::local_overlay_status,
@@ -46,6 +53,7 @@ fn main() -> tauri::Result<()> {
             app.manage(local_game::LocalSession::default());
             app.manage(network::NetworkState::default());
             app.manage(controls::ControlState::default());
+            app.manage(chat::ChatState::default());
             #[cfg(windows)]
             if let Some(main) = app.get_webview_window("main") {
                 native_windows::watch_play_hotkey(&main.as_ref().window())?;
@@ -58,19 +66,16 @@ fn main() -> tauri::Result<()> {
         .on_window_event(|window, event| {
             overlay::on_window_event(window, event);
             local_game::on_window_event(window, event);
+            chat::on_window_event(window, event);
             if window.label() == "main" {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    local_game::end_play(window.app_handle());
-                    if let Err(error) = window.hide() {
-                        eprintln!("Could not hide home: {error}");
-                    }
+                    overlay::request_exit(window.app_handle());
                 }
             }
             // An unexpected WebView destruction must not leave an invisible app behind.
             if window.label() == "main" && matches!(event, WindowEvent::Destroyed) {
-                overlay::shutdown(window.app_handle());
-                window.app_handle().exit(0);
+                overlay::exit_app(window.app_handle());
             }
         })
         .run(tauri::generate_context!())

@@ -1,5 +1,13 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
+export async function closeApp(): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("데스크톱 앱에서만 종료할 수 있습니다.");
+  }
+  await getCurrentWindow().close();
+}
 
 export function watchReducedEffects(
   onChange: (reduced: boolean) => void,

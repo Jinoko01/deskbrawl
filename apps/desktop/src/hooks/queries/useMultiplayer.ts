@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ERROR_MESSAGES, parseInviteLink } from "@deskbrawl/protocol";
+import { ERROR_MESSAGES, parseInviteLink, PROTOCOL_VERSION } from "@deskbrawl/protocol";
 import type { Joined, Session, Snapshot } from "@deskbrawl/protocol";
 import {
   getRoom,
@@ -26,12 +26,13 @@ import {
 import type { LocalCommand } from "../../native/localGame";
 import { createVisitClient } from "../../realtime/visitClient";
 import type { VisitClient } from "../../realtime/visitClient";
+import { openChat, watchChat, watchChatRequest } from "../../native/chat";
 import {
   publishInviteLink, readFocus, setNativeFocus, watchFocus,
 } from "../../native/focus";
 
 interface MultiplayerView {
-  phase: "local" | "connecting" | "host" | "guest" | "error";
+  phase: "local" | "connecting" | "reconnecting" | "host" | "guest" | "error";
   error?: string;
   members: Snapshot["members"];
 }
@@ -48,7 +49,6 @@ export function useMultiplayer() {
   const session = useRef<Session | undefined>(undefined);
   const operation = useRef<Promise<void> | undefined>(undefined);
   const pendingInvite = useRef<string | undefined>(undefined);
-  const everConnected = useRef(false);
   const [focused, setFocused] = useState(false);
   const [focusLoaded, setFocusLoaded] = useState(false);
   const focusValue = useRef(false);
@@ -79,11 +79,9 @@ export function useMultiplayer() {
     current.current = undefined;
     void publishInviteLink(null).catch((failure: unknown) => console.error("트레이 링크 정리 실패", failure));
     setView({ phase: "error", error: error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST, members: [] });
-    if (everConnected.current) {
-      void publishNetwork({ mode: "offline", snapshot: null }).catch((failure: unknown) => {
-        console.error("네트워크 종료 상태 전달 실패", failure);
-      });
-    }
+    void publishNetwork({ mode: "local", snapshot: null }).catch((failure: unknown) => {
+      console.error("네트워크 종료 상태 전달 실패", failure);
+    });
   }
   function receive(snapshot: Snapshot): void {
     if (!live.current) {
@@ -131,15 +129,35 @@ export function useMultiplayer() {
     const task = (async () => {
       try {
         setView({ phase: "connecting", members: [] });
-        client.current?.dispose();
+        const previous = client.current;
         client.current = undefined;
+        try {
+          await previous?.leave();
+        } finally {
+          previous?.dispose();
+        }
         await publishInviteLink(null);
         const auth = await authenticate(nickname);
         if (!live.current) {
           return;
         }
         mode.current = token === undefined ? "host" : "guest";
-        const connection = createVisitClient(auth, receive, (message) => report(new Error(message)));
+        const connection = createVisitClient(auth, receive, (message) => report(new Error(message)), (state) => {
+          if (!live.current) {
+            return;
+          }
+          setView((previous) => ({ ...previous, phase: state === "reconnecting" ? "reconnecting" : mode.current }));
+          if (state === "reconnecting") {
+            const frozen = current.current === undefined ? null : { ...current.current, chats: [] };
+            if (frozen !== null) {
+              current.current = frozen;
+              for (const listener of listeners.current) {
+                listener(frozen);
+              }
+            }
+            void publishNetwork({ mode: "recovering", snapshot: frozen }).catch(report);
+          }
+        });
         client.current = connection;
         await connection.connect();
         if (!live.current) {
@@ -147,9 +165,8 @@ export function useMultiplayer() {
           return;
         }
         const joined: Joined = token === undefined
-          ? await connection.enter("room:host", { version: 1, bounds: await hostBounds(), focused: focusValue.current })
-          : await connection.enter("visit:join", { version: 1, token });
-        everConnected.current = true;
+          ? await connection.enter("room:host", { version: PROTOCOL_VERSION, bounds: await hostBounds(), focused: focusValue.current })
+          : await connection.enter("visit:join", { version: PROTOCOL_VERSION, token });
         if (live.current) {
           setView((previous) => ({ ...previous, phase: joined.role }));
           if (joined.role === "host" && invite.data !== undefined) {
@@ -297,6 +314,18 @@ export function useMultiplayer() {
   });
   const watchFailed = useEffectEvent((error: unknown) => report(error));
   const focusChanged = useEffectEvent((value: boolean) => focus.mutate(value));
+  const chatRequested = useEffectEvent(() => {
+    const snapshot = current.current;
+    const id = client.current?.playerId();
+    const player = snapshot?.world.players.find((candidate) => candidate.id === id);
+    if (snapshot === undefined || player === undefined) {
+      return;
+    }
+    void openChat(player.position, snapshot.world.bounds).catch(() => {
+      setView((previous) => ({ ...previous, error: "채팅 입력창을 열지 못했어요. PLAY에서 / 키로 다시 시도해 주세요." }));
+    });
+  });
+  const chatChanged = useEffectEvent((current: string, previous: string) => client.current?.chat(current, previous));
   const subscribe = useCallback((listener: (snapshot: Snapshot) => void): (() => void) => {
     listeners.current.add(listener);
     if (current.current !== undefined) {
@@ -312,7 +341,16 @@ export function useMultiplayer() {
     const subscribers = listeners.current;
     let stop: (() => void) | undefined;
     let stopFocus: (() => void) | undefined;
+    const chatStops: (() => void)[] = [];
     void (async () => {
+      for (const watch of [watchChatRequest(chatRequested), watchChat(chatChanged)]) {
+        const unwatch = await watch;
+        if (active) {
+          chatStops.push(unwatch);
+        } else {
+          unwatch();
+        }
+      }
       let focusEvent = false;
       const unwatchFocus = await watchFocus((value) => {
         if (active) {
@@ -355,6 +393,7 @@ export function useMultiplayer() {
       abort.current?.abort();
       stop?.();
       stopFocus?.();
+      chatStops.forEach((stopChat) => stopChat());
       client.current?.dispose();
       client.current = undefined;
       session.current = undefined;
@@ -376,6 +415,13 @@ export function useMultiplayer() {
     focus,
     kick,
     clearVisitors,
+    disconnect: async (): Promise<void> => {
+      try {
+        await client.current?.leave();
+      } finally {
+        client.current?.dispose();
+      }
+    },
     input: (command: LocalCommand): void => {
       client.current?.input(command);
     },

@@ -7,17 +7,23 @@ import {
   snapshotSchema,
   hostSchema,
   joinSchema,
+  resumeSchema,
+  PROTOCOL_VERSION,
 } from "@deskbrawl/protocol";
 import type { Joined, Session, Snapshot } from "@deskbrawl/protocol";
 import type { LocalCommand } from "../native/localGame";
 import { SERVER_ORIGIN } from "../api/rooms";
 
-export function createVisitClient(session: Session, onSnapshot: (snapshot: Snapshot) => void, onEnded: (message: string) => void) {
+export function createVisitClient(session: Session, onSnapshot: (snapshot: Snapshot) => void, onEnded: (message: string) => void,
+  onRecovery: (state: "reconnecting" | "recovered") => void = () => { /* Optional outside the desktop session. */ }) {
   const socket = io(SERVER_ORIGIN, {
     autoConnect: false,
     transports: ["websocket"],
-    reconnection: false,
-    auth: { version: 1, token: session.accessToken },
+    reconnection: true,
+    reconnectionAttempts: 3,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 1500,
+    auth: { version: PROTOCOL_VERSION, token: session.accessToken },
     timeout: 5000,
   });
   let membership: Joined | undefined;
@@ -28,8 +34,15 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
   let connectingReject: ((reason: Error) => void) | undefined;
   let paused = false;
   let inputEpoch = 0;
+  let recovering = false;
+  let restoring = false;
+  let focused = false;
+  let chatSequence = 0;
+  let draft: { current: string; previous: string } | undefined;
+  let sendingChat = false;
   function dispose(): void {
     disposed = true;
+    draft = undefined;
     membership = undefined;
     connectingReject?.(new Error("Connection cancelled"));
     connectingReject = undefined;
@@ -37,6 +50,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       clearInterval(timer);
     }
     socket.removeAllListeners();
+    socket.io.off("reconnect_failed", reconnectFailed);
     socket.disconnect();
   }
   function fail(message: string): void {
@@ -54,6 +68,9 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       socket.disconnect();
       return;
     }
+    if (recovering) {
+      return;
+    }
     if (result.data.worldId !== membership?.worldId || result.data.roomId !== membership.roomId) {
       return;
     }
@@ -67,7 +84,71 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     const parsed = errorSchema.safeParse(body);
     fail(parsed.success ? ERROR_MESSAGES[parsed.data.code] : ERROR_MESSAGES.SESSION_ENDED);
   });
-  socket.on("disconnect", () => fail(ERROR_MESSAGES.CONNECTION_LOST));
+  const reconnectFailed = () => fail(ERROR_MESSAGES.CONNECTION_LOST);
+  socket.io.on("reconnect_failed", reconnectFailed);
+  socket.on("connect_error", () => {
+    // Namespace authentication denial does not trigger Socket.IO's retry loop.
+    if (recovering && !socket.active) {
+      fail(ERROR_MESSAGES.CONNECTION_LOST);
+    }
+  });
+  socket.on("disconnect", (reason: string) => {
+    if (disposed) {
+      return;
+    }
+    if (membership === undefined || reason === "io server disconnect") {
+      fail(ERROR_MESSAGES.CONNECTION_LOST);
+      return;
+    }
+    pauseInput();
+    draft = undefined;
+    sendingChat = false;
+    restoring = false;
+    clearInterval(timer);
+    timer = undefined;
+    recovering = true;
+    onRecovery("reconnecting");
+  });
+  socket.on("connect", () => {
+    if (!recovering || restoring || membership === undefined || disposed) {
+      return;
+    }
+    restoring = true;
+    const previous = membership;
+    const epoch = inputEpoch;
+    void (async () => {
+      const result = joinedAckSchema.parse(await acknowledge("visit:resume", resumeSchema.parse({
+        version: PROTOCOL_VERSION, visitId: previous.visitId, resumeToken: previous.resumeToken,
+      })));
+      if (disposed || epoch !== inputEpoch) {
+        return;
+      }
+      if (!result.ok) {
+        throw new Error(ERROR_MESSAGES[result.code]);
+      }
+      if (result.worldId !== previous.worldId || result.roomId !== previous.roomId || result.playerId !== previous.playerId) {
+        throw new Error(ERROR_MESSAGES.SESSION_ENDED);
+      }
+      membership = result;
+      sequence = 0;
+      chatSequence = 0;
+      movement = { x: 0, y: 0 };
+      paused = focused;
+      recovering = false;
+      onSnapshot(result.snapshot);
+      onRecovery("recovered");
+      clearInterval(timer);
+      timer = setInterval(refresh, 50);
+    })().catch((error: unknown) => {
+      if (epoch === inputEpoch) {
+        fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+      }
+    }).finally(() => {
+      if (epoch === inputEpoch) {
+        restoring = false;
+      }
+    });
+  });
   function acknowledge(event: string, body: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!socket.connected || disposed) {
@@ -106,6 +187,24 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     inputEpoch++;
     movement = { x: 0, y: 0 };
   }
+  function refresh(): void {
+    sendMovement();
+    if (membership === undefined || !socket.connected || recovering || sendingChat || draft === undefined) {
+      return;
+    }
+    const text = draft;
+    draft = undefined;
+    const epoch = inputEpoch;
+    sendingChat = true;
+    void command("player:chat", { visitId: membership.visitId, seq: ++chatSequence, ...text })
+      .catch(() => {
+        if (epoch === inputEpoch) {
+          fail(ERROR_MESSAGES.CONNECTION_LOST);
+        }
+      }).finally(() => {
+        sendingChat = false;
+      });
+  }
   function hostControl() {
     if (membership?.role !== "host" || disposed) {
       throw new Error(ERROR_MESSAGES.UNAUTHORIZED);
@@ -139,12 +238,13 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       membership = result;
       sequence = 0;
       movement = { x: 0, y: 0 };
-      paused = "focused" in request && request.focused === true;
+      focused = "focused" in request && request.focused === true;
+      paused = focused;
       onSnapshot(result.snapshot);
       if (timer !== undefined) {
         clearInterval(timer);
       }
-      timer = setInterval(sendMovement, 50);
+      timer = setInterval(refresh, 50);
       return result;
     },
     input(input: LocalCommand): void {
@@ -170,6 +270,9 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     async leave(): Promise<void> {
       const current = membership;
       pauseInput();
+      recovering = false;
+      draft = undefined;
+      membership = undefined;
       if (timer !== undefined) {
         clearInterval(timer);
       }
@@ -179,13 +282,21 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       }
       membership = undefined;
     },
+    playerId: (): string | undefined => membership?.playerId,
+    chat(current: string, previous: string): void {
+      if (disposed || membership === undefined || recovering || !socket.connected) {
+        return;
+      }
+      draft = { current: current.slice(0, 50), previous: previous.slice(0, 50) };
+    },
     pauseInput,
-    async setFocused(focused: boolean): Promise<void> {
+    async setFocused(nextFocused: boolean): Promise<void> {
       const control = hostControl();
       pauseInput();
-      await command("room:focus", { ...control, focused });
+      await command("room:focus", { ...control, focused: nextFocused });
       if (!disposed) {
-        paused = focused;
+        focused = nextFocused;
+        paused = nextFocused;
       }
     },
     kick(targetPlayerId: string): Promise<void> {

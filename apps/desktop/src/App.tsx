@@ -1,11 +1,51 @@
+import { useEffect, useEffectEvent, useState } from "react";
 import { ControlSettings } from "./ControlSettings";
 import { DEFAULT_CONTROLS, keyLabel, shortcutLabel } from "./game/keyMap";
 import { useLocalControls } from "./game/useLocalControls";
 import { useMultiplayer } from "./hooks/queries/useMultiplayer";
 import { MultiplayerPanel } from "./MultiplayerPanel";
+import { closeApp } from "./native/overlay";
+import { finishExit, watchClosing } from "./native/lifecycle";
 
 export function App() {
+  const [exiting, setExiting] = useState(false);
+  const [exitError, setExitError] = useState<string>();
+  async function exit(): Promise<void> {
+    if (exiting) {
+      return;
+    }
+    setExiting(true);
+    setExitError(undefined);
+    try {
+      await closeApp();
+    } catch {
+      setExiting(false);
+      setExitError("앱을 종료하지 못했습니다. 창의 X 버튼이나 트레이의 종료를 다시 눌러 주세요.");
+    }
+  }
   const multiplayer = useMultiplayer();
+  const leaving = useEffectEvent(() => {
+    void multiplayer.disconnect().catch(() => {
+      // Native exit still completes when the server is unreachable.
+    }).finally(() => {
+      void finishExit();
+    });
+  });
+  useEffect(() => {
+    let active = true;
+    let stop: (() => void) | undefined;
+    void watchClosing(leaving).then((unlisten) => {
+      if (active) {
+        stop = unlisten;
+      } else {
+        unlisten();
+      }
+    });
+    return () => {
+      active = false;
+      stop?.();
+    };
+  }, []);
   const {
     region,
     ready,
@@ -36,9 +76,24 @@ export function App() {
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          DeskBrawl
-        </h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            DeskBrawl
+          </h1>
+          {supported && (
+            <button
+              type="button"
+              disabled={exiting}
+              onClick={() => {
+                void exit();
+              }}
+              className="cursor-pointer rounded-lg border border-border px-3 py-2 text-sm hover:bg-background active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-50"
+            >
+              {exiting ? "종료 중…" : "종료"}
+            </button>
+          )}
+        </div>
+        {exitError && <p className="mt-3 text-sm" role="alert">{exitError}</p>}
         <p className="mt-3 text-base leading-relaxed text-muted-foreground">
           작은 친구들이 찾아올 데스크톱.
         </p>
@@ -60,6 +115,7 @@ export function App() {
           <p className="mt-1 text-xs text-muted-foreground">
             {`어느 창에서든 ${shortcut}로 플레이·작업 모드를 전환합니다. Esc로도 작업 모드로 돌아갑니다.`}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">공간 연결 후 PLAY에서 / 채팅 · 입력 중 바로 공유 · Enter 이전 줄 · Esc 닫기</p>
         </div>
         {loaded?.shortcut === "unavailable" && (
           <p className="mt-4 text-sm text-foreground" role="alert">

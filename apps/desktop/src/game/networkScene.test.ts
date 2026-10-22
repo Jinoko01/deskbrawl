@@ -24,7 +24,7 @@ function fixture() {
     players: [{ id: playerId, position: { x: 100, y: 100 } }],
   });
   return snapshotSchema.parse({
-    version: 1,
+    version: 2,
     roomId: randomUUID(),
     worldId: randomUUID(),
     world,
@@ -34,6 +34,35 @@ function fixture() {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe("network presentation", () => {
+  it("shows six named characters and fades live two-line drafts by local elapsed time", () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const time = vi.spyOn(performance, "now").mockReturnValue(100);
+    const first = fixture();
+    const ids = Array.from({ length: 6 }, () => randomUUID());
+    const full = snapshotSchema.parse({
+      ...first,
+      world: createWorld({ bounds: first.world.bounds, rules: { ...first.world.rules, combat: DEFAULT_COMBAT }, players: ids.map((id, i) => ({ id, position: { x: 100 + i * 100, y: 300 } })) }),
+      members: ids.map((playerId, i) => ({ playerId, nickname: `친구${i}`, role: i === 0 ? "host" : "guest" })),
+      lastProcessedSeq: Object.fromEntries(ids.map((id) => [id, 0])),
+      chats: [{
+        playerId: ids[0], current: "현재 줄", previous: "이전 줄", updatedAt: 123456789,
+      }],
+    });
+    const render = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+    const buffer = createSnapshotView(render);
+    buffer.receive(full);
+    expect(render.mock.lastCall?.[0].characters).toHaveLength(6);
+    expect(new Set(render.mock.lastCall?.[0].characters.map((frame) => frame.nickname)).size).toBe(6);
+    expect(render.mock.lastCall?.[0].characters[0]?.chat).toEqual({ current: "현재 줄", previous: "이전 줄", opacity: 1 });
+    time.mockReturnValue(5200);
+    buffer.receive(full);
+    expect(render.mock.lastCall?.[0].characters[0]?.chat?.opacity).toBe(0.5);
+    buffer.receive({ ...full, chats: [] });
+    expect(render.mock.lastCall?.[0].characters[0]?.chat).toBeUndefined();
+    buffer.dispose();
+    time.mockRestore();
+  });
   it("removes departed characters even when membership changes without advancing a tick", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());

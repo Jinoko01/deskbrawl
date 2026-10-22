@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "chat",
+  "description": "채팅 입력 창은 초안 전달·닫기와 열림 이벤트 수신만 허용합니다.",
+  "windows": ["chat"],
+  "permissions": ["allow-chat-update", "allow-chat-close", "core:event:allow-listen", "core:event:allow-unlisten"]
+}

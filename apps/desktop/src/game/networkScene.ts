@@ -6,7 +6,7 @@ export function networkScene(snapshot: Snapshot, previous?: Snapshot): Character
   const { world } = snapshot;
   return {
     bounds: world.bounds,
-    characters: world.players.map((player) => {
+    characters: world.players.map((player, index) => {
       let motion: CharacterMotion;
       const before = previous?.world.players.find((candidate) => candidate.id === player.id);
       const action = player.lastAction;
@@ -21,6 +21,7 @@ export function networkScene(snapshot: Snapshot, previous?: Snapshot): Character
       }
       return {
         id: player.id,
+        nickname: `${snapshot.members.find((member) => member.playerId === player.id)?.nickname ?? "친구"} · ${index + 1}`,
         position: player.position,
         facing: player.facing,
         motion,
@@ -39,6 +40,7 @@ export function createSnapshotView(render: (scene: CharacterSceneSnapshot) => vo
   let receivedAt = 0;
   let animation = 0;
   let rendered: CharacterSceneSnapshot | undefined;
+  const chatTimes = new Map<string, { revision: number; since: number }>();
   function frame(now: number): void {
     if (current === undefined) {
       return;
@@ -50,12 +52,21 @@ export function createSnapshotView(render: (scene: CharacterSceneSnapshot) => vo
     const interpolated = {
       ...scene,
       characters: scene.characters.map((character) => {
+        const draft = current?.chats.find((chat) => chat.playerId === character.id);
+        const seen = chatTimes.get(character.id);
+        const age = seen === undefined ? 8000 : now - seen.since;
+        const caption = draft === undefined || age >= 8000
+          ? undefined
+          : {
+              current: draft.current, previous: draft.previous, opacity: age >= 5000 ? 0.5 : 1,
+            };
+        const withChat = { ...character, ...(caption === undefined ? {} : { chat: caption }) };
         const before = sameWorld ? previous?.world.players.find((player) => player.id === character.id) : undefined;
         if (before === undefined) {
-          return character;
+          return withChat;
         }
         return {
-          ...character,
+          ...withChat,
           position: {
             x: before.position.x + (character.position.x - before.position.x) * alpha,
             y: before.position.y + (character.position.y - before.position.y) * alpha,
@@ -84,6 +95,17 @@ export function createSnapshotView(render: (scene: CharacterSceneSnapshot) => vo
       previous = current;
       current = snapshot;
       receivedAt = performance.now();
+      const ids = new Set(snapshot.chats.map((chat) => chat.playerId));
+      for (const id of chatTimes.keys()) {
+        if (!ids.has(id)) {
+          chatTimes.delete(id);
+        }
+      }
+      for (const chat of snapshot.chats) {
+        if (chatTimes.get(chat.playerId)?.revision !== chat.updatedAt) {
+          chatTimes.set(chat.playerId, { revision: chat.updatedAt, since: receivedAt });
+        }
+      }
       frame(receivedAt);
     },
     dispose(): void {
@@ -91,6 +113,7 @@ export function createSnapshotView(render: (scene: CharacterSceneSnapshot) => vo
       current = undefined;
       previous = undefined;
       rendered = undefined;
+      chatTimes.clear();
     },
   };
 }

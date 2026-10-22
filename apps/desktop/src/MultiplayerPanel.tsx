@@ -14,6 +14,7 @@ const CONNECTION_LABELS = {
   host: "내 공간 연결됨",
   guest: "친구 공간 방문 중",
   connecting: "공간에 연결하는 중…",
+  reconnecting: "연결이 끊겨 복구하는 중… 조작을 잠시 멈췄어요.",
   local: "로컬 플레이 · 서버 공간에 연결해 주세요.",
   error: "공간에 연결되지 않았어요. 다시 연결해 주세요.",
 } as const;
@@ -22,7 +23,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
   const [nickname, setNickname] = useState("친구");
   const [link, setLink] = useState("");
   const [copy, setCopy] = useState<string>();
-  const connectionBusy = !game.focusLoaded || game.view.phase === "connecting" || game.connect.isPending || game.join.isPending || game.returning.isPending;
+  const connectionBusy = !game.focusLoaded || ["connecting", "reconnecting"].includes(game.view.phase) || game.connect.isPending || game.join.isPending || game.returning.isPending;
   const controlBusy = connectionBusy || game.focus.isPending || game.kick.isPending || game.clearVisitors.isPending;
   const busy = playing || controlBusy;
   const hosting = game.view.phase === "host";
@@ -45,7 +46,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
 
   return (
     <section className="mt-6 border-t border-border pt-5 text-left" aria-label="링크 방문">
-      <h2 className="font-semibold">링크 방문 · 2인</h2>
+      <h2 className="font-semibold">링크 방문 · 최대 6인</h2>
       <p className="mt-2 break-all text-xs text-muted-foreground">
         {`서버: ${SERVER_ORIGIN}`}
       </p>
@@ -114,7 +115,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
       )}
       {hosting && (
         <div className="mt-3 space-y-3">
-          <p className="text-xs text-muted-foreground">링크를 가진 누구나 승인 없이 방문할 수 있어요. 호스트 포함 2명까지 입장합니다.</p>
+          <p className="text-xs text-muted-foreground">링크를 가진 누구나 승인 없이 방문할 수 있어요. 호스트 포함 6명까지 입장합니다.</p>
           <button
             className={button}
             disabled={controlBusy || visitors.length === 0}

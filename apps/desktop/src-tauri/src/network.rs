@@ -19,7 +19,16 @@ pub fn play_allowed(app: &tauri::AppHandle) -> bool {
         .lock()
         .ok()
         .and_then(|state| serde_json::from_str::<serde_json::Value>(&state).ok())
-        .is_some_and(|state| state["mode"] != "offline")
+        .is_some_and(|state| state["mode"] != "offline" && state["mode"] != "recovering")
+}
+
+pub fn chat_allowed(app: &tauri::AppHandle) -> bool {
+    app.state::<NetworkState>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|state| serde_json::from_str::<serde_json::Value>(&state).ok())
+        .is_some_and(|state| matches!(state["mode"].as_str(), Some("host" | "guest")))
 }
 
 #[tauri::command]
@@ -35,17 +44,17 @@ pub fn network_publish(window: WebviewWindow, request: Request<'_>) -> Result<()
         .get("mode")
         .and_then(|v| v.as_str())
         .ok_or("INVALID_NETWORK_STATE")?;
-    if fields.len() != 2 || !matches!(mode, "local" | "host" | "guest" | "offline") {
+    if fields.len() != 2 || !matches!(mode, "local" | "host" | "guest" | "offline" | "recovering") {
         return Err("INVALID_NETWORK_STATE");
     }
     let snapshot = fields.get("snapshot").ok_or("INVALID_NETWORK_STATE")?;
     if !snapshot.is_null() {
         let world = snapshot.get("world").ok_or("INVALID_NETWORK_STATE")?;
-        if snapshot.get("version").and_then(|v| v.as_u64()) != Some(1)
+        if snapshot.get("version").and_then(|v| v.as_u64()) != Some(2)
             || world
                 .get("players")
                 .and_then(|v| v.as_array())
-                .is_none_or(|v| v.len() > 2)
+                .is_none_or(|v| v.len() > 6)
             || world
                 .get("projectiles")
                 .and_then(|v| v.as_array())
@@ -73,6 +82,7 @@ pub fn network_publish(window: WebviewWindow, request: Request<'_>) -> Result<()
         changed
     };
     if changed {
+        crate::chat::dismiss(window.app_handle());
         crate::local_game::end_play(window.app_handle());
     }
     window

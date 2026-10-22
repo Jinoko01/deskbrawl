@@ -24,6 +24,7 @@ const SUSPENDED: u8 = 2;
 const EXITING: u8 = 3;
 
 struct Control {
+    closing: AtomicBool,
     intent: AtomicU8,
     adjusting_bounds: AtomicBool,
     recreate_required: AtomicBool,
@@ -135,15 +136,13 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
                     eprintln!("Tray play failed: {error}");
                 }
             }
-            EXIT => {
-                shutdown(app);
-                app.exit(0);
-            }
+            EXIT => request_exit(app),
             _ => {}
         })
         .build(app)?;
 
     app.manage(Control {
+        closing: AtomicBool::new(false),
         intent: AtomicU8::new(HIDDEN),
         adjusting_bounds: AtomicBool::new(false),
         recreate_required: AtomicBool::new(false),
@@ -172,6 +171,7 @@ fn set_focus(app: &AppHandle, next: bool) -> tauri::Result<()> {
         return Ok(());
     }
     crate::local_game::end_play(app);
+    crate::chat::dismiss(app);
     dispatch(app, if next { HIDDEN } else { VISIBLE });
     // Notify main even if the native menu update fails: network admission must still close.
     let event = app.emit_to("main", "focus-changed", next);
@@ -490,6 +490,7 @@ fn request_show(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn request_hide(app: &AppHandle) -> tauri::Result<()> {
+    crate::chat::dismiss(app);
     crate::local_game::on_overlay_visibility(app, false);
     if let Some(window) = app.get_webview_window("overlay") {
         conceal(&window)?;
@@ -568,6 +569,39 @@ pub fn shutdown(app: &AppHandle) {
     if let Some(control) = app.try_state::<Control>() {
         control.intent.store(EXITING, Ordering::SeqCst);
     }
+}
+
+pub fn exit_app(app: &AppHandle) {
+    shutdown(app);
+    crate::chat::dismiss(app);
+    crate::local_game::end_play(app);
+    app.exit(0);
+}
+
+// Give main one short opportunity to notify the room, even for X or tray exit.
+// A broken WebView must never keep the native app alive indefinitely.
+pub fn request_exit(app: &AppHandle) {
+    if app.state::<Control>().closing.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    shutdown(app);
+    crate::chat::dismiss(app);
+    crate::local_game::end_play(app);
+    let _ = app.emit_to("main", "app-closing", ());
+    let target = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        std::thread::sleep(Duration::from_millis(1250));
+        exit_app(&target);
+    });
+}
+
+#[tauri::command]
+pub fn app_exit(window: WebviewWindow) -> Result<(), &'static str> {
+    if window.label() != "main" {
+        return Err("MAIN_ONLY");
+    }
+    exit_app(window.app_handle());
+    Ok(())
 }
 
 // This boundary lets failure tests verify that no show occurs after a native setup error.
