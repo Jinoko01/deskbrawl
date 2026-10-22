@@ -19,6 +19,10 @@ export async function testOverlayRendering() {
   let currentApp;
   let scene;
   let cleanup = () => {};
+  const unhandled = [];
+  const recordError = (event) => unhandled.push(event.message);
+  window.addEventListener("error", recordError);
+  const originalCanvas = document.querySelector(".character-host canvas");
   const captureInit = async function (...args) {
     await originalInit.apply(this, args);
     currentApp = this;
@@ -31,6 +35,14 @@ export async function testOverlayRendering() {
 
   function check(condition, message) {
     if (!condition) throw new Error(message);
+  }
+
+  function characters() {
+    return currentApp.stage.children.filter((item) => item.label.startsWith("character:"));
+  }
+
+  function captions() {
+    return currentApp.stage.children.filter((item) => item.label.startsWith("caption:"));
   }
 
   async function until(predicate) {
@@ -57,9 +69,10 @@ export async function testOverlayRendering() {
       const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
       check(gl.getContextAttributes().alpha, "알파 채널 비활성");
       check(gl.getParameter(gl.COLOR_CLEAR_VALUE)[3] === 0, "배경 알파가 0이 아님");
-      check(currentApp.stage.children.length === 2, "두 캐릭터가 표시되지 않음");
+      check(characters().length === 2 && captions().length === 2 && currentApp.stage.children.length === 4, "캐릭터 또는 이름표 레이어 누락·중복");
       check(canvas.getAttribute("aria-label") === "모찌와 민트 캐릭터", "캐릭터 접근성 이름 누락");
-      const [first, second] = currentApp.stage.children;
+      const [first, second] = characters();
+      const [firstCaption, secondCaption] = captions();
       const body = first.children[0];
       check(first.x < second.x && second.children[0].scale.x < 0, "두 캐릭터 위치·방향 오류");
       check(body.texture.source !== second.children[0].texture.source, "서로 다른 캐릭터 atlas 누락");
@@ -108,25 +121,31 @@ export async function testOverlayRendering() {
           projectiles: [{ id: "stone-1", ownerId: "host", position: { x: 140, y: 110 }, velocity: { x: 1, y: 0 }, expiresAtTick: 10 }],
           effects: [{ id: "impact-1", kind: "impact", position: { x: 230, y: 110 }, startedAtTick: 1, expiresAtTick: 5 }],
         });
-        check(currentApp.stage.children.length === 4, "돌과 피격 효과가 표시되지 않음");
+        check(currentApp.stage.children.length === 6, "돌과 피격 효과가 표시되지 않음");
         check(currentApp.stage.children.some((item) => item.label === "stone:stone-1" && item.x === 140), "돌 좌표가 반영되지 않음");
         check(currentApp.stage.children.some((item) => item.label === "effect:impact-1"), "피격 효과가 표시되지 않음");
         check(!currentApp.ticker.started, "효과 감소 중 돌과 피격 애니메이션이 재생됨");
         scene.update(snapshot);
-        check(currentApp.stage.children.length === 2, "만료된 돌과 피격 효과가 정리되지 않음");
+        check(currentApp.stage.children.length === 4, "만료된 돌과 피격 효과가 정리되지 않음");
         snapshot.characters = snapshot.characters.map((frame) => ({ ...frame, motion: { kind: "melee", actionId: "one" } }));
         scene.update(snapshot);
         motion.matches = false;
         motion.dispatchEvent(new Event("change"));
         // Ticker의 최대 delta 제한을 포함하여 단발 모션의 종료를 기다린다.
         if (!document.hidden) await until(() => !currentApp.ticker.started);
-        check(document.hidden || currentApp.stage.children.every((item) => !item.children[0].playing), "단발 모션이 종료되지 않음");
+        check(document.hidden || characters().every((item) => !item.children[0].playing), "단발 모션이 종료되지 않음");
         scene.update({ ...snapshot });
         check(document.hidden || !currentApp.ticker.started, "동일 actionId가 중복 재생됨");
         scene.update({ ...snapshot, characters: snapshot.characters.slice(0, 1) });
-        check(currentApp.stage.children.length === 1 && second.destroyed, "제거된 캐릭터 자원 잔류");
+        check(currentApp.stage.children.length === 2 && second.destroyed && secondCaption.destroyed, "제거된 캐릭터·이름표 자원 잔류");
         scene.update({ ...snapshot, characters: snapshot.characters.map((frame) => ({ ...frame, skin: "mint", motion: { kind: "idle" } })) });
-        check(currentApp.stage.children.length === 2, "캐릭터 변경 후 복구 실패");
+        check(characters().length === 2 && captions().length === 2 && currentApp.stage.children.length === 4, "캐릭터 변경 후 복구 실패·이름표 중복");
+        check(first.destroyed && firstCaption.destroyed, "캐릭터 변경 후 이전 캐릭터·이름표 자원 잔류");
+        for (const skin of ["mochi", "mint", "sunny", "coral", "lumi", "rusty", "byte", "berry"]) {
+          scene.update({ ...snapshot, characters: snapshot.characters.map((frame) => ({ ...frame, skin, motion: { kind: "idle" } })) });
+          check(characters().length === 2 && captions().length === 2 && currentApp.stage.children.length === 4, `캐릭터 ${skin} 교체 후 레이어 누락·중복`);
+          check(characters().every((item) => item.children[0].texture.source.resource.src.includes(`${skin}-v2.png`)), `캐릭터 ${skin}의 실제 atlas가 적용되지 않음`);
+        }
       }
       host.style.width = "180px";
       host.style.height = "120px";
@@ -140,6 +159,7 @@ export async function testOverlayRendering() {
     }
 
     let releaseInit;
+    check(originalCanvas === null || originalCanvas.isConnected, "검증용 장면 정리가 기존 오버레이 장면을 손상시킴");
     let initReady = false;
     const gate = new Promise((resolve) => { releaseInit = resolve; });
     Application.prototype.init = async function (...args) {
@@ -203,6 +223,7 @@ export async function testOverlayRendering() {
     loseContext.loseContext();
     await until(() => contextStatus === "error");
     check(host.childElementCount === 0 && destroyed === beforeContextLoss + 1, "context 손실 후 자원 잔류");
+    check(unhandled.length === 0, `처리되지 않은 렌더링 오류: ${unhandled.join(", ")}`);
     console.log("PASS: 두 캐릭터 픽셀·상태 모션·효과 감소·투명 배경·resize/DPR·재생 중복 방지·초기화 취소·실패 정리");
   } finally {
     cleanup();
@@ -211,5 +232,6 @@ export async function testOverlayRendering() {
     Image.prototype.decode = originalDecode;
     window.matchMedia = originalMatchMedia;
     host.remove();
+    window.removeEventListener("error", recordError);
   }
 }

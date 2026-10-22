@@ -1,5 +1,10 @@
 import type { Joined, RoomControl } from '@deskbrawl/protocol';
-import { hostSchema, joinSchema, resumeSchema } from '@deskbrawl/protocol';
+import {
+  hostSchema,
+  joinSchema,
+  resumeSchema,
+  playerProfileSchema,
+} from '@deskbrawl/protocol';
 import { Inject, Injectable } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'socket.io';
@@ -188,6 +193,31 @@ export class VisitSessionService {
         return this.joined(room, member);
       }
       throw new DomainError('SESSION_ENDED');
+    });
+  }
+
+  async profile(
+    socketId: string,
+    deviceId: string,
+    body: unknown,
+  ): Promise<RoomWorld> {
+    const input = playerProfileSchema.parse(body);
+    return this.db.serialize(async () => {
+      const { room, member } = this.find(socketId);
+      if (member.playerId !== deviceId || member.visitId !== input.visitId) {
+        throw new DomainError('SESSION_ENDED');
+      }
+      if (input.nickname !== undefined) {
+        await this.db.deviceIdentity.update({
+          where: { id: deviceId },
+          data: { nickname: input.nickname },
+        });
+        member.nickname = input.nickname;
+      }
+      if (input.skin !== undefined) {
+        member.skin = input.skin;
+      }
+      return room;
     });
   }
 

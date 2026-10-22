@@ -2,12 +2,16 @@ import type { ErrorCode } from '@deskbrawl/protocol';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch, HttpException } from '@nestjs/common';
 import type { Response } from 'express';
-import { failure } from './errors';
+import { failure, isDatabaseUnavailable } from './errors';
 
 @Catch()
 export class HttpErrors implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
+    if (isDatabaseUnavailable(error)) {
+      response.status(503).json({ ok: false, code: 'INTERNAL_ERROR' });
+      return;
+    }
     const parserType =
       typeof error === 'object' && error !== null && 'type' in error
         ? error.type

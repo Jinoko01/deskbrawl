@@ -211,11 +211,14 @@ fn toggle_play(app: &tauri::AppHandle) -> tauri::Result<()> {
         crate::local_game::end_play(app);
         return Ok(());
     }
+    start_play(app)
+}
+
+pub fn start_play(app: &tauri::AppHandle) -> tauri::Result<()> {
     if crate::overlay::focused(app) || !crate::network::play_allowed(app) {
         return Ok(());
     }
-    crate::native_keyboard::start(app)?;
-    Ok(())
+    crate::native_keyboard::start(app)
 }
 
 pub fn foreground_token() -> usize {

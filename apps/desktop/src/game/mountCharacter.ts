@@ -11,10 +11,8 @@ import {
 import type { SpritesheetData } from "pixi.js";
 // Tauri의 script-src 'self'를 유지하면서 eval 없는 shader 경로를 사용한다.
 import "pixi.js/unsafe-eval";
-import mochiAtlas from "../../../../packages/game-assets/characters/mochi-v2.json";
-import mochiImage from "../../../../packages/game-assets/characters/mochi-v2.png";
-import mintAtlas from "../../../../packages/game-assets/characters/mint-v2.json";
-import mintImage from "../../../../packages/game-assets/characters/mint-v2.png";
+import { characterSkinSchema } from "@deskbrawl/protocol";
+import { CHARACTERS } from "./characters";
 import effectsAtlas from "../../../../packages/game-assets/effects/effects-v2.json";
 import effectsImage from "../../../../packages/game-assets/effects/effects-v2.png";
 import propsAtlas from "../../../../packages/game-assets/props/props-v2.json";
@@ -69,7 +67,8 @@ export function mountCharacter(
     if (initialized) {
       initialized = false;
       app.canvas.removeEventListener("webglcontextlost", onContextLost);
-      app.destroy(true, { children: true });
+      // Another scene can still use Pixi's shared pools during asynchronous teardown.
+      app.destroy({ removeView: true, releaseGlobalResources: false }, { children: true });
     }
     views.clear();
     stones.clear();
@@ -203,6 +202,8 @@ export function mountCharacter(
       let entry = views.get(frame.id);
       if (entry !== undefined && entry.skin !== frame.skin) {
         entry.view.destroy();
+        captions.get(frame.id)?.container.destroy({ children: true });
+        captions.delete(frame.id);
         views.delete(frame.id);
         entry = undefined;
       }
@@ -216,6 +217,7 @@ export function mountCharacter(
         views.set(frame.id, entry);
         app.stage.addChild(view.container);
         const container = new Container();
+        container.label = `caption:${frame.id}`;
         const label = new Text({
           text: "",
           style: {
@@ -264,9 +266,9 @@ export function mountCharacter(
         effects.set(effect.id, sprite);
       }
     }
-    const names = snapshot.characters.map((frame) => frame.skin === "mochi" ? "모찌" : "민트");
+    const names = snapshot.characters.map((frame) => CHARACTERS[frame.skin].name);
     app.canvas.setAttribute("aria-label", names.length === 0 ? "표시된 캐릭터 없음" : `${names.join("와 ")} 캐릭터`);
-    app.canvas.setAttribute("aria-description", `${snapshot.characters.map((frame) => `${frame.skin === "mochi" ? "모찌" : "민트"}: ${frame.motion.kind}`).join(", ")}, 돌 ${snapshot.projectiles?.length ?? 0}개, 효과 ${snapshot.effects?.length ?? 0}개`);
+    app.canvas.setAttribute("aria-description", `${snapshot.characters.map((frame) => `${CHARACTERS[frame.skin].name}: ${frame.motion.kind}`).join(", ")}, 돌 ${snapshot.projectiles?.length ?? 0}개, 효과 ${snapshot.effects?.length ?? 0}개`);
   }
 
   function paint() {
@@ -377,16 +379,14 @@ export function mountCharacter(
         return;
       }
 
-      const mochi = await loadSheet(mochiAtlas, mochiImage);
-      if (disposed || failed || mochi === undefined) {
-        return;
+      for (const skin of characterSkinSchema.options) {
+        const asset = CHARACTERS[skin];
+        const sheet = await loadSheet(asset.atlas, asset.image);
+        if (disposed || failed || sheet === undefined) {
+          return;
+        }
+        animations.set(skin, characterAnimations(sheet));
       }
-      animations.set("mochi", characterAnimations(mochi));
-      const mint = await loadSheet(mintAtlas, mintImage);
-      if (disposed || failed || mint === undefined) {
-        return;
-      }
-      animations.set("mint", characterAnimations(mint));
       const effectSheet = await loadSheet(effectsAtlas, effectsImage);
       if (disposed || failed || effectSheet === undefined) {
         return;

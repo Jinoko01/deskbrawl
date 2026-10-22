@@ -7,6 +7,7 @@ export function networkScene(snapshot: Snapshot, previous?: Snapshot): Character
   return {
     bounds: world.bounds,
     characters: world.players.map((player, index) => {
+      const member = snapshot.members.find((candidate) => candidate.playerId === player.id);
       let motion: CharacterMotion;
       const before = previous?.world.players.find((candidate) => candidate.id === player.id);
       const action = player.lastAction;
@@ -21,11 +22,11 @@ export function networkScene(snapshot: Snapshot, previous?: Snapshot): Character
       }
       return {
         id: player.id,
-        nickname: `${snapshot.members.find((member) => member.playerId === player.id)?.nickname ?? "친구"} · ${index + 1}`,
+        nickname: `${member?.nickname ?? "친구"} · ${index + 1}`,
         position: player.position,
         facing: player.facing,
         motion,
-        skin: snapshot.members.find((member) => member.playerId === player.id)?.role === "host" ? "mochi" : "mint",
+        skin: member?.skin ?? (member?.role === "host" ? "mochi" : "mint"),
       };
     }),
     projectiles: world.projectiles,

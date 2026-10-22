@@ -31,6 +31,7 @@ import { CONFIG } from '../config';
 import { DomainError } from '../domain.error';
 import { failure } from '../errors';
 import { RateLimit } from '../rate-limit';
+import type { RoomWorld } from '../game/simulation';
 import { AuthService } from './auth.service';
 import { VisitSessionService } from './visit-session.service';
 
@@ -146,6 +147,7 @@ export class VisitsGateway
       }
       const current = this.sessions.joined(room, member);
       socket.emit('visit:joined', current);
+      this.publishProfiles(room);
       this.server.to(room.worldId).emit('world:snapshot', current.snapshot);
       return current;
     } catch (error) {
@@ -237,6 +239,32 @@ export class VisitsGateway
       const { room, member } = this.sessions.find(socket.id);
       this.sessions.engine.action(room, member, command);
       return { ok: true as const };
+    });
+  }
+
+  @SubscribeMessage('player:profile')
+  profile(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof commandAckSchema>> {
+    return this.command(socket, 5, 'profile', async (device) => {
+      const room = await this.sessions.profile(socket.id, device, body);
+      this.publishProfiles(room);
+      this.server
+        .to(room.worldId)
+        .emit('world:snapshot', this.sessions.engine.snapshot(room));
+      return { ok: true as const };
+    });
+  }
+
+  private publishProfiles(room: RoomWorld): void {
+    this.server.to(room.worldId).emit('room:profiles', {
+      roomId: room.roomId,
+      worldId: room.worldId,
+      profiles: [...room.members.values()].map((member) => ({
+        playerId: member.playerId,
+        skin: member.skin ?? (member.role === 'host' ? 'mochi' : 'mint'),
+      })),
     });
   }
 

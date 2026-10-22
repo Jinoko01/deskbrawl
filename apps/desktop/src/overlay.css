@@ -28,3 +28,32 @@ body,
   text-shadow: 0 1px 3px black;
   pointer-events: none;
 }
+
+.mode-badge {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid rgb(177 217 190 / 22%);
+  border-radius: 999px;
+  background: rgb(20 25 24 / 70%);
+  color: #eef3f0;
+  font: 600 11px/1.3 "Segoe UI", "Malgun Gothic", sans-serif;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+
+.mode-badge span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a0b0a7;
+}
+
+.mode-badge[data-mode="play"] span {
+  background: #b1d9be;
+}

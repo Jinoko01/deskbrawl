@@ -1,7 +1,7 @@
 import { advance, createWorld, DEFAULT_COMBAT } from "@deskbrawl/game-core";
 import type { PlayerAction, PlayerInput, WorldState } from "@deskbrawl/game-core";
 import type { LocalCommand } from "../native/localGame";
-import type { CharacterMotion, CharacterSceneSnapshot } from "./characterScene";
+import type { CharacterMotion, CharacterSceneSnapshot, CharacterSkin } from "./characterScene";
 import { initialCharacterScene, sameCharacterScene } from "./characterScene";
 
 // 로컬 검증용 조정값이다. 제품 확정값은 추후 실기기 검증으로 결정한다.
@@ -43,6 +43,7 @@ export function createLocalGame(width: number, height: number, render: (snapshot
   let previousTime: number | undefined;
   let accumulated = 0;
   let previousScene: CharacterSceneSnapshot | undefined;
+  let skin: CharacterSkin = "mochi";
 
   function stop(): void {
     playing = false;
@@ -57,7 +58,7 @@ export function createLocalGame(width: number, height: number, render: (snapshot
         id: player.id,
         position: player.position,
         facing: player.facing,
-        skin: player.id === "host" ? "mochi" : "mint",
+        skin: player.id === "host" ? skin : "mint",
         motion: motion(world, player, player.position.x !== before.players[index]?.position.x || player.position.y !== before.players[index]?.position.y),
       })),
       projectiles: world.projectiles,
@@ -75,6 +76,10 @@ export function createLocalGame(width: number, height: number, render: (snapshot
     },
     get playing(): boolean {
       return playing;
+    },
+    setSkin(next: CharacterSkin): void {
+      skin = next;
+      publish(world);
     },
     command(command: LocalCommand | "stop"): void {
       if (command === "stop" || command.kind === "work") {

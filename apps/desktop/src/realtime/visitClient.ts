@@ -9,8 +9,12 @@ import {
   joinSchema,
   resumeSchema,
   PROTOCOL_VERSION,
+  roomProfilesSchema,
+  playerProfileSchema,
 } from "@deskbrawl/protocol";
-import type { Joined, Session, Snapshot } from "@deskbrawl/protocol";
+import type {
+  CharacterSkin, Joined, PlayerProfile, Session, Snapshot,
+} from "@deskbrawl/protocol";
 import type { LocalCommand } from "../native/localGame";
 import { SERVER_ORIGIN } from "../api/rooms";
 
@@ -40,7 +44,28 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
   let chatSequence = 0;
   let draft: { current: string; previous: string } | undefined;
   let sendingChat = false;
+  let selectedSkin: CharacterSkin | undefined;
+  let profiles = new Map<string, CharacterSkin>();
+  let rateLimitedUntil = 0;
+  let movementPending = false;
+  let lastMovement: LocalCommand["movement"] | undefined;
+  const actionSentAt = { melee: -Infinity, stone: -Infinity };
+  function receive(snapshot: Snapshot): void {
+    const enriched = {
+      ...snapshot,
+      members: snapshot.members.map((member) => ({
+        ...member, ...(profiles.has(member.playerId) ? { skin: profiles.get(member.playerId) } : {}),
+      })),
+    };
+    if (membership !== undefined) {
+      membership = { ...membership, snapshot: enriched };
+    }
+    onSnapshot(enriched);
+  }
   function dispose(): void {
+    if (disposed) {
+      return;
+    }
     disposed = true;
     draft = undefined;
     membership = undefined;
@@ -77,8 +102,15 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     if (result.data.world.tick < membership.snapshot.world.tick) {
       return;
     }
-    membership = { ...membership, snapshot: result.data };
-    onSnapshot(result.data);
+    receive(result.data);
+  });
+  socket.on("room:profiles", (body: unknown) => {
+    const result = roomProfilesSchema.safeParse(body);
+    if (!result.success || result.data.worldId !== membership?.worldId || result.data.roomId !== membership.roomId) {
+      return;
+    }
+    profiles = new Map(result.data.profiles.map((profile) => [profile.playerId, profile.skin]));
+    receive(membership.snapshot);
   });
   socket.on("room:closed", (body: unknown) => {
     const parsed = errorSchema.safeParse(body);
@@ -135,8 +167,11 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       movement = { x: 0, y: 0 };
       paused = focused;
       recovering = false;
-      onSnapshot(result.snapshot);
+      receive(result.snapshot);
       onRecovery("recovered");
+      if (selectedSkin !== undefined) {
+        await setProfile({ skin: selectedSkin });
+      }
       clearInterval(timer);
       timer = setInterval(refresh, 50);
     })().catch((error: unknown) => {
@@ -164,21 +199,41 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       });
     });
   }
-  async function command(event: string, body: unknown): Promise<void> {
+  async function command(event: string, body: unknown, transient = false): Promise<void> {
+    const epoch = inputEpoch;
     const result = commandAckSchema.parse(await acknowledge(event, body));
     if (!result.ok) {
+      if (transient && result.code === "RATE_LIMITED") {
+        // Drop this input/action and resume with the latest intent after the server window.
+        if (epoch === inputEpoch) {
+          rateLimitedUntil = performance.now() + 1000;
+        }
+        return;
+      }
       throw new Error(ERROR_MESSAGES[result.code]);
     }
   }
   function sendMovement(): void {
-    if (membership === undefined || !socket.connected || paused) {
+    if (membership === undefined || !socket.connected || paused || movementPending || performance.now() < rateLimitedUntil) {
+      return;
+    }
+    if (movement.x === 0 && movement.y === 0 && lastMovement?.x === 0 && lastMovement.y === 0) {
       return;
     }
     const visitId = membership.visitId;
     const epoch = inputEpoch;
-    void command("player:input", { visitId, seq: ++sequence, movement }).catch((error: unknown) => {
+    movementPending = true;
+    lastMovement = { ...movement };
+    void command("player:input", { visitId, seq: ++sequence, movement }, true).catch((error: unknown) => {
       if (epoch === inputEpoch) {
         fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+      }
+    }).finally(() => {
+      if (epoch === inputEpoch) {
+        movementPending = false;
+        if (performance.now() < rateLimitedUntil) {
+          lastMovement = undefined;
+        }
       }
     });
   }
@@ -186,17 +241,19 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     paused = true;
     inputEpoch++;
     movement = { x: 0, y: 0 };
+    movementPending = false;
+    lastMovement = undefined;
   }
   function refresh(): void {
     sendMovement();
-    if (membership === undefined || !socket.connected || recovering || sendingChat || draft === undefined) {
+    if (membership === undefined || !socket.connected || paused || recovering || sendingChat || draft === undefined || performance.now() < rateLimitedUntil) {
       return;
     }
     const text = draft;
     draft = undefined;
     const epoch = inputEpoch;
     sendingChat = true;
-    void command("player:chat", { visitId: membership.visitId, seq: ++chatSequence, ...text })
+    void command("player:chat", { visitId: membership.visitId, seq: ++chatSequence, ...text }, true)
       .catch(() => {
         if (epoch === inputEpoch) {
           fail(ERROR_MESSAGES.CONNECTION_LOST);
@@ -210,6 +267,14 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       throw new Error(ERROR_MESSAGES.UNAUTHORIZED);
     }
     return { visitId: membership.visitId, commandId: crypto.randomUUID() };
+  }
+  async function setProfile(profile: PlayerProfile): Promise<void> {
+    if (membership === undefined || disposed || recovering) {
+      throw new Error(ERROR_MESSAGES.CONNECTION_LOST);
+    }
+    const request = playerProfileSchema.parse({ ...profile, visitId: membership.visitId });
+    await command("player:profile", request);
+    selectedSkin = request.skin ?? selectedSkin;
   }
   return {
     connect(): Promise<void> {
@@ -236,11 +301,17 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         throw new Error(ERROR_MESSAGES[result.code]);
       }
       membership = result;
+      profiles.clear();
+      lastMovement = undefined;
+      movementPending = false;
+      rateLimitedUntil = 0;
+      actionSentAt.melee = -Infinity;
+      actionSentAt.stone = -Infinity;
       sequence = 0;
       movement = { x: 0, y: 0 };
       focused = "focused" in request && request.focused === true;
       paused = focused;
-      onSnapshot(result.snapshot);
+      receive(result.snapshot);
       if (timer !== undefined) {
         clearInterval(timer);
       }
@@ -257,9 +328,18 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         sendMovement();
       }
       if (input.kind === "input" && input.action !== undefined) {
-        sendMovement();
+        const now = performance.now();
+        const combat = membership.snapshot.world.rules.combat;
+        const cooldownMs = input.action === "melee" ? combat?.meleeCooldownMs : combat?.stoneCooldownMs;
+        if (now < rateLimitedUntil || now - actionSentAt[input.action] < (cooldownMs ?? 200)) {
+          return;
+        }
+        actionSentAt[input.action] = now;
+        if (movement.x !== lastMovement?.x || movement.y !== lastMovement.y) {
+          sendMovement();
+        }
         const epoch = inputEpoch;
-        void command("player:action", { visitId: membership.visitId, actionId: crypto.randomUUID(), action: input.action })
+        void command("player:action", { visitId: membership.visitId, actionId: crypto.randomUUID(), action: input.action }, true)
           .catch((error: unknown) => {
             if (epoch === inputEpoch) {
               fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
@@ -290,6 +370,12 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       draft = { current: current.slice(0, 50), previous: previous.slice(0, 50) };
     },
     pauseInput,
+    resumeInput(): void {
+      paused = focused || recovering;
+      movement = { x: 0, y: 0 };
+      lastMovement = undefined;
+    },
+    setProfile,
     async setFocused(nextFocused: boolean): Promise<void> {
       const control = hostControl();
       pauseInput();

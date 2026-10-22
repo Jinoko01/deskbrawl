@@ -1,8 +1,26 @@
 import { describe, expect, it } from "vitest";
+import { characterSkinSchema, playerProfileSchema, roomProfilesSchema } from "./index";
 import { chatSchema, playerChatSchema, bridgeSchema, resumeSchema, roomSchema, snapshotSchema, worldSchema, clearVisitorsSchema, focusSchema, hostSchema, inputSchema, joinSchema, kickSchema, parseInviteLink, playerActionSchema } from "./index";
 
 const token = "a".repeat(43);
 const visitId = "123e4567-e89b-42d3-a456-426614174000";
+
+it("validates profile edits and room-scoped character selections", () => {
+  expect(characterSkinSchema.options).toHaveLength(8);
+  for (const skin of characterSkinSchema.options) {
+    expect(playerProfileSchema.parse({ visitId, skin }).skin).toBe(skin);
+  }
+  expect(playerProfileSchema.parse({ visitId, nickname: " 새 이름 ", skin: "mint" }).nickname).toBe("새 이름");
+  for (const body of [
+    { visitId }, { visitId, nickname: " " }, { visitId, nickname: "x".repeat(25) },
+    { visitId, skin: "other" }, { visitId, skin: "mochi", playerId: visitId },
+  ]) {
+    expect(playerProfileSchema.safeParse(body).success).toBe(false);
+  }
+  const profiles = { roomId: visitId, worldId: visitId, profiles: [{ playerId: visitId, skin: "mint" }] };
+  expect(roomProfilesSchema.parse(profiles)).toEqual(profiles);
+  expect(roomProfilesSchema.safeParse({ ...profiles, profiles: Array.from({ length: 7 }, () => profiles.profiles[0]) }).success).toBe(false);
+});
 describe("M2 trust boundaries", () => {
   it("accepts app and configured web links and rejects alternate origins or URL extras", () => {
     expect(parseInviteLink(`deskbrawl://join/${token}`, "http://127.0.0.1:3000")).toBe(token);

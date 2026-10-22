@@ -133,7 +133,19 @@ pub fn chat_close(window: WebviewWindow) -> Result<(), &'static str> {
     if window.label() != "chat" {
         return Err("CHAT_ONLY");
     }
-    dismiss(window.app_handle());
+    let app = window.app_handle();
+    // Escape and the idle timeout close a focused editor and resume PLAY. A click
+    // elsewhere already dismissed the chat through focus loss and stays in WORK.
+    #[cfg(windows)]
+    let resume = active(app)
+        && crate::native_windows::is_foreground(&window.as_ref().window()).unwrap_or(false);
+    dismiss(app);
+    #[cfg(windows)]
+    if resume {
+        if let Err(error) = crate::native_windows::start_play(app) {
+            eprintln!("Could not resume PLAY after chat: {error}");
+        }
+    }
     Ok(())
 }
 

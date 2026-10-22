@@ -3,6 +3,22 @@ import { HttpException } from '@nestjs/common';
 import { z } from 'zod';
 import { DomainError } from './domain.error';
 
+const unreachableDatabase = z.union([
+  z.object({ code: z.enum(['P1001', 'P1002', 'P1017']) }),
+  z.object({
+    code: z.literal('P2010'),
+    meta: z.object({
+      driverAdapterError: z.object({
+        cause: z.object({ kind: z.literal('DatabaseNotReachable') }),
+      }),
+    }),
+  }),
+]);
+
+export function isDatabaseUnavailable(error: unknown): boolean {
+  return unreachableDatabase.safeParse(error).success;
+}
+
 export function failure(error: unknown): z.infer<typeof errorSchema> {
   if (error instanceof HttpException) {
     const status = error.getStatus();

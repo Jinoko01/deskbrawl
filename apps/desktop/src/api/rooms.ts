@@ -30,6 +30,9 @@ async function request(path: string, method: string, token?: string, body?: unkn
     }
     throw new Error("서버에 연결하지 못했습니다. 서버 실행 상태와 주소를 확인해 주세요.");
   });
+  if (response.status === 503) {
+    throw new Error("서버가 준비되지 않았어요. 서버의 PostgreSQL 실행 상태를 확인한 뒤 다시 연결해 주세요.");
+  }
   const json: unknown = await response.json().catch(() => {
     throw new Error("서버 응답 형식이 올바르지 않습니다.");
   });

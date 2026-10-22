@@ -4,6 +4,7 @@ import {
 } from "vitest";
 import { createWorld, DEFAULT_COMBAT } from "@deskbrawl/game-core";
 import { ERROR_MESSAGES, joinedSchema } from "@deskbrawl/protocol";
+import type { Snapshot } from "@deskbrawl/protocol";
 import { createVisitClient } from "./visitClient";
 import type { VisitClient } from "./visitClient";
 
@@ -80,7 +81,7 @@ async function host(focused = false) {
       lastProcessedSeq: { [playerId]: 0, [guestId]: 0 },
     },
   });
-  const receive = vi.fn();
+  const receive = vi.fn<(snapshot: Snapshot) => void>();
   const ended = vi.fn();
   const recovery = vi.fn();
   const client = createVisitClient({ deviceId: playerId, accessToken: "test", expiresAt: Date.now() + 3600000 }, receive, ended, recovery);
@@ -231,4 +232,89 @@ it("terminates recovery when the server refuses namespace authentication", async
   transport.listeners.get("disconnect")?.("transport close");
   transport.listeners.get("connect_error")?.(new Error("Unauthorized"));
   expect(ended).toHaveBeenCalledExactlyOnceWith(ERROR_MESSAGES.CONNECTION_LOST);
+});
+
+it("sends idle movement once, bounds in-flight input, and sends the latest stop after acknowledgement", async () => {
+  const { client, ended } = await host();
+  await vi.advanceTimersByTimeAsync(50);
+  pending("player:input").reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(transport.sent.filter((entry) => entry.event === "player:input")).toHaveLength(1);
+  client.input({ kind: "input", seq: 1, movement: { x: 1, y: 0 } });
+  await vi.advanceTimersByTimeAsync(50);
+  const moving = pending("player:input");
+  await vi.advanceTimersByTimeAsync(200);
+  expect(transport.sent.filter((entry) => entry.event === "player:input")).toHaveLength(2);
+  client.input({ kind: "work", seq: 2, movement: { x: 0, y: 0 } });
+  moving.reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(50);
+  expect(pending("player:input").body).toMatchObject({ movement: { x: 0, y: 0 } });
+  expect(ended).not.toHaveBeenCalled();
+});
+
+it("bounds attack bursts by the world cooldown and only sends changed movement before an action", async () => {
+  const { client } = await host();
+  for (let seq = 1; seq <= 100; seq++) {
+    client.input({
+      kind: "input", seq, movement: { x: 1, y: 0 }, action: "stone",
+    });
+  }
+  expect(transport.sent.filter((entry) => entry.event === "player:action")).toHaveLength(1);
+  expect(transport.sent.filter((entry) => entry.event === "player:input")).toHaveLength(1);
+  pending("player:action").reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(900);
+  client.input({
+    kind: "input", seq: 101, movement: { x: 1, y: 0 }, action: "stone",
+  });
+  expect(transport.sent.filter((entry) => entry.event === "player:action")).toHaveLength(2);
+});
+
+it.each(["player:input", "player:action", "player:chat"])("keeps membership on a transient %s rate limit and resumes the latest movement without replaying attacks", async (event) => {
+  const { client, ended } = await host();
+  client.input({
+    kind: "input", seq: 1, movement: { x: 1, y: 0 }, action: "stone",
+  });
+  client.chat("새 말", "");
+  await vi.advanceTimersByTimeAsync(50);
+  for (const entry of transport.sent.filter((entry) => entry.event.startsWith("player:"))) {
+    entry.reply(null, entry.event === event ? { ok: false, code: "RATE_LIMITED" } : { ok: true });
+  }
+  await vi.advanceTimersByTimeAsync(0);
+  const count = transport.sent.length;
+  client.input({
+    kind: "input", seq: 2, movement: { x: -1, y: 0 }, action: "stone",
+  });
+  await vi.advanceTimersByTimeAsync(900);
+  expect(transport.sent).toHaveLength(count);
+  await vi.advanceTimersByTimeAsync(150);
+  expect(pending("player:input").body).toMatchObject({ movement: { x: -1, y: 0 } });
+  expect(transport.sent.filter((entry) => entry.event === "player:action")).toHaveLength(1);
+  expect(ended).not.toHaveBeenCalled();
+  expect(client.playerId()).toBeDefined();
+});
+
+it("merges room-scoped skins with legacy snapshots and changes the current member's profile", async () => {
+  const { client, joined, receive } = await host();
+  const saving = client.setProfile({ nickname: "새 이름", skin: "mint" });
+  expect(pending("player:profile").body).toMatchObject({ visitId: joined.visitId, nickname: "새 이름", skin: "mint" });
+  pending("player:profile").reply(null, { ok: true });
+  await saving;
+  const profiles = { roomId: joined.roomId, worldId: joined.worldId, profiles: [{ playerId: joined.playerId, skin: "mint" }] };
+  transport.listeners.get("room:profiles")?.(profiles);
+  expect(receive.mock.lastCall?.[0].members[0]?.skin).toBe("mint");
+  transport.listeners.get("world:snapshot")?.(joined.snapshot);
+  expect(receive.mock.lastCall?.[0].members[0]?.skin).toBe("mint");
+  const count = receive.mock.calls.length;
+  transport.listeners.get("room:profiles")?.({ ...profiles, worldId: randomUUID() });
+  expect(receive).toHaveBeenCalledTimes(count);
+});
+
+it("resumes a paused visitor when a quick focus toggle is cancelled before changing rooms", async () => {
+  const { client, joined } = await host();
+  client.pauseInput();
+  await vi.advanceTimersByTimeAsync(100);
+  expect(transport.sent.filter((entry) => entry.event === "player:input")).toHaveLength(0);
+  client.resumeInput();
+  await vi.advanceTimersByTimeAsync(50);
+  expect(pending("player:input").body).toMatchObject({ visitId: joined.visitId, movement: { x: 0, y: 0 } });
 });

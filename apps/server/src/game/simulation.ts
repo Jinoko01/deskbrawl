@@ -4,7 +4,13 @@ import type {
   WorldState,
 } from '@deskbrawl/game-core';
 import { advance, createWorld, DEFAULT_COMBAT } from '@deskbrawl/game-core';
-import type { Action, Chat, Input, Snapshot } from '@deskbrawl/protocol';
+import type {
+  Action,
+  CharacterSkin,
+  Chat,
+  Input,
+  Snapshot,
+} from '@deskbrawl/protocol';
 import { PROTOCOL_VERSION } from '@deskbrawl/protocol';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
@@ -20,6 +26,7 @@ const ACTION_HISTORY_LIMIT = 128;
 export interface Member {
   playerId: string;
   nickname: string;
+  skin?: CharacterSkin;
   role: 'host' | 'guest';
   socketId: string;
   visitId: string;

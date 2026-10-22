@@ -14,6 +14,15 @@ const bridge = vi.hoisted(() => ({
   command: undefined as ((command: LocalCommand | "stop") => void) | undefined,
   stopNetwork: vi.fn(),
   stopCommands: vi.fn(),
+  skin: undefined as ((skin: "mochi" | "mint") => void) | undefined,
+  stopSkin: vi.fn(),
+}));
+vi.mock("./characterPreference", () => ({
+  watchCharacterSkin: vi.fn((receive: (skin: "mochi" | "mint") => void) => {
+    bridge.skin = receive;
+    receive("mochi");
+    return bridge.stopSkin;
+  }),
 }));
 vi.mock("../native/network", () => ({
   watchNetwork: vi.fn((receive: (state: Bridge) => void) => {
@@ -37,6 +46,7 @@ beforeEach(() => {
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   bridge.receive = undefined;
   bridge.command = undefined;
+  bridge.skin = undefined;
   vi.clearAllMocks();
 });
 afterEach(() => {
@@ -115,4 +125,27 @@ it("keeps the shared world frozen during recovery and ignores local commands unt
   expect(update.mock.lastCall?.[0]).toEqual(frozen);
   bridge.receive?.({ mode: "guest", snapshot: { ...remote, world: { ...remote.world, tick: 20 } } });
   expect(update.mock.lastCall?.[0].characters.map((character) => character.id)).toEqual(remote.world.players.map((player) => player.id));
+});
+
+it("updates the mode badge from native commands in local and remote rooms and restores the selected local skin", async () => {
+  const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+  const mode = vi.fn();
+  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, dispose: vi.fn() }, vi.fn(), mode);
+  await vi.waitFor(() => expect(bridge.receive).toBeTypeOf("function"));
+  bridge.skin?.("mint");
+  expect(update.mock.lastCall?.[0].characters[0]?.skin).toBe("mint");
+  bridge.command?.({ kind: "play", seq: 1, movement: { x: 0, y: 0 } });
+  expect(mode).toHaveBeenLastCalledWith(true);
+  bridge.receive?.({ mode: "guest", snapshot: snapshot() });
+  bridge.command?.("stop");
+  expect(mode).toHaveBeenLastCalledWith(false);
+  bridge.command?.({ kind: "play", seq: 2, movement: { x: 0, y: 0 } });
+  expect(mode).toHaveBeenLastCalledWith(true);
+  bridge.command?.({ kind: "work", seq: 3, movement: { x: 0, y: 0 } });
+  expect(mode).toHaveBeenLastCalledWith(false);
+  bridge.receive?.({ mode: "local", snapshot: null });
+  expect(update.mock.lastCall?.[0].characters[0]?.skin).toBe("mint");
+  stop();
+  stop = undefined;
+  expect(bridge.stopSkin).toHaveBeenCalledOnce();
 });

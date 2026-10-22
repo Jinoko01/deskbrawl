@@ -6,6 +6,7 @@ import { reportRendererFailure } from "./native/overlay";
 export function OverlayScene() {
   const host = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     if (host.current === null) {
@@ -21,7 +22,7 @@ export function OverlayScene() {
           setStatus("error");
           stopGame?.();
           void reportRendererFailure().catch((failure: unknown) => console.error("렌더 오류 보고 실패", failure));
-        });
+        }, setPlaying);
       }
       if (next === "error") {
         stopGame?.();
@@ -36,6 +37,15 @@ export function OverlayScene() {
   return (
     <>
       <div ref={host} className="character-host" />
+      <p
+        className="mode-badge"
+        data-mode={playing ? "play" : "work"}
+        role="status"
+        aria-label="현재 모드"
+      >
+        <span aria-hidden="true" />
+        {playing ? "PLAY" : "WORK"}
+      </p>
       {status !== "ready" && (
         <p className="overlay-status" role="status">
           {status === "loading"

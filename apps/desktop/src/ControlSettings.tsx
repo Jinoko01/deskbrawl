@@ -22,7 +22,7 @@ interface ControlSettingsProps {
   readonly onSave: (next: Controls) => Promise<void>;
 }
 
-const buttonClass = "rounded-lg border border-border px-3 py-1.5 text-sm font-semibold transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer";
+const buttonClass = "button button-secondary";
 
 export function ControlSettings({ controls, disabled, onSave }: ControlSettingsProps) {
   const [draft, setDraft] = useState(controls);
@@ -81,7 +81,7 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
   function renderControlRow(target: ControlTarget, label: string, value: string) {
     const active = listening === target;
     return (
-      <li key={target} className="flex items-center justify-between gap-3">
+      <li key={target} className="control-row">
         <span className="text-sm text-foreground">{label}</span>
         <button
           type="button"
@@ -95,7 +95,7 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
               setRecording(undefined);
             }
           }}
-          className={`${buttonClass} min-w-28 ${active ? "bg-foreground text-background" : "bg-card text-foreground"}`}
+          className={`${buttonClass} key-binding min-w-28 ${active ? "recording" : ""}`}
         >
           {active ? "키를 누르세요…" : value}
         </button>
@@ -104,12 +104,15 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
   }
 
   return (
-    <section aria-labelledby="control-settings-title" className="mt-6 rounded-xl border border-border p-5 text-left">
-      <h2 id="control-settings-title" className="text-base font-semibold text-foreground">조작키 설정</h2>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+    <section aria-labelledby="control-settings-title" className="panel settings-panel">
+      <div className="panel-heading">
+        <h2 id="control-settings-title">조작키 설정</h2>
+        <span className="eyebrow">내 손에 맞게</span>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
         {disabled ? "플레이 중에는 바꿀 수 없습니다. Esc로 작업 모드에 돌아오세요." : "버튼을 누른 뒤 사용할 키를 누르세요. Esc는 플레이 종료 키라서 쓸 수 없습니다."}
       </p>
-      <ul className="mt-4 flex flex-col gap-2">
+      <ul className="mt-5">
         {GAME_ACTIONS.map((action) => renderControlRow(action, ACTION_LABELS[action], keyLabel(draft.keys[action])))}
         {renderControlRow("toggle", "플레이 전환 단축키", shortcutLabel(draft.toggle))}
       </ul>
@@ -121,7 +124,7 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
           type="button"
           disabled={locked || sameControls(draft, DEFAULT_CONTROLS)}
           onClick={() => edit(DEFAULT_CONTROLS)}
-          className={`${buttonClass} bg-card text-foreground`}
+          className="button button-secondary"
         >
           기본값으로
         </button>
@@ -129,7 +132,7 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
           type="button"
           disabled={locked || !changed}
           onClick={() => edit(controls)}
-          className={`${buttonClass} bg-card text-foreground`}
+          className="button button-secondary"
         >
           변경 취소
         </button>
@@ -137,7 +140,7 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
           type="button"
           disabled={locked || !changed || problem !== undefined}
           onClick={() => void save()}
-          className={`${buttonClass} bg-foreground text-background`}
+          className="button button-primary"
         >
           {saving ? "저장하는 중…" : "저장"}
         </button>

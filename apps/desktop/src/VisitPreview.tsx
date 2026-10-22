@@ -14,7 +14,6 @@ export function VisitPreview({ subscribe }: VisitPreviewProps) {
     if (host.current === null) {
       return;
     }
-    host.current.scrollIntoView({ block: "center" });
     const scene = mountCharacter(host.current, setStatus, "preview");
     const buffer = createSnapshotView(scene.update);
     const stop = subscribe((snapshot) => buffer.receive(snapshot));
@@ -25,7 +24,7 @@ export function VisitPreview({ subscribe }: VisitPreviewProps) {
     };
   }, [subscribe]);
   return (
-    <div className="mt-4 rounded-xl border border-border bg-background p-2">
+    <div className="visit-preview">
       <div
         ref={host}
         className="h-52 w-full"

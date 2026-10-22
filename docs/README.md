@@ -8,5 +8,7 @@
 4. [기술 스택 및 상세 아키텍처](./DeskBrawl_04_Technical_Architecture.md) — Tauri·React·PixiJS·NestJS·PostgreSQL 구체 설계
 5. [M2 개발 안내](./m2-development.md) — 로컬 서버·DB·2인 방문·LAN 테스트 구성
 6. [M2 검증 기록](./m2-validation.md) — 실행 결과와 남은 실기기 검증
+7. [집중모드·프로필 검증](./desktop-mode-profile-validation.md) — 방 복귀·WORK/PLAY 배지·캐릭터·닉네임·입력 전송 개선
+8. [데스크톱 디자인·UX 검증](./desktop-design-validation.md) — Supanova 적용, 공간·설정 화면 개편, 반응형·키보드·실제 서버 흐름
 
 **불변 조건:** 링크로 자동 입장, 호스트의 실제 화면 미공유, 근접/돌 공격에 의한 넉백·일시적 기절만 존재, 죽음·체력·승패 없음, 작업 프로그램 위에서도 캐릭터가 보이고 작업 입력을 가로채지 않음.

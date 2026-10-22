@@ -3,8 +3,11 @@ import { createLocalGame } from "./localGame";
 import type { MountedCharacterScene } from "./mountCharacter";
 import { watchNetwork } from "../native/network";
 import { createSnapshotView } from "./networkScene";
+import { watchCharacterSkin } from "./characterPreference";
+import type { CharacterSkin } from "./characterScene";
 
-export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, onError: (error: unknown) => void): () => void {
+export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, onError: (error: unknown) => void,
+  onModeChange?: (playing: boolean) => void): () => void {
   const game = createLocalGame(host.clientWidth, host.clientHeight, scene.update, () => {
     void reportLocalReady(true).catch(onError);
   });
@@ -14,6 +17,8 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
   let stopNetwork: (() => void) | undefined;
   let unlisten: (() => void) | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let stopSkin: (() => void) | undefined;
+  let skin: CharacterSkin = "mochi";
   function visibility() {
     if (document.hidden) {
       game.pause();
@@ -23,6 +28,11 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
   void (async () => {
     try {
       const stop = await watchLocalCommands((command) => {
+        if (command === "stop" || command.kind === "work") {
+          onModeChange?.(false);
+        } else if (command.kind === "play") {
+          onModeChange?.(true);
+        }
         if (mode === "local") {
           game.command(command);
         }
@@ -32,12 +42,19 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
         return;
       }
       unlisten = stop;
+      stopSkin = watchCharacterSkin((next) => {
+        skin = next;
+        if (mode === "local") {
+          game.setSkin(next);
+        }
+      });
       const stopState = await watchNetwork((state) => {
         const previous = mode;
         mode = state.mode === "offline" ? "local" : state.mode;
         if (mode === "local") {
           if (previous !== "local") {
             network.dispose();
+            game.setSkin(skin);
             game.resume();
           }
           return;
@@ -83,6 +100,7 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
     document.removeEventListener("visibilitychange", visibility);
     unlisten?.();
     stopNetwork?.();
+    stopSkin?.();
     network.dispose();
     void reportLocalReady(false).catch((error: unknown) => console.error("Local status cleanup failed", error));
   };

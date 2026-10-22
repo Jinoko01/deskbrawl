@@ -5,7 +5,8 @@ import type {
   WorldEffect,
 } from "@deskbrawl/game-core";
 
-export type CharacterSkin = "mochi" | "mint";
+export type { CharacterSkin } from "@deskbrawl/protocol";
+import type { CharacterSkin } from "@deskbrawl/protocol";
 
 export type CharacterMotion =
   | { readonly kind: "idle" | "walk" | "stun" }

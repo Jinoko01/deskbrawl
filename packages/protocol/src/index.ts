@@ -3,6 +3,8 @@ import { z } from "zod";
 export const PROTOCOL_VERSION = 2;
 export const idSchema = z.uuid();
 export const nicknameSchema = z.string().trim().min(1).max(24);
+export const characterSkinSchema = z.enum(["mochi", "mint", "sunny", "coral", "lumi", "rusty", "byte", "berry"]);
+export type CharacterSkin = z.infer<typeof characterSkinSchema>;
 export const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const tick = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const coordinate = z.number().finite().min(-100_000).max(100_000);
@@ -33,6 +35,12 @@ export const hostSchema = z.object({ version: z.literal(PROTOCOL_VERSION), bound
 export const joinSchema = z.object({ version: z.literal(PROTOCOL_VERSION), token: tokenSchema }).strict();
 export const resumeSchema = z.object({ version: z.literal(PROTOCOL_VERSION), visitId: idSchema, resumeToken: tokenSchema }).strict();
 export const leaveSchema = z.object({ visitId: idSchema }).strict();
+export const playerProfileSchema = leaveSchema.extend({ nickname: nicknameSchema.optional(), skin: characterSkinSchema.optional() })
+  .refine((value) => value.nickname !== undefined || value.skin !== undefined);
+export type PlayerProfile = Pick<z.infer<typeof playerProfileSchema>, "nickname" | "skin">;
+// Skins travel in a separate event so existing v2 clients keep their strict snapshot contract.
+export const roomProfilesSchema = z.object({ roomId: idSchema, worldId: idSchema,
+  profiles: z.array(z.object({ playerId: idSchema, skin: characterSkinSchema }).strict()).max(6) }).strict();
 const hostControlSchema = leaveSchema.extend({ commandId: idSchema });
 export const focusSchema = hostControlSchema.extend({ focused: z.boolean() });
 export const kickSchema = hostControlSchema.extend({ targetPlayerId: idSchema });
@@ -54,7 +62,7 @@ const effect = z.object({ id: z.string().max(200), kind: z.enum(["impact", "dust
 export const worldSchema = z.object({ tick, bounds: boundsSchema,
   rules: z.object({ tickMs: positive, moveSpeedUnitsPerSecond: positive, playerRadius: positive, combat: combat.optional() }).strict(),
   players: z.array(player).max(6), projectiles: z.array(projectile).max(32), effects: z.array(effect).max(64) }).strict();
-export const memberSchema = z.object({ playerId: idSchema, nickname: nicknameSchema, role: z.enum(["host", "guest"]) }).strict();
+export const memberSchema = z.object({ playerId: idSchema, nickname: nicknameSchema, role: z.enum(["host", "guest"]), skin: characterSkinSchema.optional() }).strict();
 export const snapshotSchema = z.object({ version: z.literal(PROTOCOL_VERSION), roomId: idSchema, worldId: idSchema,
   world: worldSchema, chats: z.array(chatSchema).max(6).default([]), members: z.array(memberSchema).max(6), lastProcessedSeq: z.record(idSchema, tick) }).strict();
 export const joinedSchema = z.object({ ok: z.literal(true), roomId: idSchema, worldId: idSchema, visitId: idSchema,

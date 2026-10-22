@@ -120,6 +120,71 @@ async function openRoom() {
   };
   return { host, hs, hosted, join };
 }
+
+test('database outages return a recoverable service status without leaking connection details', async () => {
+  const { Database } = await import('../dist/app.mjs');
+  const db = app.get(Database);
+  const queryRaw = db.$queryRaw;
+  db.$queryRaw = async () => {
+    throw Object.assign(new Error('private database details'), {
+      code: 'P2010',
+      meta: { driverAdapterError: { cause: { kind: 'DatabaseNotReachable' } } },
+    });
+  };
+  try {
+    const unavailable = await api.get('/health');
+    expect(unavailable.status).toBe(503);
+    expect(unavailable.body).toEqual({ ok: false, code: 'INTERNAL_ERROR' });
+    expect(JSON.stringify(unavailable.body)).not.toContain('private');
+  } finally {
+    db.$queryRaw = queryRaw;
+  }
+  expect((await api.get('/health')).status).toBe(200);
+});
+
+test('all eight selected characters are accepted for active profiles and broadcast to the room', async () => {
+  const { host, hs, hosted } = await openRoom();
+  const skins = [
+    'mochi',
+    'mint',
+    'sunny',
+    'coral',
+    'lumi',
+    'rusty',
+    'byte',
+    'berry',
+  ];
+  const { VisitSessionService } = await import('../dist/app.mjs');
+  const service = app.get(VisitSessionService);
+  let socket = hs;
+  let own = hosted;
+  for (const [index, skin] of skins.entries()) {
+    // Fresh sockets keep this contract test independent of the 5/s profile limit.
+    if (index > 0) {
+      socket = await connect(host);
+      own = await ack(socket, 'room:host', {
+        version: 2,
+        bounds: { width: 1280, height: 720 },
+      });
+    }
+    const changed = until(socket, 'room:profiles', (body) =>
+      body.profiles.some(
+        (profile) =>
+          profile.playerId === host.deviceId && profile.skin === skin,
+      ),
+    );
+    expect(
+      await ack(socket, 'player:profile', { visitId: own.visitId, skin }),
+    ).toEqual({ ok: true });
+    expect((await changed).worldId).toBe(own.worldId);
+    expect(service.find(socket.id).member.skin).toBe(skin);
+    expect(
+      (await ack(socket, 'visit:leave', { visitId: own.visitId })).ok,
+    ).toBe(true);
+    socket.disconnect();
+  }
+});
+
 async function sessions() {
   const { VisitSessionService } = await import('../dist/app.mjs');
   return app.get(VisitSessionService);
@@ -367,4 +432,94 @@ test('host transport loss preserves the world, expiry closes it, and expired gue
   state.member.disconnectExpiresAt = Date.now() - 1;
   await closed;
   expect(service.engine.rooms.has(hosted.roomId)).toBe(false);
+});
+
+test('profiles update host and guest nicknames, persist across rooms and keep legacy snapshots compatible', async () => {
+  const { host, hs, hosted, join } = await openRoom();
+  const guest = await register('profile guest');
+  const gs = await connect(guest);
+  const entered = await ack(gs, 'visit:join', join);
+  expect(entered.ok).toBe(true);
+  const profiles = until(hs, 'room:profiles', (body) =>
+    body.profiles.some(
+      (profile) =>
+        profile.playerId === guest.deviceId && profile.skin === 'mochi',
+    ),
+  );
+  const renamed = until(hs, 'world:snapshot', (body) =>
+    body.members.some(
+      (member) =>
+        member.playerId === guest.deviceId && member.nickname === '새 방문자',
+    ),
+  );
+  expect(
+    await ack(gs, 'player:profile', {
+      visitId: entered.visitId,
+      nickname: ' 새 방문자 ',
+      skin: 'mochi',
+    }),
+  ).toEqual({ ok: true });
+  expect((await profiles).worldId).toBe(hosted.worldId);
+  const snapshot = await renamed;
+  expect(
+    snapshot.members.every(
+      (member) =>
+        Object.keys(member).sort().join(',') === 'nickname,playerId,role',
+    ),
+  ).toBe(true);
+  expect(
+    await ack(hs, 'player:profile', {
+      visitId: hosted.visitId,
+      nickname: '새 호스트',
+      skin: 'mint',
+    }),
+  ).toEqual({ ok: true });
+  expect(
+    (
+      await ack(gs, 'player:profile', {
+        visitId: hosted.visitId,
+        nickname: '위조',
+      })
+    ).code,
+  ).toBe('SESSION_ENDED');
+  expect(
+    (
+      await ack(gs, 'player:profile', {
+        visitId: entered.visitId,
+        nickname: ' ',
+      })
+    ).code,
+  ).toBe('INVALID_INPUT');
+  expect(
+    (
+      await ack(gs, 'player:profile', {
+        visitId: entered.visitId,
+        skin: 'unknown',
+      })
+    ).code,
+  ).toBe('INVALID_INPUT');
+  expect((await ack(gs, 'visit:leave', { visitId: entered.visitId })).ok).toBe(
+    true,
+  );
+  const own = await ack(gs, 'room:host', {
+    version: 2,
+    bounds: { width: 1280, height: 720 },
+  });
+  expect(own.snapshot.members[0].nickname).toBe('새 방문자');
+  expect((await ack(hs, 'visit:leave', { visitId: hosted.visitId })).ok).toBe(
+    true,
+  );
+  expect((await ack(gs, 'visit:leave', { visitId: own.visitId })).ok).toBe(
+    true,
+  );
+  hs.disconnect();
+  gs.disconnect();
+  const { Database } = await import('../dist/app.mjs');
+  expect(
+    (
+      await app
+        .get(Database)
+        .deviceIdentity.findUniqueOrThrow({ where: { id: host.deviceId } })
+    ).nickname,
+  ).toBe('새 호스트');
 });
