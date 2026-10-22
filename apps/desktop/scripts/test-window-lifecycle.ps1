@@ -38,6 +38,8 @@ namespace DeskBrawl {
         [DllImport("user32.dll")]
         public static extern bool IsWindowVisible(IntPtr window);
         [DllImport("user32.dll")]
+        public static extern bool IsIconic(IntPtr window);
+        [DllImport("user32.dll")]
         public static extern int GetWindowLong(IntPtr window, int index);
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr window, out Rect rect);
@@ -126,6 +128,12 @@ namespace DeskBrawl {
 
         public static void Close(IntPtr window) {
             if (!PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero)) {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            }
+        }
+
+        public static void Minimize(IntPtr window) {
+            if (!PostMessage(window, 0x0112, new IntPtr(0xF020), IntPtr.Zero)) {
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
             }
         }
@@ -305,14 +313,12 @@ foreach ($scenario in @('main', 'overlay', 'tray')) {
         }
         if ($scenario -ne 'tray') {
             [DeskBrawl.WindowTest]::Close($main)
-            Wait-Until { -not [DeskBrawl.WindowTest]::IsWindowVisible($main) } 'Closing main must hide it to the tray.'
-            Assert (-not $app.HasExited) 'Closing main must preserve the background app.'
-            [DeskBrawl.WindowTest]::Command($tray, $commands['홈 열기'])
-            Wait-Until { [DeskBrawl.WindowTest]::IsWindowVisible($main) } 'Tray home must restore the hidden main window.'
-            [DeskBrawl.WindowTest]::Command($tray, $commands['종료'])
         }
-        Assert ($app.WaitForExit(10000)) 'Explicit tray exit must terminate the app.'
+        Assert ($app.WaitForExit(10000)) 'Window close or tray exit must terminate the app.'
         Assert ($app.ExitCode -eq 0) "The app exited with code $($app.ExitCode)."
+        Assert (-not [DeskBrawl.WindowTest]::IsWindow($main)) 'Exit must destroy the home window.'
+        Assert ([DeskBrawl.WindowTest]::Find($app.Id, 'DeskBrawl Overlay') -eq [IntPtr]::Zero) 'Exit must remove the character overlay.'
+        Assert ([DeskBrawl.WindowTest]::FindClass($app.Id, 'tray_icon_app') -eq [IntPtr]::Zero) 'Exit must remove the tray window.'
         Write-Output "PASS: native input flags, tray control, focus safety and shutdown ($scenario)"
     }
     finally {

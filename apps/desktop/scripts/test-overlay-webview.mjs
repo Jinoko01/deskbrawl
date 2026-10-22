@@ -12,7 +12,8 @@ import { io } from "socket.io-client";
 const development = process.argv.includes("--dev");
 const localGame = process.argv.includes("--local");
 const hostControls = process.argv.includes("--m3");
-const networkGame = process.argv.includes("--network") || hostControls;
+const chatOnly = process.argv.includes("--chat");
+const networkGame = process.argv.includes("--network") || hostControls || chatOnly;
 const registeredLink = process.argv.includes("--registered-link");
 const executable = process.env.DESKBRAWL_TEST_EXECUTABLE
   ? resolve(process.env.DESKBRAWL_TEST_EXECUTABLE)
@@ -126,7 +127,8 @@ async function key(main, code, key, down) {
 
 async function testLocalGame(main) {
   await until(() => main.evaluate("document.body.textContent.includes('조작키 설정')"), "Saved controls did not finish loading");
-  const [bindings] = await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_controls')");
+  const [bindings, shortcutStatus] = await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_controls')");
+  assert.equal(shortcutStatus, "registered", "Native shortcut regression requires the test app to own its saved shortcut");
   const gameKey = (index, down) => {
     const code = bindings[index];
     const value = code.startsWith("Key") ? code.slice(3).toLowerCase() : code.startsWith("Digit") ? code.slice(5)
@@ -144,6 +146,7 @@ async function testLocalGame(main) {
   await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('플레이할 수 있음')"), "Local controls did not become ready");
   control("home");
   await until(() => main.evaluate("document.hasFocus()"), "Tray home did not focus the controller");
+  const foreground = control("state").foreground;
   control("play");
   const started = await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·') || !!document.querySelector('[role=alert]')"), "PLAY did not start")
     .then(() => true, (error) => error);
@@ -155,6 +158,7 @@ async function testLocalGame(main) {
     return;
   }
   assert.equal(failure, "", "Local play failed");
+  assert.equal(control("state").foreground, foreground, "PLAY must preserve the foreground window");
   await gameKey(3, true);
   // A defined 150 ms held-key input closes the initial 144-unit gap into melee
   // range. The first WALK frame alone can represent only 12 units of movement.
@@ -174,9 +178,71 @@ async function testLocalGame(main) {
   control("play");
   await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Ctrl+Shift+G did not enter PLAY again");
   control("play");
-  await until(() => main.evaluate("!document.hasFocus() && document.querySelector('[role=status]')?.textContent?.includes('WORK')"),
-    "Ctrl+Shift+G did not return focus and WORK");
-  console.log("PASS: Ctrl+Shift+G PLAY/WORK, arrow movement, melee, stone lifecycle, IPC scope and Escape");
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"),
+    "Ctrl+Shift+G did not return to WORK");
+  assert.equal(control("state").foreground, foreground, "WORK must preserve the foreground window");
+  await testBackgroundInput(main, bindings[1]);
+  control("home");
+  console.log("PASS: foreground-preserving and minimized-main PLAY/WORK, movement, melee, stone, IPC scope and Escape");
+}
+
+async function testBackgroundInput(main, code) {
+  let virtualKey;
+  let scan;
+  let extended = 0;
+  const arrow = { ArrowUp: [38, 0x48], ArrowLeft: [37, 0x4b], ArrowDown: [40, 0x50], ArrowRight: [39, 0x4d] }[code];
+  if (arrow) { [virtualKey, scan] = arrow; extended = 1; }
+  else if (code === "Space") { virtualKey = 32; scan = 0x39; }
+  else if (code.startsWith("Numpad")) { const digit = Number(code.slice(6)); virtualKey = 96 + digit; scan = [0x52, 0x4f, 0x50, 0x51, 0x4b, 0x4c, 0x4d, 0x47, 0x48, 0x49][digit]; }
+  else if (code.startsWith("Digit")) { const digit = Number(code.slice(5)); virtualKey = 48 + digit; scan = digit === 0 ? 0x0b : digit + 1; }
+  else {
+    const letter = code.slice(3);
+    const row = [[0x10, "QWERTYUIOP"], [0x1e, "ASDFGHJKL"], [0x2c, "ZXCVBNM"]].find(([, letters]) => letters.includes(letter));
+    assert.ok(row, `Unsupported native test key: ${code}`);
+    virtualKey = letter.charCodeAt(0); scan = row[0] + row[1].indexOf(letter);
+  }
+  const probePath = join(profile, "background-input-probe.exe");
+  const source = fileURLToPath(new URL("./fixtures/BackgroundInputProbe.cs", import.meta.url));
+  execFileSync(join(process.env.WINDIR, "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe"),
+    ["/nologo", "/r:System.Windows.Forms.dll", `/out:${probePath}`, source], { windowsHide: true });
+  const probe = spawn(probePath, [], { windowsHide: false });
+  let output = "";
+  probe.stdout.on("data", (chunk) => { output += chunk.toString().replace(/\r/g, ""); });
+  const send = (command) => probe.stdin.write(`${command}\n`);
+  const wait = (predicate, message) => until(async () => {
+    assert.ok(!output.includes("ERROR:"), output);
+    return predicate();
+  }, message);
+  try {
+    await wait(() => output.includes("READY"), "Owned work-window probe did not start");
+    control("minimize-home");
+    await wait(() => control("state").mainMinimized, "Main did not minimize");
+    const foreground = control("state").foreground;
+    send("toggle");
+    await wait(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Minimized main did not enter PLAY");
+    assert.equal(control("state").mainMinimized, true, "PLAY must leave main minimized");
+    assert.equal(control("state").foreground, foreground, "Background PLAY must preserve foreground");
+    // Input is sent only while the probe owns foreground. PLAY must consume it first.
+    send(`down ${virtualKey} ${scan} ${extended}`);
+    try {
+      await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('모찌: walk')"), "Background native movement did not reach overlay");
+    } finally { send(`up ${virtualKey} ${scan} ${extended}`); }
+    await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('모찌: idle')"), "Native key release did not stop movement");
+    assert.ok(!output.includes(`KEY:${virtualKey}\n`), "PLAY game keys must not reach the work window");
+    send("down 27 1 0");
+    send("up 27 1 0");
+    await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Native Escape did not stop background PLAY");
+    assert.equal(control("state").foreground, foreground, "WORK must preserve foreground");
+    assert.equal(control("state").mainMinimized, true, "WORK must leave main minimized");
+    send(`down ${virtualKey} ${scan} ${extended}`);
+    send(`up ${virtualKey} ${scan} ${extended}`);
+    await until(() => output.includes(`KEY:${virtualKey}\n`), "WORK must return game keys to the work window");
+    assert.ok(!output.includes("ERROR:"), output);
+    console.log("PASS: real background key capture/release, Escape, WORK input pass-through and minimized-main focus preservation");
+  } finally {
+    send("exit");
+    await until(() => probe.exitCode !== null, "Owned probe did not exit").catch(() => probe.kill());
+  }
 }
 
 function nextEvent(socket, event) {
@@ -193,7 +259,7 @@ function nextEvent(socket, event) {
 async function testHostControls(main, guestSocket, entered, ownLink) {
   const ack = (event, body) => guestSocket.timeout(5000).emitWithAck(event, body);
   const click = (label) => main.evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent === ${JSON.stringify(label)} && !b.disabled).click()`);
-  const joinGuest = () => ack("visit:join", { version: 1, token: new URL(ownLink).pathname.slice(6) });
+  const joinGuest = () => ack("visit:join", { version: 2, token: new URL(ownLink).pathname.slice(6) });
   for (const command of ["focus_read", "focus_set", "invite_publish"]) {
     assert.equal(await overlay.evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)}, {focused:true,link:null}).then(() => false, () => true)`), true,
       `${command} must stay main-only`);
@@ -206,7 +272,7 @@ async function testHostControls(main, guestSocket, entered, ownLink) {
   assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), false);
   assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_control',{kind:'play',seq:1,movement:{x:0,y:0}}).then(() => false, () => true)"), true,
     "Focus must reject native PLAY");
-  control("play");
+  control("play-tray");
   assert.equal(await main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"), true);
   const rejected = await joinGuest();
   assert.equal(rejected.ok, false);
@@ -234,12 +300,12 @@ async function testHostControls(main, guestSocket, entered, ownLink) {
   execFileSync("pwsh", ["-NoProfile", "-Command",
     "$ErrorActionPreference = 'Stop'; if ((Get-Clipboard -Raw).TrimEnd() -cne $env:DESKBRAWL_EXPECTED_LINK) { throw 'Tray clipboard does not match the generated link' }"],
   { windowsHide: true, env: { ...process.env, DESKBRAWL_EXPECTED_LINK: ownLink } });
-  control("close-home");
-  await until(() => !control("state").mainVisible, "Closing main did not hide it");
+  control("minimize-home");
+  await until(() => control("state").mainMinimized, "Main did not minimize");
   assert.equal((await ack("player:input", { visitId: entered.visitId, seq: 1, movement: { x: 0, y: 0 } })).ok, true,
-    "Closing main must preserve the hosted session");
+    "Minimizing main must preserve the hosted session");
   control("home");
-  await until(() => control("state").mainVisible, "Tray home did not restore main");
+  await until(() => control("state").mainVisible && !control("state").mainMinimized, "Tray home did not restore main");
 
   const kicked = nextEvent(guestSocket, "room:closed");
   await click("내보내기");
@@ -253,8 +319,8 @@ async function testHostControls(main, guestSocket, entered, ownLink) {
   assert.equal((await cleared).code, "KICKED");
   await until(() => main.evaluate("document.body.textContent.includes('현재 방문자가 없어요.')"), "Clear visitors did not update member list");
 
-  control("close-home");
-  await until(() => !control("state").mainVisible, "Main did not return to tray");
+  control("minimize-home");
+  await until(() => control("state").mainMinimized, "Main did not minimize");
   control("focus");
   await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"), "Tray focus did not synchronize with main");
   control("show");
@@ -262,7 +328,7 @@ async function testHostControls(main, guestSocket, entered, ownLink) {
   control("focus");
   await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Tray unfocus did not synchronize with main");
   control("home");
-  await until(() => control("state").mainVisible && control("state").visible, "Tray recovery failed");
+  await until(() => !control("state").mainMinimized && control("state").mainVisible && control("state").visible, "Tray recovery failed");
   console.log("PASS: M3 focus, admission denial, link preservation, native input denial, single/all kick, stale input rejection, tray clipboard and background hosting");
 }
 
@@ -286,20 +352,24 @@ async function testNetwork(main) {
     return !!ownLink;
   }, "Host invite link not created");
   const guest = await api("/v1/devices", { nickname: "M2 테스트 방문자" });
-  const guestSocket = io(base, { autoConnect: false, transports: ["websocket"], reconnection: false, auth: { version: 1, token: guest.accessToken } });
+  const guestSocket = io(base, { autoConnect: false, transports: ["websocket"], reconnection: false, auth: { version: 2, token: guest.accessToken } });
   const ack = (event, body) => guestSocket.timeout(5000).emitWithAck(event, body);
   try {
     await new Promise((resolve, reject) => { guestSocket.once("connect", resolve); guestSocket.once("connect_error", reject); guestSocket.connect(); });
-    const entered = await ack("visit:join", { version: 1, token: new URL(ownLink).pathname.slice(6) });
+    const entered = await ack("visit:join", { version: 2, token: new URL(ownLink).pathname.slice(6) });
     assert.equal(entered.ok, true);
     await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Guest did not appear in native host overlay");
+    await testSixNative(ownLink, api, base);
+    await testNativeChat(main, guestSocket);
+    if (chatOnly) return main;
+    await testNativeRecovery(main);
     await ack("player:action", { visitId: entered.visitId, actionId: crypto.randomUUID(), action: "stone" });
     await until(() => overlay.evaluate("/모찌: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Authoritative guest stone hit did not reach native host");
     if (hostControls) await testHostControls(main, guestSocket, entered, ownLink);
     else await ack("visit:leave", { visitId: entered.visitId });
     await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌 캐릭터'"), "Departed visitor remained in overlay");
 
-    const externalHost = await ack("room:host", { version: 1, bounds: { width: 1280, height: 720 } });
+    const externalHost = await ack("room:host", { version: 2, bounds: { width: 1280, height: 720 } });
     assert.equal(externalHost.ok, true);
     const externalInvite = await api("/v1/rooms/me/invites", {}, guest.accessToken);
     const deepLink = `deskbrawl://join/${new URL(externalInvite.link).pathname.slice(6)}`;
@@ -312,7 +382,8 @@ async function testNetwork(main) {
       await new Promise((resolve, reject) => { const timeout = setTimeout(() => { second.kill(); reject(new Error("Second app did not exit")); }, 10000); second.once("exit", () => { clearTimeout(timeout); resolve(); }); second.once("error", reject); });
     }
     await until(() => main.evaluate("document.body.textContent.includes('친구 공간 방문 중') && !!document.querySelector('canvas')"), "Running app did not accept the deep link into preview");
-    await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '표시된 캐릭터 없음'"), "Own overlay should be empty while visiting");
+    await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Visitor overlay must show the shared world");
+    assert.equal(control("state").coversPrimary, true, "Visitor overlay must cover the primary desktop");
     await until(() => main.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Preview does not show the shared world");
     assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('preview_reduced_effects').then(v => typeof v === 'boolean')"), true);
     assert.equal(await denied(overlay, "preview_reduced_effects"), true, "Preview preference read must stay main-only");
@@ -334,6 +405,7 @@ async function testNetwork(main) {
     assert.equal(await main.evaluate("window.__m2Draws"), previewDraws, "Idle network snapshots must not redraw reduced preview");
     await ack("player:action", { visitId: externalHost.visitId, actionId: crypto.randomUUID(), action: "stone" });
     await until(() => main.evaluate("/민트: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Server hit did not reach visitor preview");
+    await until(() => overlay.evaluate("/민트: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Server hit did not reach visitor desktop");
     const screenshot = await main.rpc("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(profileRoot, "m2-visit-preview.png"), Buffer.from(screenshot.data, "base64"));
     if (hostControls) {
@@ -348,21 +420,139 @@ async function testNetwork(main) {
     await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Return did not restore own hosted room");
     await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌 캐릭터'"), "Return did not restore host overlay");
     // Restart with the same encrypted device identity and a startup deep link.
+    await ack("visit:leave", { visitId: externalHost.visitId });
+    const finalGuest = await ack("visit:join", { version: 2, token: new URL(ownLink).pathname.slice(6) });
+    assert.equal(finalGuest.ok, true);
+    const hostClosed = nextEvent(guestSocket, "room:closed");
     control("exit");
+    assert.equal((await hostClosed).code, "HOST_OFFLINE", "Normal app exit must bypass disconnect grace");
     await until(() => app.exitCode !== null, "Test app did not exit before cold deep-link check");
+    assert.equal((await ack("room:host", { version: 2, bounds: { width: 1280, height: 720 } })).ok, true);
     clients.forEach((client) => client.close());
     await launch([deepLink]);
     const target = (await pages()).find((page) => page.type === "page" && !page.url.includes("overlay.html"));
     assert.ok(target, "Restarted main WebView target not found");
     main = await connect(target);
     await until(() => main.evaluate("document.body.textContent.includes('친구 공간 방문 중') && !!document.querySelector('canvas')"), "Cold-start deep link did not restore device identity and join");
-    await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '귀환').click()");
-    await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Cold-start return failed");
+    guestSocket.disconnect();
+    await until(() => main.evaluate("!!document.querySelector('[role=alert]')"), "Host closure did not report session end");
+    await until(() => overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(v => JSON.parse(v).mode === 'local')"), "Host closure did not restore local mode");
+    await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Host closure left local characters invisible");
+    assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), true, "Local PLAY must remain available after host closure");
+    console.log("PASS: host disconnect restores visible local characters and local PLAY");
     console.log("PASS: native host overlay, shared stone hit, guest removal, single-instance deep-link forwarding, preview, return and IPC credential scope");
     console.log("PASS: cold-start deep link with DPAPI device identity restoration");
     if (registeredLink) console.log("PASS: installed Windows URI registration and ShellExecute forwarding into the running app (browser click is separate)");
     return main;
   } finally { guestSocket.disconnect(); }
+}
+
+async function testSixNative(link, api, base) {
+  const members = [];
+  try {
+    for (let index = 3; index <= 6; index++) {
+      const identity = await api("/v1/devices", { nickname: `M4 참가자${index}` });
+      const peer = io(base, { autoConnect: false, transports: ["websocket"], reconnection: false, auth: { version: 2, token: identity.accessToken } });
+      members.push({ peer });
+      await new Promise((resolve, reject) => { peer.once("connect", resolve); peer.once("connect_error", reject); peer.connect(); });
+      const joined = await peer.timeout(5000).emitWithAck("visit:join", { version: 2, token: new URL(link).pathname.slice(6) });
+      assert.equal(joined.ok, true);
+      members.at(-1).visitId = joined.visitId;
+    }
+    await until(() => overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(value => JSON.parse(value).snapshot.world.players.length === 6)"), "Six participants did not reach native overlay");
+    await until(() => overlay.evaluate("(document.querySelector('canvas')?.getAttribute('aria-label').match(/캐릭터|민트/g) ?? []).length === 6"), "Six characters were not rendered");
+    const image = await overlay.rpc("Page.captureScreenshot", { format: "png" });
+    writeFileSync(join(profileRoot, "m4-six-characters.png"), Buffer.from(image.data, "base64"));
+    console.log("PASS: six real participants rendered on native full-desktop overlay");
+  } finally {
+    for (const { peer, visitId } of members) {
+      if (visitId !== undefined) await peer.timeout(5000).emitWithAck("visit:leave", { visitId });
+      peer.disconnect();
+    }
+  }
+}
+
+async function testNativeRecovery(main) {
+  const before = await overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(JSON.parse)");
+  const prototype = await main.rpc("Runtime.evaluate", { expression: "WebSocket.prototype" });
+  const sockets = await main.rpc("Runtime.queryObjects", { prototypeObjectId: prototype.result.objectId });
+  await main.rpc("Network.enable");
+  await main.rpc("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  try {
+    await main.rpc("Runtime.callFunctionOn", { objectId: sockets.objects.objectId,
+      functionDeclaration: "function() { for (const socket of this) if (socket.url.includes('/socket.io/')) socket.close(); }" });
+    await until(() => main.evaluate("document.body.textContent.includes('연결이 끊겨 복구하는 중')"), "Transport loss did not show recovery");
+    assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), false, "Recovery must block PLAY");
+    const frozen = await overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(JSON.parse)");
+    assert.equal(frozen.mode, "recovering");
+    assert.equal(frozen.snapshot.worldId, before.snapshot.worldId);
+  } finally {
+    await main.rpc("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    await main.rpc("Runtime.releaseObject", { objectId: sockets.objects.objectId });
+    await main.rpc("Runtime.releaseObject", { objectId: prototype.result.objectId });
+  }
+  await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Native client did not resume hosted world");
+  const after = await overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(JSON.parse)");
+  assert.equal(after.snapshot.worldId, before.snapshot.worldId);
+  assert.deepEqual(after.snapshot.world.players.map((player) => player.id), before.snapshot.world.players.map((player) => player.id));
+  assert.ok(after.snapshot.world.tick >= before.snapshot.world.tick);
+  console.log("PASS: native transport loss, frozen desktop, blocked PLAY and full snapshot resume without duplicate characters");
+}
+
+async function testNativeChat(main, peer) {
+  control("minimize-home");
+  const probePath = join(profile, "chat-input-probe.exe");
+  const source = fileURLToPath(new URL("./fixtures/BackgroundInputProbe.cs", import.meta.url));
+  execFileSync(join(process.env.WINDIR, "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe"),
+    ["/nologo", "/r:System.Windows.Forms.dll", `/out:${probePath}`, source], { windowsHide: true });
+  control("play-tray");
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Background PLAY did not start for chat");
+  const probe = spawn(probePath, [], { windowsHide: false });
+  let output = "";
+  let snapshot;
+  const observe = (value) => { snapshot = value; };
+  peer.on("world:snapshot", observe);
+  probe.stdout.on("data", (chunk) => { output += chunk.toString().replace(/\r/g, ""); });
+  const send = (command) => probe.stdin.write(`${command}\n`);
+  try {
+    await until(() => output.includes("READY") && /HANDLE:\d+/.test(output), "Chat foreground probe did not start");
+    const foreground = Number(/HANDLE:(\d+)/.exec(output)[1]);
+    send("slash");
+    let target;
+    await until(async () => { target = (await pages()).find((page) => page.url.includes("chat.html")); return target; }, "Native slash did not open chat")
+      .catch(async (error) => { throw new Error(`${error.message}; probe=${output}; status=${JSON.stringify(await main.evaluate("[...document.querySelectorAll('[role=status],[role=alert]')].map(el => el.textContent)"))}`); });
+    const chat = await connect(target);
+    await until(() => chat.evaluate("document.activeElement?.id === 'message' && document.hasFocus()"), "Chat input did not receive explicit focus");
+    assert.equal(control("state").mainMinimized, true, "Chat must not restore home");
+    assert.ok(!output.includes("KEY:191\n"), "PLAY slash must be consumed");
+    assert.equal(await chat.evaluate("window.__TAURI_INTERNALS__.invoke('credential_read').then(() => false, () => true)"), true, "Chat must not read credentials");
+    assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('chat_update', {current:'forged',previous:''}).then(() => false, () => true)"), true, "Only the editor can publish a draft");
+    await chat.rpc("Input.insertText", { text: "안녕 친구" });
+    await until(() => snapshot?.chats.some((draft) => draft.current === "안녕 친구"), "Live Korean draft did not reach peer before Enter");
+    await chat.rpc("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await until(() => snapshot?.chats.some((draft) => draft.previous === "안녕 친구" && draft.current === ""), "Enter must move draft to previous line");
+    assert.equal(await chat.evaluate("document.hasFocus()"), true, "Enter must leave editor open");
+    await chat.rpc("Input.insertText", { text: "두 번째 줄" });
+    await until(() => snapshot?.chats.some((draft) => draft.previous === "안녕 친구" && draft.current === "두 번째 줄"), "Two-line draft did not reach peer");
+    const image = await chat.rpc("Page.captureScreenshot", { format: "png" });
+    writeFileSync(join(profileRoot, "m4-chat-editor.png"), Buffer.from(image.data, "base64"));
+    const scene = await overlay.rpc("Page.captureScreenshot", { format: "png" });
+    writeFileSync(join(profileRoot, "m4-chat-overlay.png"), Buffer.from(scene.data, "base64"));
+    await chat.rpc("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await until(() => snapshot?.chats.length === 0, "Closing chat did not clear peer draft");
+    await until(() => control("state").foreground === foreground, "Closing chat did not restore borrowed work focus")
+      .catch((error) => { throw new Error(`${error.message}; expected=${foreground}; actual=${control("state").foreground}`); });
+    assert.equal(control("state").mainMinimized, true);
+    send("slash");
+    await until(() => output.includes("KEY:191\n"), "WORK slash must pass through to work window");
+    assert.ok(!output.includes("ERROR:"), output);
+    console.log("PASS: native slash, minimized home, IME-capable Korean draft, two lines, IPC scope, Escape cleanup, borrowed focus restore and WORK slash pass-through");
+  } finally {
+    peer.off("world:snapshot", observe);
+    send("exit");
+    await until(() => probe.exitCode !== null, "Chat probe did not exit").catch(() => probe.kill());
+    control("home");
+  }
 }
 
 async function launch(args = []) {
@@ -371,7 +561,9 @@ async function launch(args = []) {
     WEBVIEW2_USER_DATA_FOLDER: profile } });
   app.on("error", (error) => { console.error(error); });
   let startupError = "";
-  app.stderr.on("data", (chunk) => { startupError = (startupError + chunk.toString()).slice(-2000); });
+  app.stderr.on("data", (chunk) => {
+    startupError = (startupError + chunk.toString()).slice(-2000);
+  });
   try { overlay = await findOverlay(); }
   catch (error) { throw new Error(`${error.message}; app exit=${app.exitCode}; ${startupError}`); }
 }
@@ -446,6 +638,27 @@ try {
   assert.equal(control("state").visible, true, "Tray did not recover failed renderer");
   assert.equal(await overlay.evaluate("getComputedStyle(document.body).backgroundColor"), "rgba(0, 0, 0, 0)");
   console.log("PASS: native monitor bounds, IPC denial, tray effects, idle stop, preference persistence, GPU failure hide and fresh renderer recovery");
+  // Both user-visible exit paths must terminate the process, overlay and tray,
+  // including when native PLAY capture is active.
+  for (const method of ["button", "window-close"]) {
+    const target = (await pages()).find((page) => page.type === "page" && !page.url.includes("overlay.html"));
+    const home = await connect(target);
+    await until(() => home.evaluate("document.querySelector('[role=status]')?.textContent?.includes('플레이할 수 있음')"), "Exit test app did not become ready");
+    assert.equal(await overlay.evaluate("window.__TAURI_INTERNALS__.invoke('plugin:window|close').then(() => false, () => true)"), true,
+      "Overlay must not receive window-close permission");
+    control("play-tray");
+    await until(() => home.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Exit test did not start PLAY");
+    if (method === "button") {
+      await home.evaluate("setTimeout(() => [...document.querySelectorAll('button')].find(button => button.textContent === '종료').click(), 0)");
+    } else {
+      control("close-home");
+    }
+    await until(() => app.exitCode !== null, `${method} did not terminate app`);
+    assert.equal(app.exitCode, 0);
+    control("assert-exited");
+    console.log(`PASS: ${method} exits process, character overlay, tray and PLAY capture`);
+    if (method === "button") await launch();
+  }
 } finally {
   if (app && app.exitCode === null) {
     if (typeof originalPreference === "boolean") {
