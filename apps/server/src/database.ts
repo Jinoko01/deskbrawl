@@ -26,7 +26,7 @@ export class Database
   }
 
   // ponytail: one control-operation queue for this single server; partition by room if measured contention requires it.
-  async serialize<T>(operation: () => Promise<T>): Promise<T> {
+  async serialize<T>(operation: () => Promise<T> | T): Promise<T> {
     if (this.queued >= 128) {
       throw new Error('Control queue full');
     }

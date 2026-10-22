@@ -2,11 +2,15 @@ import type {
   commandAckSchema,
   Joined,
   joinedAckSchema,
+  RoomControl,
 } from '@deskbrawl/protocol';
 import {
   inputSchema,
   leaveSchema,
   playerActionSchema,
+  focusSchema,
+  kickSchema,
+  clearVisitorsSchema,
 } from '@deskbrawl/protocol';
 import type { OnModuleDestroy } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
@@ -122,12 +126,24 @@ export class VisitsGateway
       throw new DomainError('CONNECTION_LOST');
     }
     await socket.join(joined.worldId);
-    socket.emit('visit:joined', joined);
-    const { room } = this.sessions.find(socket.id);
-    this.server
-      .to(room.worldId)
-      .emit('world:snapshot', this.sessions.engine.snapshot(room));
-    return joined;
+    try {
+      const { room, member } = this.sessions.find(socket.id);
+      if (
+        !socket.connected ||
+        member.visitId !== joined.visitId ||
+        room.worldId !== joined.worldId
+      ) {
+        throw new DomainError('SESSION_ENDED');
+      }
+      const current = this.sessions.joined(room, member);
+      socket.emit('visit:joined', current);
+      this.server.to(room.worldId).emit('world:snapshot', current.snapshot);
+      return current;
+    } catch (error) {
+      // Focus/kick can remove a member while the transport joins asynchronously.
+      await socket.leave(joined.worldId);
+      throw error;
+    }
   }
 
   @SubscribeMessage('room:host')
@@ -186,10 +202,61 @@ export class VisitsGateway
   ): Promise<z.infer<typeof commandAckSchema>> {
     return this.command(socket, 10, 'action', () => {
       const command = playerActionSchema.parse(body);
-      const { member } = this.sessions.find(socket.id);
-      this.sessions.engine.action(member, command);
+      const { room, member } = this.sessions.find(socket.id);
+      this.sessions.engine.action(room, member, command);
       return { ok: true as const };
     });
+  }
+
+  private async controlRoom(
+    socket: Socket,
+    device: string,
+    command: RoomControl,
+  ): Promise<{ ok: true }> {
+    const { room, removed } = await this.sessions.control(
+      socket.id,
+      device,
+      command,
+    );
+    const code = 'focused' in command ? 'ROOM_UNAVAILABLE' : 'KICKED';
+    for (const visitor of removed) {
+      this.server.to(visitor.socketId).emit('room:closed', { ok: false, code });
+      this.server.in(visitor.socketId).socketsLeave(room.worldId);
+    }
+    this.server
+      .to(room.worldId)
+      .emit('world:snapshot', this.sessions.engine.snapshot(room));
+    return { ok: true };
+  }
+
+  @SubscribeMessage('room:focus')
+  focus(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof commandAckSchema>> {
+    return this.command(socket, 10, 'control', (device) =>
+      this.controlRoom(socket, device, focusSchema.parse(body)),
+    );
+  }
+
+  @SubscribeMessage('visit:kick')
+  kick(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof commandAckSchema>> {
+    return this.command(socket, 10, 'control', (device) =>
+      this.controlRoom(socket, device, kickSchema.parse(body)),
+    );
+  }
+
+  @SubscribeMessage('visit:clear')
+  clear(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof commandAckSchema>> {
+    return this.command(socket, 10, 'control', (device) =>
+      this.controlRoom(socket, device, clearVisitorsSchema.parse(body)),
+    );
   }
 
   handleDisconnect(socket: Socket): void {

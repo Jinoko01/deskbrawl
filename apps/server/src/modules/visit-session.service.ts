@@ -1,4 +1,4 @@
-import type { Joined } from '@deskbrawl/protocol';
+import type { Joined, RoomControl } from '@deskbrawl/protocol';
 import { hostSchema, joinSchema } from '@deskbrawl/protocol';
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -88,6 +88,7 @@ export class VisitSessionService {
         'host',
       );
       const room = this.engine.open(roomInfo.id, input.bounds, member);
+      this.engine.focus(room, input.focused ?? false);
       return this.joined(room, member);
     });
   }
@@ -115,6 +116,9 @@ export class VisitSessionService {
       if (room === undefined) {
         throw new DomainError('HOST_OFFLINE');
       }
+      if (room.focused) {
+        throw new DomainError('ROOM_UNAVAILABLE');
+      }
       const existing = room.members.get(deviceId);
       if (existing?.socketId === socket.id) {
         return this.joined(room, existing);
@@ -132,6 +136,64 @@ export class VisitSessionService {
       member.inputAtTick = room.world.tick;
       this.engine.add(room, member);
       return this.joined(room, member);
+    });
+  }
+
+  async control(
+    socketId: string,
+    deviceId: string,
+    command: RoomControl,
+  ): Promise<{ room: RoomWorld; removed: Member[] }> {
+    // Shares the invitation queue: a join cannot slip between focus validation and eviction.
+    return this.db.serialize(() => {
+      const { room, member } = this.find(socketId);
+      if (member.role !== 'host' || member.playerId !== deviceId) {
+        throw new DomainError('UNAUTHORIZED');
+      }
+      if (command.visitId !== member.visitId) {
+        throw new DomainError('SESSION_ENDED');
+      }
+      if (
+        'targetPlayerId' in command &&
+        command.targetPlayerId === member.playerId
+      ) {
+        throw new DomainError('INVALID_INPUT');
+      }
+      const signature = JSON.stringify(command);
+      const previous = room.controlCommands.get(command.commandId);
+      if (previous !== undefined) {
+        if (previous !== signature) {
+          throw new DomainError('INVALID_INPUT');
+        }
+        return { room, removed: [] };
+      }
+      const removed = [...room.members.values()].filter((candidate) => {
+        if (candidate.role !== 'guest') {
+          return false;
+        }
+        if ('focused' in command) {
+          return command.focused;
+        }
+        return (
+          !('targetPlayerId' in command) ||
+          candidate.playerId === command.targetPlayerId
+        );
+      });
+      for (const visitor of removed) {
+        this.engine.remove(room, visitor.playerId);
+      }
+      if ('focused' in command) {
+        this.engine.focus(room, command.focused);
+      }
+      room.controlCommands.set(command.commandId, signature);
+      // Same bounded retry window as attacks; reconnect recovery remains M4 scope.
+      if (room.controlCommands.size > 128) {
+        const oldest = room.controlCommands.keys().next().value;
+        if (oldest !== undefined) {
+          room.controlCommands.delete(oldest);
+        }
+      }
+      return { room, removed };
     });
   }
 

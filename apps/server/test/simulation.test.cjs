@@ -60,7 +60,7 @@ test('authoritative stone hit produces identical snapshots and duplicate action 
     actionId: randomUUID(),
     action: 'stone',
   };
-  engine.action(host, command);
+  engine.action(room, host, command);
   for (let i = 0; i < 4; i++) {
     engine.step(room);
   }
@@ -72,7 +72,7 @@ test('authoritative stone hit produces identical snapshots and duplicate action 
   for (let i = 0; i < 25; i++) {
     engine.step(room);
   }
-  engine.action(host, command);
+  engine.action(room, host, command);
   engine.step(room);
   expect(room.world.players[0].lastAction.tick).toBe(actionTick);
   engine.remove(room, guest.playerId);
@@ -83,7 +83,7 @@ test('clock catch-up is bounded and cancels stale attacks', () => {
   const host = member('host');
   const room = engine.open(randomUUID(), { width: 1280, height: 720 }, host);
   engine.advanceTime(0);
-  engine.action(host, {
+  engine.action(room, host, {
     visitId: host.visitId,
     actionId: randomUUID(),
     action: 'stone',
@@ -91,4 +91,30 @@ test('clock catch-up is bounded and cancels stale attacks', () => {
   engine.advanceTime(10000);
   expect(room.world.tick).toBe(5);
   expect(room.world.projectiles).toHaveLength(0);
+});
+
+test('focus cancels queued movement and attacks and rejects input until resumed', () => {
+  const engine = new SimulationEngine();
+  const host = member('host');
+  const room = engine.open(randomUUID(), { width: 1280, height: 720 }, host);
+  const input = { visitId: host.visitId, seq: 1, movement: { x: 1, y: 0 } };
+  const action = {
+    visitId: host.visitId,
+    actionId: randomUUID(),
+    action: 'stone',
+  };
+  engine.input(room, host, input);
+  engine.action(room, host, action);
+  engine.focus(room, true);
+  const paused = engine.snapshot(room);
+  expect(() => engine.input(room, host, input)).toThrow('ROOM_UNAVAILABLE');
+  expect(() => engine.action(room, host, action)).toThrow('ROOM_UNAVAILABLE');
+  expect(engine.step(room)).toEqual(paused);
+  engine.focus(room, false);
+  engine.step(room);
+  expect(room.world.players[0].position).toEqual(
+    paused.world.players[0].position,
+  );
+  expect(room.world.projectiles).toHaveLength(0);
+  expect(host.action).toBeUndefined();
 });

@@ -34,6 +34,8 @@ export interface RoomWorld {
   worldId: string;
   world: WorldState;
   members: Map<string, Member>;
+  focused: boolean;
+  controlCommands: Map<string, string>;
 }
 @Injectable()
 export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
@@ -73,11 +75,13 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
         },
       ],
     });
-    const room = {
+    const room: RoomWorld = {
       roomId,
       worldId: randomUUID(),
       world,
       members: new Map([[member.playerId, member]]),
+      focused: false,
+      controlCommands: new Map(),
     };
     this.rooms.set(roomId, room);
     return room;
@@ -122,6 +126,9 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     if (input.visitId !== member.visitId) {
       throw new DomainError('SESSION_ENDED');
     }
+    if (room.focused) {
+      throw new DomainError('ROOM_UNAVAILABLE');
+    }
     if (input.seq <= member.seq) {
       return;
     }
@@ -130,9 +137,12 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     member.inputAtTick = room.world.tick;
   }
 
-  action(member: Member, command: Action): void {
+  action(room: RoomWorld, member: Member, command: Action): void {
     if (command.visitId !== member.visitId) {
       throw new DomainError('SESSION_ENDED');
+    }
+    if (room.focused) {
+      throw new DomainError('ROOM_UNAVAILABLE');
     }
     if (member.actionIds.includes(command.actionId)) {
       return;
@@ -145,7 +155,19 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     member.action ??= command.action;
   }
 
+  focus(room: RoomWorld, focused: boolean): void {
+    room.focused = focused;
+    for (const member of room.members.values()) {
+      member.movement = { x: 0, y: 0 };
+      member.action = undefined;
+    }
+    room.world = { ...room.world, projectiles: [], effects: [] };
+  }
+
   step(room: RoomWorld): Snapshot {
+    if (room.focused) {
+      return this.snapshot(room);
+    }
     const inputs = [...room.members.values()].map((member): PlayerInput => {
       const movement =
         room.world.tick - member.inputAtTick <= MAX_INPUT_AGE_TICKS
@@ -211,6 +233,9 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     );
     while (this.accumulatedMs >= TICK_MS) {
       for (const room of this.rooms.values()) {
+        if (room.focused) {
+          continue;
+        }
         this.step(room);
         this.onSnapshot(room);
       }

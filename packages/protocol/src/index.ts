@@ -10,12 +10,13 @@ const vector = z.object({ x: coordinate, y: coordinate }).strict();
 export const boundsSchema = z.object({ width: z.number().min(320).max(16384), height: z.number().min(200).max(16384) }).strict();
 export const movementSchema = z.object({ x: z.union([z.literal(-1), z.literal(0), z.literal(1)]), y: z.union([z.literal(-1), z.literal(0), z.literal(1)]) }).strict();
 export const actionSchema = z.enum(["melee", "stone"]);
-export const errorCodeSchema = z.enum(["INVALID_INPUT", "UNAUTHORIZED", "INVALID_INVITE", "ROOM_FULL", "HOST_OFFLINE", "SELF_VISIT", "ALREADY_VISITING", "SESSION_ENDED", "RATE_LIMITED", "INCOMPATIBLE_VERSION", "INTERNAL_ERROR", "CONNECTION_LOST"]);
+export const errorCodeSchema = z.enum(["INVALID_INPUT", "UNAUTHORIZED", "INVALID_INVITE", "ROOM_FULL", "HOST_OFFLINE", "ROOM_UNAVAILABLE", "KICKED", "SELF_VISIT", "ALREADY_VISITING", "SESSION_ENDED", "RATE_LIMITED", "INCOMPATIBLE_VERSION", "INTERNAL_ERROR", "CONNECTION_LOST"]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   INVALID_INPUT: "입력값을 확인해 주세요.", UNAUTHORIZED: "기기 인증이 만료되었습니다. 다시 연결해 주세요.",
   INVALID_INVITE: "유효하지 않거나 만료된 방문 링크예요.", ROOM_FULL: "현재 방문 인원이 가득 찼어요.",
   HOST_OFFLINE: "호스트가 오프라인이에요.", SELF_VISIT: "자신의 공간에는 방문할 수 없어요.",
+  ROOM_UNAVAILABLE: "호스트가 집중 모드여서 지금은 방문할 수 없어요.", KICKED: "호스트가 방문을 종료했어요.",
   ALREADY_VISITING: "다른 공간을 방문 중이에요. 귀환 후 다시 시도해 주세요.", SESSION_ENDED: "방문 세션이 종료되었습니다.",
   RATE_LIMITED: "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.", INCOMPATIBLE_VERSION: "앱과 서버 버전이 맞지 않습니다.",
   INTERNAL_ERROR: "서버에서 요청을 처리하지 못했습니다.", CONNECTION_LOST: "서버 연결이 끊어졌습니다. 다시 연결해 주세요.",
@@ -28,9 +29,14 @@ export const sessionSchema = z.object({ deviceId: idSchema, accessToken: z.strin
 export const registrationSchema = sessionSchema.extend({ secret: tokenSchema });
 export const roomSchema = z.object({ id: idSchema, ownerDeviceId: idSchema, maxParticipants: z.literal(2) }).strict();
 export const inviteSchema = z.object({ link: z.url(), expiresAt: tick }).strict();
-export const hostSchema = z.object({ version: z.literal(PROTOCOL_VERSION), bounds: boundsSchema }).strict();
+export const hostSchema = z.object({ version: z.literal(PROTOCOL_VERSION), bounds: boundsSchema, focused: z.boolean().optional() }).strict();
 export const joinSchema = z.object({ version: z.literal(PROTOCOL_VERSION), token: tokenSchema }).strict();
 export const leaveSchema = z.object({ visitId: idSchema }).strict();
+const hostControlSchema = leaveSchema.extend({ commandId: idSchema });
+export const focusSchema = hostControlSchema.extend({ focused: z.boolean() });
+export const kickSchema = hostControlSchema.extend({ targetPlayerId: idSchema });
+export const clearVisitorsSchema = hostControlSchema;
+export type RoomControl = z.infer<typeof focusSchema> | z.infer<typeof kickSchema> | z.infer<typeof clearVisitorsSchema>;
 export const inputSchema = leaveSchema.extend({ seq: tick.min(1), movement: movementSchema });
 export const playerActionSchema = leaveSchema.extend({ actionId: idSchema, action: actionSchema });
 const positive = z.number().finite().positive().max(100_000);
