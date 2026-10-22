@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm build && node --env-file-if-exists=.env dist/main.mjs",
-    "build": "node scripts/build.mjs",
+    "build": "pnpm db:generate && node scripts/build.mjs",
     "start": "node --env-file-if-exists=.env dist/main.mjs",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0",
