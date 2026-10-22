@@ -11,7 +11,8 @@ import { io } from "socket.io-client";
 // --dev는 Vite와 Tauri 개발 빌드가 준비된 경우에만 소스 기반 WebGL 검증도 실행한다.
 const development = process.argv.includes("--dev");
 const localGame = process.argv.includes("--local");
-const networkGame = process.argv.includes("--network");
+const hostControls = process.argv.includes("--m3");
+const networkGame = process.argv.includes("--network") || hostControls;
 const executable = fileURLToPath(new URL(`../src-tauri/target/${development ? "debug" : "release"}/deskbrawl.exe`, import.meta.url));
 const controller = fileURLToPath(new URL("./overlay-test-control.ps1", import.meta.url));
 const profileRoot = resolve(fileURLToPath(new URL("../node_modules/.cache", import.meta.url)));
@@ -103,12 +104,23 @@ async function setPreference(value) {
 }
 
 async function key(main, code, key, down) {
-  const virtualKey = code === "ArrowRight" ? 39 : code === "KeyZ" ? 90 : code === "KeyX" ? 88 : 27;
+  const virtualKey = { ArrowUp: 38, ArrowLeft: 37, ArrowDown: 40, ArrowRight: 39, Space: 32, Escape: 27 }[code]
+    ?? (/^Key[A-Z]$/.test(code) ? code.charCodeAt(3) : /^Digit[0-9]$/.test(code) ? code.charCodeAt(5)
+      : /^Numpad[0-9]$/.test(code) ? 96 + Number(code.at(-1)) : undefined);
+  assert.ok(virtualKey, `Unsupported test key: ${code}`);
   await main.rpc("Input.dispatchKeyEvent", { type: down ? "keyDown" : "keyUp", key, code,
     windowsVirtualKeyCode: virtualKey, nativeVirtualKeyCode: virtualKey });
 }
 
 async function testLocalGame(main) {
+  await until(() => main.evaluate("document.body.textContent.includes('조작키 설정')"), "Saved controls did not finish loading");
+  const [bindings] = await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_controls')");
+  const gameKey = (index, down) => {
+    const code = bindings[index];
+    const value = code.startsWith("Key") ? code.slice(3).toLowerCase() : code.startsWith("Digit") ? code.slice(5)
+      : code.startsWith("Numpad") ? code.slice(6) : code === "Space" ? " " : code;
+    return key(main, code, value, down);
+  };
   const deny = "command => window.__TAURI_INTERNALS__.invoke(command, {kind:'play',seq:1,movement:{x:0,y:0},ready:true}).then(() => false, () => true)";
   assert.equal(await overlay.evaluate(`(${deny})('local_control')`), true, "Overlay must not control the local game");
   assert.equal(await main.evaluate(`(${deny})('local_overlay_status')`), true, "Main must not claim overlay readiness");
@@ -118,6 +130,8 @@ async function testLocalGame(main) {
   await until(() => main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available').then(value => !value)"), "Hidden overlay still accepted input");
   control("show");
   await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('플레이할 수 있음')"), "Local controls did not become ready");
+  control("home");
+  await until(() => main.evaluate("document.hasFocus()"), "Tray home did not focus the controller");
   control("play");
   const started = await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·') || !!document.querySelector('[role=alert]')"), "PLAY did not start")
     .then(() => true, (error) => error);
@@ -129,17 +143,17 @@ async function testLocalGame(main) {
     return;
   }
   assert.equal(failure, "", "Local play failed");
-  await key(main, "ArrowRight", "ArrowRight", true);
+  await gameKey(3, true);
   // A defined 150 ms held-key input closes the initial 144-unit gap into melee
   // range. The first WALK frame alone can represent only 12 units of movement.
   await main.evaluate("new Promise(resolve => setTimeout(resolve, 150))");
   await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('모찌: walk')"), "Movement did not reach the overlay");
-  await key(main, "ArrowRight", "ArrowRight", false);
-  await key(main, "KeyZ", "z", true);
-  await key(main, "KeyZ", "z", false);
+  await gameKey(3, false);
+  await gameKey(4, true);
+  await gameKey(4, false);
   await until(() => overlay.evaluate("/민트: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Melee hit did not reach the overlay");
-  await key(main, "KeyX", "x", true);
-  await key(main, "KeyX", "x", false);
+  await gameKey(5, true);
+  await gameKey(5, false);
   await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('돌 1개')"), "Stone did not reach the overlay");
   await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('돌 0개')"), "Stone was not cleaned up");
   await key(main, "Escape", "Escape", true);
@@ -151,6 +165,93 @@ async function testLocalGame(main) {
   await until(() => main.evaluate("!document.hasFocus() && document.querySelector('[role=status]')?.textContent?.includes('WORK')"),
     "Ctrl+Shift+G did not return focus and WORK");
   console.log("PASS: Ctrl+Shift+G PLAY/WORK, arrow movement, melee, stone lifecycle, IPC scope and Escape");
+}
+
+function nextEvent(socket, event) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off(event, receive);
+      reject(new Error(`Socket event timeout: ${event}`));
+    }, 5000);
+    function receive(value) { clearTimeout(timer); resolve(value); }
+    socket.once(event, receive);
+  });
+}
+
+async function testHostControls(main, guestSocket, entered, ownLink) {
+  const ack = (event, body) => guestSocket.timeout(5000).emitWithAck(event, body);
+  const click = (label) => main.evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent === ${JSON.stringify(label)} && !b.disabled).click()`);
+  const joinGuest = () => ack("visit:join", { version: 1, token: new URL(ownLink).pathname.slice(6) });
+  for (const command of ["focus_read", "focus_set", "invite_publish"]) {
+    assert.equal(await overlay.evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)}, {focused:true,link:null}).then(() => false, () => true)`), true,
+      `${command} must stay main-only`);
+  }
+  const unavailable = nextEvent(guestSocket, "room:closed");
+  await click("집중 모드 켜기");
+  assert.equal((await unavailable).code, "ROOM_UNAVAILABLE");
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"), "Focus status did not reach main");
+  await until(() => !control("state").visible, "Focus did not hide the overlay");
+  assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), false);
+  assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_control',{kind:'play',seq:1,movement:{x:0,y:0}}).then(() => false, () => true)"), true,
+    "Focus must reject native PLAY");
+  control("play");
+  assert.equal(await main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"), true);
+  const rejected = await joinGuest();
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.code, "ROOM_UNAVAILABLE");
+  assert.equal(await main.evaluate("[...document.querySelectorAll('label')].find(l => l.textContent.startsWith('내 방문 링크')).querySelector('input').value"), ownLink,
+    "Focus must preserve the invitation");
+  await click("집중 모드 끄기");
+  await until(() => control("state").visible, "Unfocus did not restore the overlay");
+  entered = await joinGuest();
+  assert.equal(entered.ok, true, "The existing link must work after unfocus");
+  await until(() => main.evaluate(`!!document.querySelector('button[aria-label="M2 테스트 방문자 내보내기"]')`), "Host member controls did not appear");
+
+  // Capture the actual WebView without leaking its bearer invitation.
+  await main.evaluate("document.querySelectorAll('input[readonly]').forEach(input => { input.type = 'password'; })");
+  for (const [name, width, height] of [["m3-host-controls", 800, 600], ["m3-host-controls-narrow", 540, 760]]) {
+    await main.rpc("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+    assert.equal(await main.evaluate("document.documentElement.scrollWidth <= innerWidth"), true, "Host controls overflow horizontally");
+    const screenshot = await main.rpc("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
+    writeFileSync(join(profileRoot, `${name}.png`), Buffer.from(screenshot.data, "base64"));
+  }
+  await main.rpc("Emulation.clearDeviceMetricsOverride");
+  await main.evaluate("document.querySelectorAll('input[readonly]').forEach(input => { input.type = 'text'; })");
+
+  control("copy");
+  execFileSync("pwsh", ["-NoProfile", "-Command",
+    "$ErrorActionPreference = 'Stop'; if ((Get-Clipboard -Raw).TrimEnd() -cne $env:DESKBRAWL_EXPECTED_LINK) { throw 'Tray clipboard does not match the generated link' }"],
+  { windowsHide: true, env: { ...process.env, DESKBRAWL_EXPECTED_LINK: ownLink } });
+  control("close-home");
+  await until(() => !control("state").mainVisible, "Closing main did not hide it");
+  assert.equal((await ack("player:input", { visitId: entered.visitId, seq: 1, movement: { x: 0, y: 0 } })).ok, true,
+    "Closing main must preserve the hosted session");
+  control("home");
+  await until(() => control("state").mainVisible, "Tray home did not restore main");
+
+  const kicked = nextEvent(guestSocket, "room:closed");
+  await click("내보내기");
+  assert.equal((await kicked).code, "KICKED");
+  assert.equal((await ack("player:input", { visitId: entered.visitId, seq: 2, movement: { x: 1, y: 0 } })).code, "SESSION_ENDED");
+  assert.equal((await ack("player:action", { visitId: entered.visitId, actionId: crypto.randomUUID(), action: "stone" })).code, "SESSION_ENDED");
+  assert.equal((await joinGuest()).ok, true);
+  await until(() => main.evaluate(`!!document.querySelector('button[aria-label="M2 테스트 방문자 내보내기"]')`), "Rejoined member did not appear");
+  const cleared = nextEvent(guestSocket, "room:closed");
+  await click("모두 내보내기");
+  assert.equal((await cleared).code, "KICKED");
+  await until(() => main.evaluate("document.body.textContent.includes('현재 방문자가 없어요.')"), "Clear visitors did not update member list");
+
+  control("close-home");
+  await until(() => !control("state").mainVisible, "Main did not return to tray");
+  control("focus");
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"), "Tray focus did not synchronize with main");
+  control("show");
+  assert.equal(control("state").visible, false, "Tray show must not bypass focus");
+  control("focus");
+  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Tray unfocus did not synchronize with main");
+  control("home");
+  await until(() => control("state").mainVisible && control("state").visible, "Tray recovery failed");
+  console.log("PASS: M3 focus, admission denial, link preservation, native input denial, single/all kick, stale input rejection, tray clipboard and background hosting");
 }
 
 async function testNetwork(main) {
@@ -182,7 +283,8 @@ async function testNetwork(main) {
     await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Guest did not appear in native host overlay");
     await ack("player:action", { visitId: entered.visitId, actionId: crypto.randomUUID(), action: "stone" });
     await until(() => overlay.evaluate("/모찌: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Authoritative guest stone hit did not reach native host");
-    await ack("visit:leave", { visitId: entered.visitId });
+    if (hostControls) await testHostControls(main, guestSocket, entered, ownLink);
+    else await ack("visit:leave", { visitId: entered.visitId });
     await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌 캐릭터'"), "Departed visitor remained in overlay");
 
     const externalHost = await ack("room:host", { version: 1, bounds: { width: 1280, height: 720 } });
@@ -216,7 +318,15 @@ async function testNetwork(main) {
     await until(() => main.evaluate("/민트: (hit|stun)/.test(document.querySelector('canvas')?.getAttribute('aria-description') ?? '')"), "Server hit did not reach visitor preview");
     const screenshot = await main.rpc("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(profileRoot, "m2-visit-preview.png"), Buffer.from(screenshot.data, "base64"));
-    await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '귀환').click()");
+    if (hostControls) {
+      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드 켜기').click()");
+      await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨') && document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"),
+        "Focus while visiting did not leave and protect own room");
+      await until(() => !control("state").visible, "Visiting focus left the overlay visible");
+      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드 끄기').click()");
+    } else {
+      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '귀환').click()");
+    }
     await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Return did not restore own hosted room");
     await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌 캐릭터'"), "Return did not restore host overlay");
     // Restart with the same encrypted device identity and a startup deep link.
@@ -241,7 +351,10 @@ async function launch(args = []) {
     WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
     WEBVIEW2_USER_DATA_FOLDER: profile } });
   app.on("error", (error) => { console.error(error); });
-  overlay = await findOverlay();
+  let startupError = "";
+  app.stderr.on("data", (chunk) => { startupError = (startupError + chunk.toString()).slice(-2000); });
+  try { overlay = await findOverlay(); }
+  catch (error) { throw new Error(`${error.message}; app exit=${app.exitCode}; ${startupError}`); }
 }
 
 try {

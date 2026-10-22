@@ -303,8 +303,15 @@ foreach ($scenario in @('main', 'overlay', 'tray')) {
             [DeskBrawl.WindowTest]::Command($tray, $commands['오버레이 숨김'])
             Wait-Until { -not [DeskBrawl.WindowTest]::IsWindowVisible($overlay) } 'Overlay must be hidden before main closes.'
         }
-        if ($scenario -ne 'tray') { [DeskBrawl.WindowTest]::Close($main) }
-        Assert ($app.WaitForExit(10000)) 'Closing main or using tray exit must terminate the app.'
+        if ($scenario -ne 'tray') {
+            [DeskBrawl.WindowTest]::Close($main)
+            Wait-Until { -not [DeskBrawl.WindowTest]::IsWindowVisible($main) } 'Closing main must hide it to the tray.'
+            Assert (-not $app.HasExited) 'Closing main must preserve the background app.'
+            [DeskBrawl.WindowTest]::Command($tray, $commands['홈 열기'])
+            Wait-Until { [DeskBrawl.WindowTest]::IsWindowVisible($main) } 'Tray home must restore the hidden main window.'
+            [DeskBrawl.WindowTest]::Command($tray, $commands['종료'])
+        }
+        Assert ($app.WaitForExit(10000)) 'Explicit tray exit must terminate the app.'
         Assert ($app.ExitCode -eq 0) "The app exited with code $($app.ExitCode)."
         Write-Output "PASS: native input flags, tray control, focus safety and shutdown ($scenario)"
     }
