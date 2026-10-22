@@ -10,6 +10,7 @@ import {
   localGameSupported,
   sendLocalCommand,
   watchLocalPlay,
+  watchLocalKeys,
   watchLocalReset,
 } from "../native/localGame";
 import type { LocalCommand } from "../native/localGame";
@@ -51,7 +52,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
     let queue = Promise.resolve();
     let unlisten: (() => void) | undefined;
     let unlistenPlay: (() => void) | undefined;
-    let awaitingFocus: (() => void) | undefined;
+    let nativeCapture = false;
+    let unlistenKeys: (() => void) | undefined;
     let unlistenControls: (() => void) | undefined;
     let controlsLoaded = false;
     let controlsEvent = false;
@@ -75,7 +77,7 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
     }
 
     function leave(restore = false): void {
-      awaitingFocus?.();
+      nativeCapture = false;
       revision++;
       const wasActive = active || pending;
       active = false;
@@ -120,7 +122,7 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
     }
 
     function start(): void {
-      if (!controlsLoaded || !available || active || pending || !document.hasFocus() || document.hidden) {
+      if (!controlsLoaded || !available || active || pending) {
         return;
       }
       pending = true;
@@ -135,7 +137,6 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
         active = true;
         setBusy(false);
         setPlaying(true);
-        region.current?.focus({ preventScroll: true });
       }).catch((cause: unknown) => {
         if (!live || current !== revision) {
           return;
@@ -145,27 +146,32 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
       });
     }
 
-    // 단축키로 조작 창이 앞으로 와도 WebView의 focus는 늦게 도착할 수 있다.
     function requestPlay(): void {
       if (active || pending) {
         return;
       }
-      awaitingFocus?.();
-      if (document.hasFocus()) {
-        start();
+      if (!controlsLoaded || !available) {
+        void enqueue("work").catch(inputFailed);
         return;
       }
-      const timeout = setTimeout(() => awaitingFocus?.(), 1000);
-      function onFocus(): void {
-        awaitingFocus?.();
-        start();
+      nativeCapture = true;
+      start();
+    }
+
+    function onNativeKey(code: string, down: boolean): void {
+      if (!active || !nativeCapture) {
+        return;
       }
-      awaitingFocus = () => {
-        clearTimeout(timeout);
-        window.removeEventListener("focus", onFocus);
-        awaitingFocus = undefined;
-      };
-      window.addEventListener("focus", onFocus);
+      const changed = down ? keys.press(code, false) : { changed: keys.release(code), action: undefined };
+      if (changed.changed) {
+        void enqueue("input", keys.movement(), changed.action).catch(inputFailed);
+      }
+    }
+    function inputFailed(cause: unknown): void {
+      if (live) {
+        setError(`입력 전달 실패: ${String(cause)}`);
+        leave();
+      }
     }
 
     function onKeyDown(event: KeyboardEvent): void {
@@ -208,12 +214,14 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
       });
     }
     function onVisibility(): void {
-      if (document.hidden) {
+      if (document.hidden && !nativeCapture) {
         leave();
       }
     }
     function onBlur(): void {
-      leave();
+      if (!nativeCapture) {
+        leave();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -227,6 +235,12 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
           return;
         }
         unlisten = stop;
+        const stopKeys = await watchLocalKeys(onNativeKey, inputFailed);
+        if (!live) {
+          stopKeys();
+          return;
+        }
+        unlistenKeys = stopKeys;
         const stopPlay = await watchLocalPlay(requestPlay);
         if (!live) {
           stopPlay();
@@ -275,6 +289,7 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
       live = false;
       unlisten?.();
       unlistenPlay?.();
+      unlistenKeys?.();
       unlistenControls?.();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);

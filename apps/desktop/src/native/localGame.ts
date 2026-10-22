@@ -7,7 +7,7 @@ export interface LocalCommand {
   readonly seq: number;
   readonly movement: PlayerInput["movement"];
   readonly action?: PlayerAction;
-  // WORK에만 붙인다. 사용자가 Esc로 끝낼 때만 이전 작업 창으로 포커스를 돌려준다.
+  // 이전 클라이언트의 WORK 명령과 호환하기 위한 선택 필드다.
   readonly restore?: true;
 }
 
@@ -76,12 +76,25 @@ export async function watchLocalCommands(onCommand: (command: LocalCommand | "st
   });
 }
 
-// Ctrl+Shift+G가 조작 창을 앞으로 가져온 뒤 PLAY 시작을 요청한다.
+// 네이티브 단축키가 창 포커스를 유지하면서 PLAY 시작을 요청한다.
 export async function watchLocalPlay(onPlay: () => void): Promise<() => void> {
   if (!isTauri()) {
     return () => { /* 브라우저에서는 네이티브 구독이 없어 정리할 자원이 없다. */ };
   }
   return listen("local-play", () => onPlay());
+}
+
+export async function watchLocalKeys(onKey: (code: string, down: boolean) => void, onError: (error: unknown) => void): Promise<() => void> {
+  if (!isTauri()) {
+    return () => { /* 네이티브 입력이 없는 브라우저에서는 구독하지 않는다. */ };
+  }
+  return listen<unknown>("local-key", ({ payload }) => {
+    if (!Array.isArray(payload) || payload.length !== 2 || typeof payload[0] !== "string" || typeof payload[1] !== "boolean") {
+      onError(new Error("Invalid native key"));
+      return;
+    }
+    onKey(payload[0], payload[1]);
+  });
 }
 
 export async function watchLocalReset(onReset: (ready: boolean) => void): Promise<() => void> {

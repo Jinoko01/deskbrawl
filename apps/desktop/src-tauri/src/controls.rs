@@ -203,6 +203,17 @@ fn snapshot(app: &AppHandle) -> Result<(Vec<String>, &'static str), &'static str
     Ok((values, status(app)))
 }
 
+#[cfg(windows)]
+pub fn game_keys(app: &AppHandle) -> Result<[String; 6], &'static str> {
+    Ok(app
+        .state::<ControlState>()
+        .current
+        .lock()
+        .map_err(|_| "CONTROLS_UNAVAILABLE")?
+        .keys
+        .clone())
+}
+
 fn announce(app: &AppHandle) {
     match snapshot(app) {
         Ok(value) => {

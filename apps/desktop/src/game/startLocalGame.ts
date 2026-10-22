@@ -33,12 +33,17 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
       }
       unlisten = stop;
       const stopState = await watchNetwork((state) => {
-        mode = state.mode;
+        const previous = mode;
+        mode = state.mode === "offline" ? "local" : state.mode;
         if (mode === "local") {
+          if (previous !== "local") {
+            network.dispose();
+            game.resume();
+          }
           return;
         }
         game.pause();
-        if (state.mode === "host" && state.snapshot !== null) {
+        if (state.snapshot !== null) {
           network.receive(state.snapshot);
         } else {
           network.dispose();

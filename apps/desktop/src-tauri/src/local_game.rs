@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     ipc::{InvokeBody, Request},
     AppHandle, Emitter, Manager, WebviewWindow, Window, WindowEvent,
@@ -7,33 +7,28 @@ use tauri::{
 #[derive(Default)]
 pub struct LocalSession {
     ready: AtomicBool,
-    // An accepted PLAY that has not ended through WORK or main losing focus.
+    // An accepted PLAY that has not ended through WORK or a safety reset.
     playing: AtomicBool,
-    // The work window that had focus before the PLAY shortcut; 0 when unknown.
-    previous: AtomicIsize,
+    capturing: AtomicBool,
 }
 
 pub fn playing(app: &AppHandle) -> bool {
     app.state::<LocalSession>().playing.load(Ordering::SeqCst)
 }
 
-pub fn remember_previous(app: &AppHandle, window: isize) {
+pub fn capturing(app: &AppHandle) -> bool {
+    app.state::<LocalSession>().capturing.load(Ordering::SeqCst)
+}
+
+pub fn set_capturing(app: &AppHandle, value: bool) {
     app.state::<LocalSession>()
-        .previous
-        .store(window, Ordering::SeqCst);
+        .capturing
+        .store(value, Ordering::SeqCst);
 }
 
-pub fn take_previous(app: &AppHandle) -> isize {
-    let session = app.state::<LocalSession>();
-    session.playing.store(false, Ordering::SeqCst);
-    session.previous.swap(0, Ordering::SeqCst)
-}
-
-// main has just been brought to the foreground; its webview starts PLAY once focused.
-pub fn request_play(app: &AppHandle) {
-    if let Err(error) = app.emit_to("main", "local-play", ()) {
-        eprintln!("Local play request failed: {error}");
-    }
+// The native shortcut starts PLAY without changing any window's focus or visibility.
+pub fn request_play(app: &AppHandle) -> tauri::Result<()> {
+    app.emit_to("main", "local-play", ())
 }
 
 fn visible(app: &AppHandle) -> bool {
@@ -44,12 +39,7 @@ fn visible(app: &AppHandle) -> bool {
 
 pub fn on_overlay_visibility(app: &AppHandle, shown: bool) {
     if !shown {
-        app.state::<LocalSession>()
-            .playing
-            .store(false, Ordering::SeqCst);
-        if let Err(error) = app.emit_to("overlay", "local-input", "stop") {
-            eprintln!("Local stop failed: {error}");
-        }
+        end_play(app);
     }
     let ready = shown && app.state::<LocalSession>().ready.load(Ordering::SeqCst);
     if let Err(error) = app.emit_to("main", "local-reset", ready) {
@@ -131,16 +121,15 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
             return Err("INVALID_LOCAL_INPUT");
         }
     }
-    // Only an explicit Esc asks to return to the work window. Other WORK exits
-    // (focus loss, resets) must never move focus.
-    let restore = match fields.get("restore") {
-        None => false,
-        Some(value) if kind == "work" && value.as_bool() == Some(true) => true,
+    // Keep accepting the existing optional field; mode changes no longer move focus.
+    match fields.get("restore") {
+        None => {}
+        Some(value) if kind == "work" && value.as_bool() == Some(true) => {}
         Some(_) => return Err("INVALID_LOCAL_INPUT"),
-    };
+    }
     let app = window.app_handle();
-    // Tauri's cached focus flag can lag the WebView right after the shortcut
-    // activates main, so Windows asks the OS for the real foreground window.
+    // Native capture permits background input. Legacy focused webview input still
+    // checks the real foreground window rather than Tauri's cached focus flag.
     #[cfg(windows)]
     let focused = crate::native_windows::is_foreground(&window.as_ref().window())
         .map_err(|_| "LOCAL_FOCUS_FAILED")?;
@@ -150,8 +139,11 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
         if crate::overlay::focused(app) || !crate::network::play_allowed(app) {
             return Err("PLAY_UNAVAILABLE");
         }
-        if !focused {
+        if !focused && !capturing(app) {
             return Err("MAIN_NOT_FOCUSED");
+        }
+        if kind == "input" && !playing(app) {
+            return Err("PLAY_UNAVAILABLE");
         }
         if !app.state::<LocalSession>().ready.load(Ordering::SeqCst) || !visible(app) {
             return Err("OVERLAY_NOT_READY");
@@ -165,24 +157,19 @@ pub fn local_control(window: WebviewWindow, request: Request<'_>) -> Result<(), 
             .state::<LocalSession>()
             .playing
             .store(true, Ordering::SeqCst),
-        "work" => {
-            let previous = take_previous(app);
-            if restore && focused && previous != 0 {
-                #[cfg(windows)]
-                crate::native_windows::return_focus(&window.as_ref().window(), previous)
-                    .map_err(|_| "LOCAL_FOCUS_FAILED")?;
-            }
-        }
+        "work" => end_play(app),
         _ => {}
     }
     Ok(())
 }
 
-// Ends PLAY because main can no longer receive game keys: input stops in the
-// overlay and main's webview returns to WORK.
+// Stops both native capture and simulation input without moving focus.
 pub fn end_play(app: &AppHandle) {
     let session = app.state::<LocalSession>();
     session.playing.store(false, Ordering::SeqCst);
+    session.capturing.store(false, Ordering::SeqCst);
+    #[cfg(windows)]
+    crate::native_windows::stop_game_keys(app);
     if let Err(error) = app.emit_to("overlay", "local-input", "stop") {
         eprintln!("Local stop failed: {error}");
     }
@@ -206,7 +193,11 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         && !crate::native_windows::is_foreground(window).unwrap_or(false);
     #[cfg(not(windows))]
     let lost_focus = matches!(event, WindowEvent::Focused(false));
-    if window.label() == "main" && lost_focus {
+    if window.label() == "main"
+        && lost_focus
+        && !capturing(window.app_handle())
+        && !crate::chat::active(window.app_handle())
+    {
         end_play(window.app_handle());
     }
     if window.label() == "overlay" && matches!(event, WindowEvent::Destroyed) {

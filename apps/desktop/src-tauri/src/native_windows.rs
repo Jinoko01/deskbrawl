@@ -6,8 +6,6 @@ const GWL_EXSTYLE: i32 = -20;
 const SAFE_EXTENDED_STYLE: u32 = 0x0808_00a0; // NOACTIVATE | LAYERED | TRANSPARENT | TOOLWINDOW
 const SW_HIDE: i32 = 0;
 const SW_SHOWNOACTIVATE: i32 = 4;
-const SW_MINIMIZE: i32 = 6;
-const SW_RESTORE: i32 = 9;
 const WM_HOTKEY: u32 = 0x0312;
 const PLAY_HOTKEY: i32 = 1;
 const MOD_NOREPEAT: u32 = 0x4000;
@@ -144,8 +142,7 @@ unsafe extern "system" fn display_proc(
     unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
 }
 
-// The only global shortcut is registered to main's HWND, so WM_HOTKEY arrives on
-// main's UI thread, and Windows grants this process foreground rights for it.
+// The mode shortcut is registered to main's HWND; WM_HOTKEY runs on its UI thread.
 pub fn watch_play_hotkey(window: &Window) -> tauri::Result<()> {
     let hwnd = window.hwnd()?.0;
     let data = Box::into_raw(Box::new(window.app_handle().clone()));
@@ -175,10 +172,7 @@ pub fn register_play_hotkey(window: &Window, modifiers: u32, key: u32) -> tauri:
 
 // The tray fallback for when the shortcut is unavailable. Must run on main's UI thread.
 pub fn toggle_play_from(window: &Window) -> tauri::Result<()> {
-    let hwnd = window.hwnd()?.0;
-    // SAFETY: hwnd is main's live HWND and this runs on its UI thread.
-    unsafe { toggle_play(window.app_handle(), hwnd) };
-    Ok(())
+    toggle_play(window.app_handle())
 }
 
 unsafe extern "system" fn hotkey_proc(
@@ -193,7 +187,9 @@ unsafe extern "system" fn hotkey_proc(
     // callbacks are serialized on main's UI thread, and never unwind.
     let app = unsafe { &*(data as *const tauri::AppHandle) };
     if message == WM_HOTKEY && wparam == PLAY_HOTKEY as usize {
-        unsafe { toggle_play(app, hwnd) };
+        if let Err(error) = toggle_play(app) {
+            eprintln!("Could not switch PLAY: {error}");
+        }
         return 0;
     }
     if message == 0x0082 {
@@ -206,51 +202,41 @@ unsafe extern "system" fn hotkey_proc(
     unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
 }
 
-// SAFETY: main is the live main HWND and this runs on its UI thread.
-unsafe fn toggle_play(app: &tauri::AppHandle, main: *mut c_void) {
+fn toggle_play(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if crate::chat::active(app) {
+        crate::chat::dismiss(app);
+        return Ok(());
+    }
+    if crate::local_game::capturing(app) || crate::local_game::playing(app) {
+        crate::local_game::end_play(app);
+        return Ok(());
+    }
     if crate::overlay::focused(app) || !crate::network::play_allowed(app) {
-        return;
+        return Ok(());
     }
-    let foreground = unsafe { GetForegroundWindow() };
-    if foreground == main && crate::local_game::playing(app) {
-        unsafe { return_focus_to(main, crate::local_game::take_previous(app)) };
-        return;
-    }
-    // Remember the work window to return to; none when main was already in front.
-    crate::local_game::remember_previous(
-        app,
-        if foreground == main {
-            0
-        } else {
-            foreground as isize
-        },
-    );
-    unsafe {
-        if IsIconic(main) != 0 || IsWindowVisible(main) == 0 {
-            ShowWindow(main, SW_RESTORE);
-        }
-        if SetForegroundWindow(main) == 0 {
-            eprintln!("Could not focus the control window for PLAY");
-            return;
-        }
-    }
-    crate::local_game::request_play(app);
+    crate::native_keyboard::start(app)?;
+    Ok(())
 }
 
-// SAFETY: main must be the live main HWND, called on its UI thread while it is foreground.
-// previous is an untrusted handle value that may have been destroyed since; it is only
-// validated and activated, never dereferenced.
-unsafe fn return_focus_to(main: *mut c_void, previous: isize) {
-    let target = previous as *mut c_void;
-    let restored = previous != 0
-        && unsafe {
-            IsWindow(target) != 0
-                && IsWindowVisible(target) != 0
-                && SetForegroundWindow(target) != 0
-        };
-    if !restored {
-        // Minimizing hands focus to the next window instead of keeping game input.
-        unsafe { ShowWindow(main, SW_MINIMIZE) };
+pub fn foreground_token() -> usize {
+    // SAFETY: Reading a borrowed HWND does not transfer ownership.
+    unsafe { GetForegroundWindow() as usize }
+}
+
+pub fn restore_chat_focus(window: &Window, previous: usize) {
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    let previous = previous as *mut c_void;
+    // SAFETY: Never steal focus after the user clicked elsewhere. Validate the
+    // remembered window before restoring the focus borrowed for explicit chat.
+    unsafe {
+        if GetForegroundWindow() == hwnd.0
+            && IsWindow(previous) != 0
+            && IsWindowVisible(previous) != 0
+        {
+            SetForegroundWindow(previous);
+        }
     }
 }
 
@@ -261,11 +247,10 @@ pub fn is_foreground(window: &Window) -> tauri::Result<bool> {
     Ok(unsafe { GetForegroundWindow() == hwnd && IsIconic(hwnd) == 0 })
 }
 
-pub fn return_focus(window: &Window, previous: isize) -> tauri::Result<()> {
-    let hwnd = window.hwnd()?.0;
-    // SAFETY: Callers run on main's UI thread while main is foreground.
-    unsafe { return_focus_to(hwnd, previous) };
-    Ok(())
+pub fn stop_game_keys(app: &tauri::AppHandle) {
+    if !crate::local_game::capturing(app) {
+        crate::native_keyboard::stop();
+    }
 }
 
 pub fn verify(window: &Window) -> tauri::Result<()> {

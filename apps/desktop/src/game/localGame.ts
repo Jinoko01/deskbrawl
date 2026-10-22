@@ -126,5 +126,12 @@ export function createLocalGame(width: number, height: number, render: (snapshot
       previousTime = undefined;
       accumulated = 0;
     },
+    resume(): void {
+      stop();
+      previousTime = undefined;
+      accumulated = 0;
+      previousScene = undefined;
+      publish(world);
+    },
   };
 }
