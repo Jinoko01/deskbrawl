@@ -67,3 +67,33 @@ Docker Desktop 시작 시 기존 환경의 inference 소켓 오류가 발생해 
 실제 PC 두 대에서 네트워크를 사이에 두고 동시에 조작하는 M2 최종 인수 검증은 미실행이다. NSIS 설치 후 브라우저 클릭으로 시작하는 Windows URI 등록 경로, LAN 방화벽·서로 다른 DPI/모니터와 물리 전경 포커스, 외부 HTTPS/WSS 배포도 이번 검증으로 확정하지 않는다. 설치 파일 생성과 설치·게시 검증을 구분한다. 서명·업데이트·자동 재연결·4인 확장은 M4 범위다.
 
 플러그인 동작 기준: [Tauri 딥링크](https://v2.tauri.app/plugin/deep-linking/), [Tauri 단일 인스턴스](https://v2.tauri.app/plugin/single-instance/). 임시 DB 출처: [EDB 공식 바이너리](https://www.enterprisedb.com/download-postgresql-binaries?lang=en).
+
+## 추가 검증 — 2026-10-22, Asia/Seoul
+
+위 기록 이후, 현재 PC 한 대에서 설치본 검증을 추가했다. 설치된 Node 22.20.0과 고정 pnpm 10.34.7을 사용했다. 기본 Node 24와 pnpm 11에서는 pnpm 버전 전환이 제한되어 초기 명령을 완료하지 못했으며, 고정 버전을 사용할 수 있는 환경에서 아래 검사를 다시 실행했다. manifest·lockfile·검사 규칙은 변경하지 않았다.
+
+| 명령/대상 | 결과 |
+|---|---|
+| `pnpm check` | 전체 lint·타입 검사·웹 빌드 통과. 기존 500kB chunk 경고 유지 |
+| `pnpm test` | game-core 70개, protocol 2개, desktop 27개, server 3개 통과 |
+| 서버 `db:generate`, `db:validate`, `db:migrate` | 기존 migration을 새 로컬 격리 DB에 적용하고 검증 통과 |
+| 서버 `test:integration` | 실제 NestJS·PostgreSQL·Socket.IO 2개 통과 |
+| `cargo test`, `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings` | 실제 desktop manifest 대상 Rust 테스트 11개·포맷·Clippy 통과 |
+| `pnpm build` | 현재 소스의 Windows 실행 파일·NSIS 생성 통과. 서명·게시 없음 |
+| 테스트 origin/CSP override를 지정한 `tauri build --config …` | 기존 설정 파일을 수정하지 않고 별도 포트용 설치본 생성 통과 |
+| NSIS `/S` | 현재 사용자 설치 및 URI 등록 통과. 설치기가 `/D` 인자 대신 기본 `%LOCALAPPDATA%\DeskBrawl`을 사용했으며 실제 경로로 검사 |
+| `DESKBRAWL_TEST_EXECUTABLE`, `DESKBRAWL_TEST_SERVER_ORIGIN` 지정 후 WebView 검사 `--network --registered-link` | 아래 설치본 흐름과 기존 native 회귀 통과 |
+| `node --check apps/desktop/scripts/test-overlay-webview.mjs` | 검사 스크립트 문법 통과 |
+
+기존 WebView 검사기에 설치된 실행 파일과 서버 주소 지정, 등록된 URI 명령 확인 및 ShellExecute 전달 옵션을 추가했다. 설치본에서 실제 확인한 항목은 다음과 같다.
+
+- 호스트 연결·링크 발급·방문자 표시, 방문자 돌의 서버 판정과 호스트 WebView 피격·기절 표시.
+- 방문 종료 후 방문자 제거, Windows에 등록된 `deskbrawl://` 전달로 실행 중 앱의 방문 미리보기 입장·귀환.
+- 설치본 실행 파일에 URI 인자를 주어 꺼진 앱 시작, DPAPI 기기 자격 증명 복원·재인증·입장·귀환.
+- IPC 창별 접근 거부, 효과 감소·설정 복원·투명 배경·모니터 경계·GPU 손실 시 숨김과 복구.
+
+DB는 이미 설치된 PostgreSQL 18 바이너리로 workspace의 `.local/m2-pg-data`에 별도 클러스터를 만들고 loopback 포트 54329에서 실행했다. 시스템 서비스는 설치하지 않았다. 새 `deskbrawl_test` DB만 사용했다. 기존 포트 3000의 서비스는 유지하고, 검사 서버와 설치본은 포트 3001을 사용했다. 앱 설정 `.env.local`과 기본 Tauri CSP 파일은 변경하지 않았다.
+
+검사 후 테스트 설치본은 공식 uninstaller로 제거하고 실행 파일·URI 등록 제거를 확인했다. 테스트 서버와 PostgreSQL 클러스터를 종료했으며, 기본 설정으로 `pnpm build`를 다시 실행해 설치 파일도 복원했다. 격리 DB 파일과 DPAPI 기기 자격 증명은 재검증용으로 유지한다.
+
+**남은 M2 인수 항목:** 실제 PC 두 대의 동시 조작·판정 일치, 설치 후 실제 브라우저 링크 클릭으로 실행 중/꺼진 앱 방문. 사용자는 현재 PC만 사용할 수 있다고 확인했으며, 이 환경에는 지정된 브라우저 도구인 `wmux` 실행 파일이 없어 브라우저 클릭은 수행하지 않았다. ShellExecute 전달과 실행 파일 URI 시작을 브라우저 클릭 결과로 보고하지 않는다. 최종 M2 인수 완료로 표시하지 않았다.

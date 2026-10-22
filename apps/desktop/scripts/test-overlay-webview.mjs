@@ -13,7 +13,19 @@ const development = process.argv.includes("--dev");
 const localGame = process.argv.includes("--local");
 const hostControls = process.argv.includes("--m3");
 const networkGame = process.argv.includes("--network") || hostControls;
-const executable = fileURLToPath(new URL(`../src-tauri/target/${development ? "debug" : "release"}/deskbrawl.exe`, import.meta.url));
+const registeredLink = process.argv.includes("--registered-link");
+const executable = process.env.DESKBRAWL_TEST_EXECUTABLE
+  ? resolve(process.env.DESKBRAWL_TEST_EXECUTABLE)
+  : fileURLToPath(new URL(`../src-tauri/target/${development ? "debug" : "release"}/deskbrawl.exe`, import.meta.url));
+if (registeredLink && (!networkGame || development || !process.env.DESKBRAWL_TEST_EXECUTABLE)) {
+  throw new Error("--registered-link requires --network and DESKBRAWL_TEST_EXECUTABLE pointing to the installed release app");
+}
+if (registeredLink) {
+  const command = execFileSync("pwsh", ["-NoProfile", "-Command",
+    "$ErrorActionPreference = 'Stop'; (Get-ItemProperty 'Registry::HKEY_CLASSES_ROOT\\deskbrawl\\shell\\open\\command').'(default)'"],
+  { encoding: "utf8", windowsHide: true }).trim();
+  assert.equal(command.toLowerCase(), `"${executable}" "%1"`.toLowerCase(), "URI scheme must point to the installed test app");
+}
 const controller = fileURLToPath(new URL("./overlay-test-control.ps1", import.meta.url));
 const profileRoot = resolve(fileURLToPath(new URL("../node_modules/.cache", import.meta.url)));
 mkdirSync(profileRoot, { recursive: true });
@@ -255,7 +267,7 @@ async function testHostControls(main, guestSocket, entered, ownLink) {
 }
 
 async function testNetwork(main) {
-  const base = "http://127.0.0.1:3000";
+  const base = process.env.DESKBRAWL_TEST_SERVER_ORIGIN ?? "http://127.0.0.1:3000";
   const api = async (path, body, accessToken) => {
     const response = await fetch(`${base}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) }, body: JSON.stringify(body) });
     assert.ok(response.ok, `Fixture request failed: ${response.status}`);
@@ -291,8 +303,14 @@ async function testNetwork(main) {
     assert.equal(externalHost.ok, true);
     const externalInvite = await api("/v1/rooms/me/invites", {}, guest.accessToken);
     const deepLink = `deskbrawl://join/${new URL(externalInvite.link).pathname.slice(6)}`;
-    const second = spawn(executable, [deepLink], { windowsHide: true });
-    await new Promise((resolve, reject) => { const timeout = setTimeout(() => { second.kill(); reject(new Error("Second app did not exit")); }, 10000); second.once("exit", () => { clearTimeout(timeout); resolve(); }); second.once("error", reject); });
+    if (registeredLink) {
+      execFileSync("pwsh", ["-NoProfile", "-Command",
+        "$ErrorActionPreference = 'Stop'; Start-Process -FilePath $env:DESKBRAWL_TEST_LINK"],
+      { windowsHide: true, env: { ...process.env, DESKBRAWL_TEST_LINK: deepLink }, timeout: 10000 });
+    } else {
+      const second = spawn(executable, [deepLink], { windowsHide: true });
+      await new Promise((resolve, reject) => { const timeout = setTimeout(() => { second.kill(); reject(new Error("Second app did not exit")); }, 10000); second.once("exit", () => { clearTimeout(timeout); resolve(); }); second.once("error", reject); });
+    }
     await until(() => main.evaluate("document.body.textContent.includes('친구 공간 방문 중') && !!document.querySelector('canvas')"), "Running app did not accept the deep link into preview");
     await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '표시된 캐릭터 없음'"), "Own overlay should be empty while visiting");
     await until(() => main.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Preview does not show the shared world");
@@ -342,6 +360,7 @@ async function testNetwork(main) {
     await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Cold-start return failed");
     console.log("PASS: native host overlay, shared stone hit, guest removal, single-instance deep-link forwarding, preview, return and IPC credential scope");
     console.log("PASS: cold-start deep link with DPAPI device identity restoration");
+    if (registeredLink) console.log("PASS: installed Windows URI registration and ShellExecute forwarding into the running app (browser click is separate)");
     return main;
   } finally { guestSocket.disconnect(); }
 }

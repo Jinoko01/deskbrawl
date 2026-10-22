@@ -116,3 +116,21 @@ pnpm --filter @deskbrawl/desktop exec node scripts/test-overlay-webview.mjs --de
 ```
 
 결과와 남은 실기기 항목은 [M2 검증 기록](m2-validation.md)을 따른다.
+
+### 설치본과 Windows URI 등록 검증
+
+같은 서버 주소로 빌드한 NSIS를 설치한 뒤, 설치본 경로를 지정해 검사한다. 현재 사용자 설치의 기본 경로는 다음과 같다. 검사기는 등록된 `deskbrawl://` 명령이 해당 설치본을 가리키는지 확인하고, Windows ShellExecute로 실행 중 앱에 링크를 전달한다. 테스트 서버에는 검증용 기기·룸·초대가 생성되므로 별도 로컬 테스트 DB를 사용한다.
+
+```powershell
+$env:DESKBRAWL_TEST_EXECUTABLE = "$env:LOCALAPPDATA\DeskBrawl\deskbrawl.exe"
+$env:DESKBRAWL_TEST_SERVER_ORIGIN = 'http://127.0.0.1:3000'
+pnpm --filter @deskbrawl/desktop exec node scripts/test-overlay-webview.mjs --network --registered-link
+Remove-Item Env:DESKBRAWL_TEST_EXECUTABLE, Env:DESKBRAWL_TEST_SERVER_ORIGIN
+```
+
+`DESKBRAWL_TEST_SERVER_ORIGIN`은 생략하면 기존 로컬 서버 주소를 사용한다. 값을 지정할 때는 설치본의 `VITE_SERVER_URL` 및 CSP도 같은 주소로 빌드해야 한다. `--registered-link`는 설치된 release 앱을 대상으로 하며 `--dev`와 함께 사용하지 않는다. 꺼진 앱 시작 검사는 실행 파일의 URI 인자를 사용한다. OS URI 전달 검사는 브라우저의 외부 앱 실행 확인 UI를 대신 검증하지 않는다.
+
+M2 최종 인수 시에는 다음 두 항목을 별도로 기록한다.
+
+1. 설치된 앱을 실행한 상태와 종료한 상태에서 각각 `/join/<token>` 페이지의 **앱에서 방문하기**를 클릭한다. 승인 없이 방문 미리보기가 열리고, 실행 중에는 기존 앱에 전달되는지 확인한다.
+2. 같은 LAN의 Windows PC 두 대에서 각각 호스트와 방문자로 접속한다. 양쪽에서 이동·근접·돌을 조작해 동일한 피격·넉백·기절과 귀환 후 방문자 제거를 확인한다. 서버 주소·Windows 버전·DPI·관찰 결과를 기록하며 두 번째 클라이언트 소켓만으로 이 항목을 완료 처리하지 않는다.
