@@ -1,7 +1,7 @@
 import type { Joined, RoomControl } from '@deskbrawl/protocol';
-import { hostSchema, joinSchema } from '@deskbrawl/protocol';
+import { hostSchema, joinSchema, resumeSchema } from '@deskbrawl/protocol';
 import { Inject, Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'socket.io';
 import { Database } from '../database';
 import { DomainError } from '../domain.error';
@@ -30,12 +30,15 @@ export class VisitSessionService {
       socketId,
       role,
       visitId: randomUUID(),
+      resumeToken: randomBytes(32).toString('base64url'),
+      disconnectExpiresAt: undefined,
       movement: { x: 0, y: 0 },
       seq: 0,
       appliedSeq: 0,
       inputAtTick: 0,
       action: undefined,
       actionIds: [],
+      chatSeq: 0,
     };
   }
 
@@ -57,6 +60,7 @@ export class VisitSessionService {
       worldId: room.worldId,
       visitId: member.visitId,
       playerId: member.playerId,
+      resumeToken: member.resumeToken,
       role: member.role,
       snapshot: this.engine.snapshot(room),
     };
@@ -116,6 +120,14 @@ export class VisitSessionService {
       if (room === undefined) {
         throw new DomainError('HOST_OFFLINE');
       }
+      if (
+        [...room.members.values()].some(
+          (member) =>
+            member.role === 'host' && member.disconnectExpiresAt !== undefined,
+        )
+      ) {
+        throw new DomainError('HOST_OFFLINE');
+      }
       if (room.focused) {
         throw new DomainError('ROOM_UNAVAILABLE');
       }
@@ -137,6 +149,86 @@ export class VisitSessionService {
       this.engine.add(room, member);
       return this.joined(room, member);
     });
+  }
+
+  async resume(
+    socket: Socket,
+    deviceId: string,
+    body: unknown,
+  ): Promise<Joined> {
+    const input = resumeSchema.parse(body);
+    return this.db.serialize(() => {
+      for (const room of this.engine.rooms.values()) {
+        const member = room.members.get(deviceId);
+        if (
+          member?.visitId !== input.visitId ||
+          member.resumeToken !== input.resumeToken
+        ) {
+          continue;
+        }
+        if (
+          member.disconnectExpiresAt === undefined ||
+          member.disconnectExpiresAt <= Date.now()
+        ) {
+          throw new DomainError('SESSION_ENDED');
+        }
+        if (!socket.connected) {
+          throw new DomainError('CONNECTION_LOST');
+        }
+        member.socketId = socket.id;
+        member.visitId = randomUUID();
+        member.resumeToken = randomBytes(32).toString('base64url');
+        member.disconnectExpiresAt = undefined;
+        member.movement = { x: 0, y: 0 };
+        member.action = undefined;
+        member.seq = 0;
+        member.chatSeq = 0;
+        member.appliedSeq = 0;
+        member.inputAtTick = room.world.tick;
+        return this.joined(room, member);
+      }
+      throw new DomainError('SESSION_ENDED');
+    });
+  }
+
+  disconnect(socketId: string): void {
+    let found;
+    try {
+      found = this.find(socketId);
+    } catch {
+      return;
+    }
+    found.room.chats.delete(found.member.playerId);
+    found.member.socketId = '';
+    // Provisional M4 recovery window; no persistence across server restarts.
+    found.member.disconnectExpiresAt = Date.now() + 10_000;
+    found.member.movement = { x: 0, y: 0 };
+    found.member.action = undefined;
+  }
+
+  expireDisconnected(
+    nowMs = Date.now(),
+  ): { closed: boolean; room: RoomWorld }[] {
+    const results: { closed: boolean; room: RoomWorld }[] = [];
+    for (const room of this.engine.rooms.values()) {
+      const expired = [...room.members.values()].filter(
+        (member) =>
+          member.disconnectExpiresAt !== undefined &&
+          member.disconnectExpiresAt <= nowMs,
+      );
+      if (expired.some((member) => member.role === 'host')) {
+        this.engine.rooms.delete(room.roomId);
+        results.push({ closed: true, room });
+        continue;
+      }
+      for (const member of expired) {
+        this.engine.remove(room, member.playerId);
+      }
+      if (expired.length > 0) {
+        results.push({ closed: false, room });
+      }
+    }
+    return results;
   }
 
   async control(
@@ -186,7 +278,7 @@ export class VisitSessionService {
         this.engine.focus(room, command.focused);
       }
       room.controlCommands.set(command.commandId, signature);
-      // Same bounded retry window as attacks; reconnect recovery remains M4 scope.
+      // Keep only the bounded retry window for control commands.
       if (room.controlCommands.size > 128) {
         const oldest = room.controlCommands.keys().next().value;
         if (oldest !== undefined) {

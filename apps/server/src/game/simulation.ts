@@ -4,7 +4,8 @@ import type {
   WorldState,
 } from '@deskbrawl/game-core';
 import { advance, createWorld, DEFAULT_COMBAT } from '@deskbrawl/game-core';
-import type { Action, Input, Snapshot } from '@deskbrawl/protocol';
+import type { Action, Chat, Input, Snapshot } from '@deskbrawl/protocol';
+import { PROTOCOL_VERSION } from '@deskbrawl/protocol';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -22,12 +23,15 @@ export interface Member {
   role: 'host' | 'guest';
   socketId: string;
   visitId: string;
+  resumeToken: string;
+  disconnectExpiresAt: number | undefined;
   movement: PlayerInput['movement'];
   seq: number;
   appliedSeq: number;
   inputAtTick: number;
   action: PlayerInput['action'];
   actionIds: string[];
+  chatSeq: number;
 }
 export interface RoomWorld {
   roomId: string;
@@ -36,6 +40,7 @@ export interface RoomWorld {
   members: Map<string, Member>;
   focused: boolean;
   controlCommands: Map<string, string>;
+  chats: Map<string, Snapshot['chats'][number]>;
 }
 @Injectable()
 export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
@@ -82,6 +87,7 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
       members: new Map([[member.playerId, member]]),
       focused: false,
       controlCommands: new Map(),
+      chats: new Map(),
     };
     this.rooms.set(roomId, room);
     return room;
@@ -94,10 +100,7 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
       players: [
         {
           id: member.playerId,
-          position: {
-            x: room.world.bounds.width / 2 + 72,
-            y: room.world.bounds.height / 2,
-          },
+          position: this.spawn(room),
         },
       ],
     }).players[0];
@@ -111,8 +114,44 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     room.members.set(member.playerId, member);
   }
 
+  private spawn(room: RoomWorld): { x: number; y: number } {
+    const { width, height } = room.world.bounds;
+    const radius = room.world.rules.playerRadius;
+    const verticalSpacing = Math.min(128, (height - radius * 2) / 2);
+    const candidates = [
+      { x: width / 2 + 72, y: height / 2 },
+      { x: width / 2 - 72, y: height / 2 },
+      { x: width / 2 - 72, y: height / 2 - verticalSpacing },
+      { x: width / 2 + 72, y: height / 2 - verticalSpacing },
+      { x: width / 2 - 72, y: height / 2 + verticalSpacing },
+      { x: width / 2 + 72, y: height / 2 + verticalSpacing },
+    ];
+    const isAvailable = (candidate: { x: number; y: number }): boolean =>
+      room.world.players.every(
+        (player) =>
+          Math.hypot(
+            player.position.x - candidate.x,
+            player.position.y - candidate.y,
+          ) >=
+          radius * 2,
+      );
+    const position = candidates.find(isAvailable);
+    if (position !== undefined) {
+      return position;
+    }
+    for (let y = radius; y <= height - radius; y += radius * 2) {
+      for (let x = radius; x <= width - radius; x += radius * 2) {
+        if (isAvailable({ x, y })) {
+          return { x, y };
+        }
+      }
+    }
+    throw new DomainError('ROOM_FULL');
+  }
+
   remove(room: RoomWorld, playerId: string): void {
     room.members.delete(playerId);
+    room.chats.delete(playerId);
     room.world = {
       ...room.world,
       players: room.world.players.filter((player) => player.id !== playerId),
@@ -155,8 +194,40 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     member.action ??= command.action;
   }
 
+  chat(room: RoomWorld, member: Member, command: Chat, nowMs: number): void {
+    if (command.visitId !== member.visitId) {
+      throw new DomainError('SESSION_ENDED');
+    }
+    if (room.focused) {
+      throw new DomainError('ROOM_UNAVAILABLE');
+    }
+    if (command.seq <= member.chatSeq) {
+      return;
+    }
+    member.chatSeq = command.seq;
+    if (command.current.length === 0 && command.previous.length === 0) {
+      room.chats.delete(member.playerId);
+      return;
+    }
+    room.chats.set(member.playerId, {
+      playerId: member.playerId,
+      current: command.current,
+      previous: command.previous,
+      updatedAt: nowMs,
+    });
+  }
+
+  expireChats(room: RoomWorld, nowMs: number): void {
+    for (const chat of room.chats.values()) {
+      if (nowMs - chat.updatedAt >= 8000) {
+        room.chats.delete(chat.playerId);
+      }
+    }
+  }
+
   focus(room: RoomWorld, focused: boolean): void {
     room.focused = focused;
+    room.chats.clear();
     for (const member of room.members.values()) {
       member.movement = { x: 0, y: 0 };
       member.action = undefined;
@@ -189,7 +260,7 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
   snapshot(room: RoomWorld): Snapshot {
     // Schema output is mutable; clone arrays at this wire boundary rather than expose engine state.
     return {
-      version: 1,
+      version: PROTOCOL_VERSION,
       roomId: room.roomId,
       worldId: room.worldId,
       world: {
@@ -200,6 +271,7 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
         })),
         effects: room.world.effects.map((effect) => ({ ...effect })),
       },
+      chats: [...room.chats.values()].map((chat) => ({ ...chat })),
       members: [...room.members.values()].map(
         ({ playerId, nickname, role }) => ({ playerId, nickname, role }),
       ),

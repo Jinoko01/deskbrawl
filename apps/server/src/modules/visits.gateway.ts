@@ -5,9 +5,11 @@ import type {
   RoomControl,
 } from '@deskbrawl/protocol';
 import {
+  PROTOCOL_VERSION,
   inputSchema,
   leaveSchema,
   playerActionSchema,
+  playerChatSchema,
   focusSchema,
   kickSchema,
   clearVisitorsSchema,
@@ -49,6 +51,7 @@ export class VisitsGateway
 
   afterInit(server: Server): void {
     this.sessions.engine.onSnapshot = (room) => {
+      this.sessions.engine.expireChats(room, Date.now());
       server
         .to(room.worldId)
         .emit('world:snapshot', this.sessions.engine.snapshot(room));
@@ -62,7 +65,13 @@ export class VisitsGateway
     // Token expiry/revocation must end idle sessions too.
     this.expiryTimer = setInterval(() => {
       for (const socket of server.sockets.sockets.values()) {
-        void this.authenticate(socket).catch(() => socket.disconnect(true));
+        void this.authenticate(socket).catch(() => {
+          this.endSession(socket);
+          socket.disconnect(true);
+        });
+      }
+      for (const result of this.sessions.expireDisconnected()) {
+        this.announceDeparture(result);
       }
     }, 1000);
   }
@@ -85,7 +94,7 @@ export class VisitsGateway
       typeof auth !== 'object' ||
       auth === null ||
       !('version' in auth) ||
-      auth.version !== 1
+      auth.version !== PROTOCOL_VERSION
     ) {
       throw new DomainError('INCOMPATIBLE_VERSION');
     }
@@ -166,6 +175,16 @@ export class VisitsGateway
     );
   }
 
+  @SubscribeMessage('visit:resume')
+  resume(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof joinedAckSchema>> {
+    return this.command(socket, 5, 'join', async (device) =>
+      this.enter(socket, await this.sessions.resume(socket, device, body)),
+    );
+  }
+
   @SubscribeMessage('visit:leave')
   leave(
     @ConnectedSocket() socket: Socket,
@@ -177,7 +196,7 @@ export class VisitsGateway
       if (input.visitId !== member.visitId) {
         throw new DomainError('SESSION_ENDED');
       }
-      this.handleDisconnect(socket);
+      this.endSession(socket);
       return { ok: true as const };
     });
   }
@@ -191,6 +210,19 @@ export class VisitsGateway
       const command = inputSchema.parse(body);
       const { room, member } = this.sessions.find(socket.id);
       this.sessions.engine.input(room, member, command);
+      return { ok: true as const };
+    });
+  }
+
+  @SubscribeMessage('player:chat')
+  chat(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof commandAckSchema>> {
+    return this.command(socket, 30, 'chat', () => {
+      const command = playerChatSchema.parse(body);
+      const { room, member } = this.sessions.find(socket.id);
+      this.sessions.engine.chat(room, member, command, Date.now());
       return { ok: true as const };
     });
   }
@@ -260,11 +292,21 @@ export class VisitsGateway
   }
 
   handleDisconnect(socket: Socket): void {
+    this.sessions.disconnect(socket.id);
+  }
+
+  private endSession(socket: Socket): void {
     const result = this.sessions.leave(socket.id);
     if (result === undefined) {
       return;
     }
     void socket.leave(result.room.worldId);
+    this.announceDeparture(result);
+  }
+
+  private announceDeparture(
+    result: NonNullable<ReturnType<VisitSessionService['leave']>>,
+  ): void {
     if (result.closed) {
       this.server
         .to(result.room.worldId)
