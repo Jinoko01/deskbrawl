@@ -1,0 +1,14 @@
+.git
+.local
+.agents
+.claude
+**/node_modules
+**/dist
+**/target
+**/gen
+**/src/generated
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/*.tsbuildinfo
