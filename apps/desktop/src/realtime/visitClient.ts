@@ -27,7 +27,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     reconnectionAttempts: 3,
     reconnectionDelay: 500,
     reconnectionDelayMax: 1500,
-    auth: { version: PROTOCOL_VERSION, token: session.accessToken },
+    auth: { version: PROTOCOL_VERSION, token: session.accessToken, health: true },
     timeout: 5000,
   });
   let membership: Joined | undefined;

@@ -83,3 +83,12 @@ it("validates ephemeral two-line chats without allowing another sender or unboun
   expect(playerChatSchema.safeParse({ ...chat, playerId: visitId }).success).toBe(false);
   expect(chatSchema.safeParse({ playerId: visitId, current: "", previous: "", updatedAt: -1 }).success).toBe(false);
 });
+
+it("accepts negotiated HP from 0 to 50 and legacy players without HP", () => {
+  const schema = worldSchema.shape.players.element;
+  const player = { id: visitId, position: { x: 100, y: 100 }, facing: { x: 1, y: 0 }, knockbackVelocity: { x: 0, y: 0 }, knockbackUntilTick: 0, stunnedUntilTick: 0, invulnerableUntilTick: 0, meleeReadyAtTick: 0, stoneReadyAtTick: 0, lastAction: null, lastHitTick: null };
+  expect(schema.parse(player).hp).toBeUndefined();
+  for (const hp of [0, 2, 47, 50]) expect(schema.parse({ ...player, hp }).hp).toBe(hp);
+  for (const hp of [-1, 51, 2.5, Infinity, NaN, "50", null]) expect(schema.safeParse({ ...player, hp }).success).toBe(false);
+  expect(schema.omit({ hp: true }).safeParse(player).success).toBe(true);
+});

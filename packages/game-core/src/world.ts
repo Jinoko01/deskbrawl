@@ -1,5 +1,6 @@
 import type { PlayerInput, WorldSetup, WorldState } from "./types";
 import { resolveCombat } from "./combat";
+import { MAX_HP } from "./defaults";
 
 function requirePositive(value: number, name: string): void {
   if (!Number.isFinite(value) || value <= 0) {
@@ -51,7 +52,7 @@ export function createWorld(setup: WorldSetup): WorldState {
     ) {
       throw new RangeError("The player collision area must start inside the world.");
     }
-    return { id, position: { x, y }, facing: { x: 1, y: 0 },
+    return { id, hp: MAX_HP, position: { x, y }, facing: { x: 1, y: 0 },
       knockbackVelocity: { x: 0, y: 0 }, knockbackUntilTick: 0, stunnedUntilTick: 0,
       invulnerableUntilTick: 0, meleeReadyAtTick: 0, stoneReadyAtTick: 0,
       lastAction: null, lastHitTick: null };
@@ -92,7 +93,9 @@ export function advance(world: WorldState, inputs: readonly PlayerInput[]): Worl
   const { playerRadius: radius, moveSpeedUnitsPerSecond, tickMs } = world.rules;
   const distance = moveSpeedUnitsPerSecond * (tickMs / 1000);
   const tick = world.tick + 1;
-  const players = world.players.map((player) => {
+  const players = world.players.map((original) => {
+    const player = original.hp === 0 && tick >= original.stunnedUntilTick
+      ? { ...original, hp: MAX_HP } : original;
     if (tick < player.knockbackUntilTick) {
       const nextX = player.position.x + player.knockbackVelocity.x * tickMs / 1000;
       const nextY = player.position.y + player.knockbackVelocity.y * tickMs / 1000;

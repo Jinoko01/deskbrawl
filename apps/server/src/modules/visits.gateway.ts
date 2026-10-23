@@ -3,6 +3,7 @@ import type {
   Joined,
   joinedAckSchema,
   RoomControl,
+  Snapshot,
 } from '@deskbrawl/protocol';
 import {
   PROTOCOL_VERSION,
@@ -53,9 +54,7 @@ export class VisitsGateway
   afterInit(server: Server): void {
     this.sessions.engine.onSnapshot = (room) => {
       this.sessions.engine.expireChats(room, Date.now());
-      server
-        .to(room.worldId)
-        .emit('world:snapshot', this.sessions.engine.snapshot(room));
+      this.publishSnapshot(room);
     };
     server.use((socket, next) => {
       void this.validateHandshake(socket).then(
@@ -146,10 +145,14 @@ export class VisitsGateway
         throw new DomainError('SESSION_ENDED');
       }
       const current = this.sessions.joined(room, member);
-      socket.emit('visit:joined', current);
+      const response = {
+        ...current,
+        snapshot: this.clientSnapshot(socket, current.snapshot),
+      };
+      socket.emit('visit:joined', response);
       this.publishProfiles(room);
-      this.server.to(room.worldId).emit('world:snapshot', current.snapshot);
-      return current;
+      this.publishSnapshot(room);
+      return response;
     } catch (error) {
       // Focus/kick can remove a member while the transport joins asynchronously.
       await socket.leave(joined.worldId);
@@ -250,9 +253,7 @@ export class VisitsGateway
     return this.command(socket, 5, 'profile', async (device) => {
       const room = await this.sessions.profile(socket.id, device, body);
       this.publishProfiles(room);
-      this.server
-        .to(room.worldId)
-        .emit('world:snapshot', this.sessions.engine.snapshot(room));
+      this.publishSnapshot(room);
       return { ok: true as const };
     });
   }
@@ -266,6 +267,40 @@ export class VisitsGateway
         skin: member.skin ?? (member.role === 'host' ? 'mochi' : 'mint'),
       })),
     });
+  }
+
+  private clientSnapshot(socket: Socket, snapshot: Snapshot): Snapshot {
+    const auth: unknown = socket.handshake.auth;
+    if (
+      typeof auth === 'object' &&
+      auth !== null &&
+      'health' in auth &&
+      auth.health === true
+    ) {
+      return snapshot;
+    }
+    // Existing v2 clients reject unknown player fields in their strict schema.
+    return {
+      ...snapshot,
+      world: {
+        ...snapshot.world,
+        players: snapshot.world.players.map((player) => {
+          const legacy = { ...player };
+          delete legacy.hp;
+          return legacy;
+        }),
+      },
+    };
+  }
+
+  private publishSnapshot(room: RoomWorld): void {
+    const snapshot = this.sessions.engine.snapshot(room);
+    for (const member of room.members.values()) {
+      const socket = this.server.sockets.sockets.get(member.socketId);
+      if (socket?.rooms.has(room.worldId)) {
+        socket.emit('world:snapshot', this.clientSnapshot(socket, snapshot));
+      }
+    }
   }
 
   private async controlRoom(
@@ -283,9 +318,7 @@ export class VisitsGateway
       this.server.to(visitor.socketId).emit('room:closed', { ok: false, code });
       this.server.in(visitor.socketId).socketsLeave(room.worldId);
     }
-    this.server
-      .to(room.worldId)
-      .emit('world:snapshot', this.sessions.engine.snapshot(room));
+    this.publishSnapshot(room);
     return { ok: true };
   }
 
@@ -341,9 +374,7 @@ export class VisitsGateway
         .emit('room:closed', { ok: false, code: 'HOST_OFFLINE' });
       this.server.in(result.room.worldId).socketsLeave(result.room.worldId);
     } else {
-      this.server
-        .to(result.room.worldId)
-        .emit('world:snapshot', this.sessions.engine.snapshot(result.room));
+      this.publishSnapshot(result.room);
     }
   }
 }

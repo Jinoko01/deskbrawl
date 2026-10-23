@@ -54,7 +54,8 @@ const positive = z.number().finite().positive().max(100_000);
 const combat = z.object({ meleeReach: positive, meleeCooldownMs: positive, stoneCooldownMs: positive,
   stoneSpeedUnitsPerSecond: positive, stoneRadius: positive, stoneLifetimeMs: positive,
   stunMs: positive, invulnerabilityMs: positive, knockbackMs: positive, knockbackSpeedUnitsPerSecond: positive, effectMs: positive }).strict();
-const player = z.object({ id: idSchema, position: vector, facing: vector, knockbackVelocity: vector,
+// HP is negotiated in the Socket.IO handshake; older v2 servers may omit it.
+const player = z.object({ id: idSchema, hp: z.number().int().min(0).max(50).optional(), position: vector, facing: vector, knockbackVelocity: vector,
   knockbackUntilTick: tick, stunnedUntilTick: tick, invulnerableUntilTick: tick, meleeReadyAtTick: tick, stoneReadyAtTick: tick,
   lastAction: z.object({ kind: actionSchema, tick }).strict().nullable(), lastHitTick: tick.nullable() }).strict();
 const projectile = z.object({ id: z.string().max(160), ownerId: idSchema, position: vector, velocity: vector, expiresAtTick: tick }).strict();

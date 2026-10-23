@@ -104,6 +104,98 @@ function until(socket, event, predicate) {
   });
 }
 
+test('negotiated HP preserves legacy snapshots and broadcasts knockout and recovery at fixed ticks', async () => {
+  const host = await register('HP host');
+  const guest = await register('HP guest');
+  const hs = await connect(host);
+  const gs = await connect(guest, {
+    auth: { version: 2, token: guest.accessToken, health: true },
+  });
+  const hosted = await ack(hs, 'room:host', {
+    version: 2,
+    bounds: { width: 1280, height: 720 },
+  });
+  expect(hosted.snapshot.world.players[0]).not.toHaveProperty('hp');
+  const invitation = (await apiFor(host).post('/v1/rooms/me/invites')).body;
+  const entered = await ack(gs, 'visit:join', {
+    version: 2,
+    token: new URL(invitation.link).pathname.slice(6),
+  });
+  expect(
+    entered.snapshot.world.players.every((player) => player.hp === 50),
+  ).toBe(true);
+
+  const { SimulationEngine } = await import('../dist/app.mjs');
+  const engine = app.get(SimulationEngine);
+  const room = engine.rooms.get(hosted.roomId);
+  room.focused = true;
+  const attacker = room.world.players.find(
+    (player) => player.id === host.deviceId,
+  );
+  room.world = {
+    ...room.world,
+    players: room.world.players.map((player) =>
+      player.id === guest.deviceId
+        ? {
+            ...player,
+            hp: 3,
+            position: { x: attacker.position.x + 70, y: attacker.position.y },
+          }
+        : player,
+    ),
+  };
+  const step = (count) => {
+    room.focused = false;
+    for (let index = 0; index < count; index++) {
+      engine.step(room);
+    }
+    room.focused = true;
+    engine.onSnapshot(room);
+  };
+  room.focused = false;
+  engine.action(room, room.members.get(host.deviceId), {
+    visitId: hosted.visitId,
+    actionId: randomUUID(),
+    action: 'melee',
+  });
+  room.focused = true;
+  const hitTick = room.world.tick + 1;
+  const knockedOut = until(
+    gs,
+    'world:snapshot',
+    (snapshot) => snapshot.world.tick === hitTick,
+  );
+  const legacy = until(
+    hs,
+    'world:snapshot',
+    (snapshot) => snapshot.world.tick === hitTick,
+  );
+  step(1);
+  const hit = (await knockedOut).world.players.find(
+    (player) => player.id === guest.deviceId,
+  );
+  expect(hit.hp).toBe(0);
+  expect(hit.stunnedUntilTick).toBe(hitTick + 60);
+  expect(
+    (await legacy).world.players.every((player) => !('hp' in player)),
+  ).toBe(true);
+  step(59);
+  expect(
+    room.world.players.find((player) => player.id === guest.deviceId).hp,
+  ).toBe(0);
+  const recovered = until(
+    gs,
+    'world:snapshot',
+    (snapshot) => snapshot.world.tick === hitTick + 60,
+  );
+  step(1);
+  expect(
+    (await recovered).world.players.find(
+      (player) => player.id === guest.deviceId,
+    ).hp,
+  ).toBe(50);
+});
+
 async function openPair(focused = false) {
   const host = await register('M3 호스트');
   const guest = await register('M3 방문자');

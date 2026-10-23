@@ -18,6 +18,7 @@ export interface PlayerInput {
 
 export interface PlayerState {
   readonly id: string;
+  readonly hp: number;
   // 원형 충돌 영역의 중심. 그림의 발 기준 anchor와의 변환은 렌더러가 담당한다.
   readonly position: Vector2;
   readonly facing: Vector2;

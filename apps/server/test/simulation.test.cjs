@@ -71,6 +71,7 @@ test('authoritative stone hit produces identical snapshots and duplicate action 
   }
   const hit = room.world.players.find((p) => p.id === guest.playerId);
   expect(hit.lastHitTick).not.toBeNull();
+  expect(hit.hp).toBe(49);
   expect(hit.stunnedUntilTick).toBeGreaterThan(room.world.tick);
   expect(engine.snapshot(room)).toEqual(engine.snapshot(room));
   const actionTick = room.world.players[0].lastAction.tick;

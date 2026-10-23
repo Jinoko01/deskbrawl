@@ -1,4 +1,5 @@
 import type { PlayerInput, PlayerState, ProjectileState, Vector2, WorldEffect, WorldState } from "./types";
+import { ATTACK_DAMAGE, KNOCKOUT_MS } from "./defaults";
 
 type MutablePlayer = { -readonly [Key in keyof PlayerState]: PlayerState[Key] };
 
@@ -39,12 +40,13 @@ export function resolveCombat(world: WorldState, inputs: ReadonlyMap<string, Pla
     effects.push({ id, kind, position: { ...position }, startedAtTick: world.tick, expiresAtTick: deadline(world, rules.effectMs) });
   }
 
-  function hit(target: MutablePlayer, direction: Vector2, id: string): void {
-    if (world.tick < target.invulnerableUntilTick) return;
+  function hit(target: MutablePlayer, direction: Vector2, id: string, damage: number): void {
+    if (target.hp === 0 || world.tick < target.invulnerableUntilTick) return;
+    target.hp = Math.max(0, target.hp - damage);
     target.knockbackVelocity = { x: direction.x * rules.knockbackSpeedUnitsPerSecond, y: direction.y * rules.knockbackSpeedUnitsPerSecond };
     target.knockbackUntilTick = deadline(world, rules.knockbackMs);
-    target.stunnedUntilTick = deadline(world, rules.stunMs);
-    target.invulnerableUntilTick = deadline(world, rules.invulnerabilityMs);
+    target.stunnedUntilTick = deadline(world, target.hp === 0 ? KNOCKOUT_MS : rules.stunMs);
+    target.invulnerableUntilTick = Math.max(deadline(world, rules.invulnerabilityMs), target.stunnedUntilTick);
     target.lastHitTick = world.tick;
     effect(`${id}:hit:${target.id}`, "impact", target.position);
   }
@@ -67,7 +69,7 @@ export function resolveCombat(world: WorldState, inputs: ReadonlyMap<string, Pla
         const length = Math.hypot(dx, dy);
         if (length > rules.meleeReach + world.rules.playerRadius * 2) continue;
         if (length > 0 && dx * player.facing.x + dy * player.facing.y <= 0) continue;
-        hit(target, length === 0 ? player.facing : { x: dx / length, y: dy / length }, id);
+        hit(target, length === 0 ? player.facing : { x: dx / length, y: dy / length }, id, ATTACK_DAMAGE.melee);
       }
     } else if (action === "stone" && world.tick >= original.stoneReadyAtTick) {
       player.stoneReadyAtTick = deadline(world, rules.stoneCooldownMs);
@@ -99,7 +101,7 @@ export function resolveCombat(world: WorldState, inputs: ReadonlyMap<string, Pla
     }
     if (nearest !== undefined) {
       const speed = Math.hypot(stone.velocity.x, stone.velocity.y);
-      hit(nearest.player, { x: stone.velocity.x / speed, y: stone.velocity.y / speed }, stone.id);
+      hit(nearest.player, { x: stone.velocity.x / speed, y: stone.velocity.y / speed }, stone.id, ATTACK_DAMAGE.stone);
     } else if (wallHit) {
       effect(stone.id, "dust", end);
     } else projectiles.push({ ...stone, position: end });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { advance, createWorld } from "./index";
+import { advance, createWorld, MAX_HP } from "./index";
 import type { CombatRules, PlayerAction, PlayerInput, WorldState } from "./index";
 
 const combat: CombatRules = {
@@ -28,7 +28,8 @@ describe("근접 공격과 피격", () => {
     const initial = world();
     const original = structuredClone(initial);
     const next = advance(initial, [action("melee")]);
-    expect(next.players[1]).toMatchObject({ stunnedUntilTick: 9, invulnerableUntilTick: 11,
+    expect(initial.players.every((player) => player.hp === MAX_HP)).toBe(true);
+    expect(next.players[1]).toMatchObject({ hp: 47, stunnedUntilTick: 9, invulnerableUntilTick: 11,
       knockbackVelocity: { x: 300, y: 0 }, lastHitTick: 1 });
     expect(next.players[0]?.lastAction).toEqual({ kind: "melee", tick: 1 });
     expect(next.effects).toHaveLength(1);
@@ -66,6 +67,7 @@ describe("근접 공격과 피격", () => {
       ? { ...player, meleeReadyAtTick: 0 } : player) }, [action("melee")]);
     expect(second.players[1]?.stunnedUntilTick).toBe(9);
     expect(second.players[1]?.lastHitTick).toBe(1);
+    expect(second.players[1]?.hp).toBe(47);
   });
 
   test("경계에서 넉백 축을 정지하고 캐릭터를 삭제하지 않는다", () => {
@@ -104,6 +106,7 @@ describe("돌 던지기", () => {
     const result = advance(fast, [action("stone")]);
     expect(result.projectiles).toHaveLength(0);
     expect(result.players[1]?.lastHitTick).toBe(1);
+    expect(result.players[1]?.hp).toBe(49);
     expect(result.players[1]?.stunnedUntilTick).toBe(9);
   });
 
@@ -152,5 +155,49 @@ describe("돌 던지기", () => {
     }
     expect(a).toEqual(b);
     expect(a.projectiles.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("HP 소진과 회복", () => {
+  test.each(["melee", "stone"] as const)("%s 피해로 HP가 0이 되면 3초 후 최대 체력으로 깨어난다", (kind) => {
+    const initial = world();
+    const weakened = { ...initial, players: initial.players.map((player) => player.id === "guest"
+      ? { ...player, hp: 1 } : player) };
+    const knockedOut = advance(weakened, [action(kind)]);
+    expect(knockedOut.players[1]).toMatchObject({ hp: 0, stunnedUntilTick: 61, invulnerableUntilTick: 61 });
+    const input = { ...action("stone", "guest"), movement: { x: 0, y: 1 } as const };
+    let state = knockedOut;
+    for (let tick = 2; tick < 61; tick++) {
+      state = advance(state, [input]);
+      expect(state.players[1]?.hp).toBe(0);
+      expect(state.players[1]?.position.y).toBe(100);
+      expect(state.players[1]?.lastAction).toBeNull();
+    }
+    const recovered = advance(state, [input]);
+    expect(recovered.tick).toBe(61);
+    expect(recovered.players[1]?.hp).toBe(50);
+    expect(recovered.players[1]?.position.y).toBe(110);
+    expect(recovered.players[1]?.lastAction).toEqual({ kind: "stone", tick: 61 });
+    expect(weakened.players[1]?.hp).toBe(1);
+  });
+
+  test("기절 중 추가 타격은 피해와 회복 시각을 바꾸지 않는다", () => {
+    const initial = world();
+    const weakened = { ...initial, players: initial.players.map((player) => player.id === "guest"
+      ? { ...player, hp: 3 } : player) };
+    const first = advance(weakened, [action("melee")]);
+    const repeated = advance({ ...first, players: first.players.map((player) => player.id === "host"
+      ? { ...player, meleeReadyAtTick: 0 } : { ...player, invulnerableUntilTick: 0 }) }, [action("melee")]);
+    expect(repeated.players[1]).toMatchObject({ hp: 0, stunnedUntilTick: 61, lastHitTick: 1 });
+  });
+
+  test("서로의 마지막 HP를 동시에 소진해도 두 공격을 모두 적용한다", () => {
+    const initial = world();
+    const state = { ...initial, players: initial.players.map((player) => ({ ...player, hp: 3,
+      facing: { x: player.id === "host" ? 1 : -1, y: 0 } })) };
+    const inputs = [action("melee"), action("melee", "guest")];
+    const result = advance(state, inputs);
+    expect(result.players.every((player) => player.hp === 0 && player.stunnedUntilTick === 61)).toBe(true);
+    expect(result).toEqual(advance(state, [...inputs].reverse()));
   });
 });
