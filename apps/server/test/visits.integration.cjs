@@ -24,14 +24,16 @@ const config = {
   ACCESS_TTL_SECONDS: 3600,
   INVITE_TTL_SECONDS: 3600,
 };
-beforeAll(async () => {
+beforeEach(async () => {
+  sockets.length = 0;
+  createdDevices.length = 0;
   const { createApp } = await import('../dist/app.mjs');
   app = await createApp(config);
   await app.listen(0, '127.0.0.1');
   base = await app.getUrl();
   api = request(app.getHttpServer());
 });
-afterAll(async () => {
+afterEach(async () => {
   for (const socket of sockets) {
     socket.disconnect();
   }
@@ -214,6 +216,82 @@ async function openPair(focused = false) {
   };
   return { host, guest, hs, gs, hosted, join };
 }
+
+test('WORK position commands synchronize only the sender and reject PLAY and another visit', async () => {
+  const { host, guest, hs, gs, hosted, join } = await openPair();
+  const entered = await ack(gs, 'visit:join', join);
+  expect(
+    (
+      await ack(hs, 'player:mode', {
+        visitId: hosted.visitId,
+        seq: 1,
+        playing: false,
+      })
+    ).ok,
+  ).toBe(true);
+  expect(
+    (
+      await ack(gs, 'player:position', {
+        visitId: hosted.visitId,
+        seq: 1,
+        position: { x: 300, y: 200 },
+      })
+    ).code,
+  ).toBe('SESSION_ENDED');
+  const positioned = until(gs, 'world:snapshot', (snapshot) =>
+    snapshot.world.players.some(
+      (player) =>
+        player.id === host.deviceId &&
+        player.position.x === 300 &&
+        player.position.y === 200,
+    ),
+  );
+  expect(
+    (
+      await ack(hs, 'player:position', {
+        visitId: hosted.visitId,
+        seq: 2,
+        position: { x: 300, y: 200 },
+      })
+    ).ok,
+  ).toBe(true);
+  const snapshot = await positioned;
+  expect(
+    snapshot.world.players.find((player) => player.id === guest.deviceId)
+      .position,
+  ).toEqual(
+    entered.snapshot.world.players.find(
+      (player) => player.id === guest.deviceId,
+    ).position,
+  );
+  expect(
+    (
+      await ack(hs, 'player:position', {
+        visitId: hosted.visitId,
+        seq: 3,
+        position: { x: -1, y: 200 },
+      })
+    ).code,
+  ).toBe('INVALID_INPUT');
+  expect(
+    (
+      await ack(hs, 'player:mode', {
+        visitId: hosted.visitId,
+        seq: 3,
+        playing: true,
+      })
+    ).ok,
+  ).toBe(true);
+  expect(
+    (
+      await ack(hs, 'player:position', {
+        visitId: hosted.visitId,
+        seq: 4,
+        position: { x: 500, y: 200 },
+      })
+    ).code,
+  ).toBe('INVALID_INPUT');
+});
 
 test('host-only kick and clear immediately reject old sessions and duplicate commands cannot evict a new visit', async () => {
   const { host, guest, hs, gs, hosted, join } = await openPair();

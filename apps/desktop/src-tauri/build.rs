@@ -14,6 +14,8 @@ fn main() {
             "local_available",
             "local_control",
             "local_overlay_status",
+            "overlay_drag_regions",
+            "overlay_place",
             "local_controls",
             "local_set_controls",
             "network_publish",

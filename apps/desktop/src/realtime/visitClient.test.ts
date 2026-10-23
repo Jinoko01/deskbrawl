@@ -52,6 +52,36 @@ function pending(event: string) {
   }
   return command;
 }
+
+it("coalesces WORK dragging, waits for mode acceptance and discards placement when PLAY resumes", async () => {
+  const { client, joined } = await host();
+  expect(client.canPlace()).toBe(false);
+  transport.listeners.get("server:features")?.({ workDrag: true });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(client.canPlace()).toBe(true);
+  const work = pending("player:mode");
+  expect(work.body).toEqual({ visitId: joined.visitId, seq: 1, playing: false });
+  client.place({ x: 200, y: 200 });
+  client.place({ x: 300, y: 250 });
+  await vi.advanceTimersByTimeAsync(50);
+  expect(transport.sent.some((entry) => entry.event === "player:position")).toBe(false);
+  work.reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(50);
+  const placed = pending("player:position");
+  expect(placed.body).toEqual({ visitId: joined.visitId, seq: 2, position: { x: 300, y: 250 } });
+  placed.reply(null, { ok: true });
+  client.place({ x: 400, y: 300 });
+  client.input({ kind: "play", seq: 1, movement: { x: 0, y: 0 } });
+  await vi.advanceTimersByTimeAsync(0);
+  client.input({
+    kind: "input", seq: 2, movement: { x: 0, y: 0 }, action: "melee",
+  });
+  expect(transport.sent.some((entry) => entry.event === "player:action")).toBe(false);
+  pending("player:mode").reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(100);
+  expect(pending("player:action").body).toMatchObject({ visitId: joined.visitId, action: "melee" });
+  expect(transport.sent.filter((entry) => entry.event === "player:position")).toHaveLength(1);
+});
 async function host(focused = false) {
   const playerId = randomUUID();
   const guestId = randomUUID();
@@ -206,6 +236,16 @@ it("ends once after bounded reconnect failure and rejects a different world on r
   pending("visit:resume").reply(null, { ...next.joined, worldId: randomUUID() });
   await vi.advanceTimersByTimeAsync(0);
   expect(next.ended).toHaveBeenCalledOnce();
+});
+
+it("keeps recovery frozen when the reconnecting server announces drag support", async () => {
+  const { receive } = await host();
+  transport.socket.connected = false;
+  transport.listeners.get("disconnect")?.("transport close");
+  const before = receive.mock.calls.length;
+  transport.listeners.get("server:features")?.({ workDrag: true });
+  expect(receive).toHaveBeenCalledTimes(before);
+  expect(transport.sent.some((entry) => entry.event === "player:mode")).toBe(false);
 });
 
 it("coalesces live drafts, clears them explicitly, and never replays offline text", async () => {

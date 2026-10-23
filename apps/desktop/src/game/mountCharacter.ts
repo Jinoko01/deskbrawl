@@ -19,7 +19,8 @@ import effectsImage from "../../../../packages/game-assets/effects/effects-v2.pn
 import propsAtlas from "../../../../packages/game-assets/props/props-v2.json";
 import propsImage from "../../../../packages/game-assets/props/props-v2.png";
 import { reportRendererFailure, watchReducedEffects } from "../native/overlay";
-import { CHARACTER_SIZE_PX, initialCharacterScene } from "./characterScene";
+import { initialCharacterScene } from "./characterScene";
+import { sceneLayout } from "./sceneLayout";
 import type { CharacterSceneSnapshot, CharacterSkin } from "./characterScene";
 import { createCharacterView } from "./characterView";
 import type { CharacterAnimations } from "./characterView";
@@ -277,11 +278,9 @@ export function mountCharacter(
     if (current === undefined) {
       return;
     }
-    const { width, height } = current.bounds;
-    const scale = Math.min(app.screen.width / width, app.screen.height / height);
-    const left = (app.screen.width - width * scale) / 2;
-    const top = (app.screen.height - height * scale) / 2;
-    const size = Math.min(CHARACTER_SIZE_PX, width / 2, height) * scale;
+    const {
+      scale, left, top, size,
+    } = sceneLayout(current.bounds, app.screen.width, app.screen.height);
     for (const frame of current.characters) {
       views.get(frame.id)?.view.layout(left + frame.position.x * scale, top + frame.position.y * scale, size);
       const caption = captions.get(frame.id);

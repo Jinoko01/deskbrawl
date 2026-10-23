@@ -3,5 +3,5 @@
   "identifier": "overlay",
   "description": "표시 전용 오버레이의 효과 설정·로컬 입력 수신과 렌더·준비 상태 보고를 허용합니다. 창 제어는 Rust가 담당합니다.",
   "windows": ["overlay"],
-  "permissions": ["allow-overlay-reduced-effects", "allow-overlay-renderer-failed", "allow-local-overlay-status", "allow-network-read", "core:event:allow-listen", "core:event:allow-unlisten"]
+  "permissions": ["allow-overlay-reduced-effects", "allow-overlay-renderer-failed", "allow-local-overlay-status", "allow-overlay-drag-regions", "allow-overlay-place", "allow-network-read", "core:event:allow-listen", "core:event:allow-unlisten"]
 }

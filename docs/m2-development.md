@@ -60,6 +60,9 @@ HP 지원 클라이언트는 Socket.IO 핸드셰이크의 `auth.health: true`로
 | `visit:leave` | client → server | 현재 `visitId`; 세션 종료 후 ack |
 | `player:input` | client → server | `visitId`, 단조 증가 `seq`, -1/0/1 이동 의도 |
 | `player:action` | client → server | `visitId`, UUID `actionId`, `melee`/`stone` |
+| `server:features` | server → client | 연결 시 `workDrag: true`로 WORK 위치 이동 지원 안내; 기존 클라이언트는 무시 |
+| `player:mode` | client → server | `visitId`, 단조 증가 `seq`, `playing`; WORK 진입 시 대기 이동·공격·위치 이동 취소 |
+| `player:position` | client → server | `visitId`, mode와 공유하는 `seq`, 월드 논리 `position`; WORK에서 본인 캐릭터 위치만 다음 tick에 적용 |
 | `world:snapshot` | server → room | 버전·room/world ID·tick·world·공개 참가자 정보·적용된 seq |
 | `room:closed` | server → room | 안전한 종료 오류 code |
 
@@ -70,6 +73,8 @@ DB 변경과 입장은 현재 단일 서버의 bounded 직렬 큐에서 순서�
 REST 조회는 TanStack Query, UI 폼은 로컬 React 상태, 고빈도 snapshot과 socket은 main의 게임 런타임이 소유한다. overlay는 제한된 IPC로 받은 상태만 표시한다. 세션/월드 전환은 기존 PLAY를 끝내고 눌린 키를 정리한다.
 
 ## 같은 LAN의 PC 두 대
+
+WORK 드래그는 `server:features`로 지원을 확인한 연결에서만 활성화한다. 서버는 세션·본인 멤버십·WORK 상태·기절 여부·월드 경계를 검사하고, 한 tick의 위치 요청은 마지막 값 하나로 합친다. PLAY 전환·집중 모드·연결 단절·재연결은 예약된 위치를 취소한다. 기존 서버에서는 이동·전투를 유지하되 멀티플레이 드래그는 제공하지 않는다.
 
 한 PC에서만 서버와 DB를 실행한다. 두 앱 모두 같은 서버의 내부 IP를 사용한다. 예를 들어 `http://192.168.0.10:3000`을 쓸 때 서버 `.env`의 `PUBLIC_ORIGIN`을 해당 값으로 바꾼다. DB 포트는 공유하지 않고 필요한 서버 포트만 Windows 방화벽에서 허용한다.
 

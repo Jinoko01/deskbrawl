@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory)][int]$AppProcessId,
-    [ValidateSet('state', 'show', 'hide', 'effects', 'exit', 'play', 'play-tray', 'home', 'focus', 'copy', 'close-home', 'minimize-home', 'assert-exited')][string]$Action = 'state'
+    [ValidateSet('state', 'show', 'hide', 'effects', 'exit', 'play', 'play-tray', 'home', 'focus', 'copy', 'close-home', 'minimize-home', 'assert-exited', 'drag')][string]$Action = 'state',
+    [int]$FromX, [int]$FromY, [int]$ToX, [int]$ToY,
+    [switch]$Relative
 )
 . "$PSScriptRoot/test-window-lifecycle.ps1" -HelpersOnly
 if ($Action -eq 'assert-exited') {
@@ -12,6 +14,36 @@ if ($Action -eq 'assert-exited') {
 $app = Get-Process -Id $AppProcessId
 $overlay = [DeskBrawl.WindowTest]::Find($app.Id, 'DeskBrawl Overlay')
 $main = [DeskBrawl.WindowTest]::Find($app.Id, 'DeskBrawl')
+if ($Action -eq 'drag') {
+    Assert ($overlay -ne [IntPtr]::Zero -and [DeskBrawl.WindowTest]::IsWindowVisible($overlay)) 'Owned test overlay must be visible.'
+    $previousDpi = [DeskBrawl.WindowTest]::SetThreadDpiAwarenessContext([IntPtr](-4))
+    $cursor = New-Object DeskBrawl.WindowTest+Point
+    [void][DeskBrawl.WindowTest]::GetCursorPos([ref]$cursor)
+    try {
+        [void][DeskBrawl.WindowTest]::SetCursorPos($FromX, $FromY)
+        [DeskBrawl.WindowTest]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 40
+        if ($Relative) {
+            # Relative hardware-style moves must accumulate while the button is held.
+            # A single SetCursorPos jump misses hooks that freeze the Windows cursor.
+            for ($step = 0; $step -lt 12; $step++) {
+                [DeskBrawl.WindowTest]::mouse_event(1, [uint32][Math]::Round(($ToX - $FromX) / 12), [uint32][Math]::Round(($ToY - $FromY) / 12), 0, [UIntPtr]::Zero)
+                Start-Sleep -Milliseconds 25
+            }
+            $end = New-Object DeskBrawl.WindowTest+Point
+            [void][DeskBrawl.WindowTest]::GetCursorPos([ref]$end)
+            @{ x = $end.X; y = $end.Y } | ConvertTo-Json -Compress
+        } else {
+            [void][DeskBrawl.WindowTest]::SetCursorPos($ToX, $ToY)
+            Start-Sleep -Milliseconds 40
+        }
+    } finally {
+        [DeskBrawl.WindowTest]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+        [void][DeskBrawl.WindowTest]::SetCursorPos($cursor.X, $cursor.Y)
+        [void][DeskBrawl.WindowTest]::SetThreadDpiAwarenessContext($previousDpi)
+    }
+    return
+}
 if ($Action -eq 'state') {
     @{ visible = $overlay -ne [IntPtr]::Zero -and [DeskBrawl.WindowTest]::IsWindowVisible($overlay)
        coversPrimary = $overlay -ne [IntPtr]::Zero -and [DeskBrawl.WindowTest]::CoversPrimaryMonitor($overlay)

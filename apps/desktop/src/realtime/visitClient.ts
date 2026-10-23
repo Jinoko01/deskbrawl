@@ -11,12 +11,14 @@ import {
   PROTOCOL_VERSION,
   roomProfilesSchema,
   playerProfileSchema,
+  serverFeaturesSchema,
 } from "@deskbrawl/protocol";
 import type {
   CharacterSkin, Joined, PlayerProfile, Session, Snapshot,
 } from "@deskbrawl/protocol";
 import type { LocalCommand } from "../native/localGame";
 import { SERVER_ORIGIN } from "../api/rooms";
+import type { PlayerAction, Vector2 } from "@deskbrawl/game-core";
 
 export function createVisitClient(session: Session, onSnapshot: (snapshot: Snapshot) => void, onEnded: (message: string) => void,
   onRecovery: (state: "reconnecting" | "recovered") => void = () => { /* Optional outside the desktop session. */ }) {
@@ -49,6 +51,14 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
   let rateLimitedUntil = 0;
   let movementPending = false;
   let lastMovement: LocalCommand["movement"] | undefined;
+  let supportsPlacement = false;
+  let working: boolean | undefined;
+  let controlSequence = 0;
+  let modePending = false;
+  let modeQueue = Promise.resolve();
+  let pendingPosition: Vector2 | undefined;
+  let placementPending = false;
+  let pendingAction: PlayerAction | undefined;
   const actionSentAt = { melee: -Infinity, stone: -Infinity };
   function receive(snapshot: Snapshot): void {
     const enriched = {
@@ -104,6 +114,15 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     }
     receive(result.data);
   });
+  socket.on("server:features", (body: unknown) => {
+    if (serverFeaturesSchema.safeParse(body).success) {
+      supportsPlacement = true;
+      if (membership !== undefined && !recovering) {
+        setMode(false);
+        receive(membership.snapshot);
+      }
+    }
+  });
   socket.on("room:profiles", (body: unknown) => {
     const result = roomProfilesSchema.safeParse(body);
     if (!result.success || result.data.worldId !== membership?.worldId || result.data.roomId !== membership.roomId) {
@@ -133,6 +152,9 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       return;
     }
     pauseInput();
+    supportsPlacement = false;
+    modePending = false;
+    placementPending = false;
     draft = undefined;
     sendingChat = false;
     restoring = false;
@@ -167,6 +189,10 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       movement = { x: 0, y: 0 };
       paused = focused;
       recovering = false;
+      controlSequence = 0;
+      modeQueue = Promise.resolve();
+      working = undefined;
+      setMode(false);
       receive(result.snapshot);
       onRecovery("recovered");
       if (selectedSkin !== undefined) {
@@ -214,7 +240,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     }
   }
   function sendMovement(): void {
-    if (membership === undefined || !socket.connected || paused || movementPending || performance.now() < rateLimitedUntil) {
+    if (membership === undefined || !socket.connected || paused || working === true || modePending || movementPending || performance.now() < rateLimitedUntil) {
       return;
     }
     if (movement.x === 0 && movement.y === 0 && lastMovement?.x === 0 && lastMovement.y === 0) {
@@ -238,6 +264,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     });
   }
   function pauseInput(): void {
+    setMode(false);
     paused = true;
     inputEpoch++;
     movement = { x: 0, y: 0 };
@@ -245,6 +272,26 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     lastMovement = undefined;
   }
   function refresh(): void {
+    if (pendingPosition !== undefined && membership !== undefined && working === true && !modePending
+      && !placementPending && !paused && !recovering && socket.connected && performance.now() >= rateLimitedUntil) {
+      const position = pendingPosition;
+      pendingPosition = undefined;
+      const epoch = inputEpoch;
+      placementPending = true;
+      void acknowledge("player:position", { visitId: membership.visitId, seq: ++controlSequence, position })
+        .then((body) => {
+          const result = commandAckSchema.parse(body);
+          if (!result.ok && !["INVALID_INPUT", "ROOM_UNAVAILABLE", "RATE_LIMITED"].includes(result.code)) {
+            throw new Error(ERROR_MESSAGES[result.code]);
+          }
+        }).catch((error: unknown) => {
+          if (epoch === inputEpoch) {
+            fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+          }
+        }).finally(() => {
+          placementPending = false;
+        });
+    }
     sendMovement();
     if (membership === undefined || !socket.connected || paused || recovering || sendingChat || draft === undefined || performance.now() < rateLimitedUntil) {
       return;
@@ -267,6 +314,55 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       throw new Error(ERROR_MESSAGES.UNAUTHORIZED);
     }
     return { visitId: membership.visitId, commandId: crypto.randomUUID() };
+  }
+  function setMode(playing: boolean): void {
+    pendingPosition = undefined;
+    pendingAction = undefined;
+    if (!supportsPlacement || membership === undefined || recovering || disposed || !socket.connected) {
+      return;
+    }
+    working = !playing;
+    const seq = ++controlSequence;
+    const visitId = membership.visitId;
+    const epoch = inputEpoch;
+    modePending = true;
+    modeQueue = modeQueue.then(() => command("player:mode", { visitId, seq, playing })).catch((error: unknown) => {
+      if (epoch === inputEpoch) {
+        fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+      }
+    }).finally(() => {
+      if (seq === controlSequence) {
+        modePending = false;
+        flushAction();
+      }
+    });
+  }
+  function flushAction(): void {
+    if (pendingAction === undefined || modePending) {
+      return;
+    }
+    const action = pendingAction;
+    pendingAction = undefined;
+    if (membership === undefined || working === true || paused || recovering || !socket.connected) {
+      return;
+    }
+    const now = performance.now();
+    const combat = membership.snapshot.world.rules.combat;
+    const cooldownMs = action === "melee" ? combat?.meleeCooldownMs : combat?.stoneCooldownMs;
+    if (now < rateLimitedUntil || now - actionSentAt[action] < (cooldownMs ?? 200)) {
+      return;
+    }
+    actionSentAt[action] = now;
+    if (movement.x !== lastMovement?.x || movement.y !== lastMovement.y) {
+      sendMovement();
+    }
+    const epoch = inputEpoch;
+    void command("player:action", { visitId: membership.visitId, actionId: crypto.randomUUID(), action }, true)
+      .catch((error: unknown) => {
+        if (epoch === inputEpoch) {
+          fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+        }
+      });
   }
   async function setProfile(profile: PlayerProfile): Promise<void> {
     if (membership === undefined || disposed || recovering) {
@@ -308,9 +404,13 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       actionSentAt.melee = -Infinity;
       actionSentAt.stone = -Infinity;
       sequence = 0;
+      controlSequence = 0;
+      modeQueue = Promise.resolve();
+      working = undefined;
       movement = { x: 0, y: 0 };
       focused = "focused" in request && request.focused === true;
       paused = focused;
+      setMode(false);
       receive(result.snapshot);
       if (timer !== undefined) {
         clearInterval(timer);
@@ -323,28 +423,18 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         return;
       }
       movement = input.kind === "input" ? input.movement : { x: 0, y: 0 };
+      if (input.kind === "play" || input.kind === "work") {
+        setMode(input.kind === "play");
+      }
       // A focus loss must reach the server immediately; held input is refreshed by the 20 Hz timer.
       if (input.kind === "work") {
         sendMovement();
       }
       if (input.kind === "input" && input.action !== undefined) {
-        const now = performance.now();
-        const combat = membership.snapshot.world.rules.combat;
-        const cooldownMs = input.action === "melee" ? combat?.meleeCooldownMs : combat?.stoneCooldownMs;
-        if (now < rateLimitedUntil || now - actionSentAt[input.action] < (cooldownMs ?? 200)) {
-          return;
+        if (working !== true) {
+          pendingAction = input.action;
+          flushAction();
         }
-        actionSentAt[input.action] = now;
-        if (movement.x !== lastMovement?.x || movement.y !== lastMovement.y) {
-          sendMovement();
-        }
-        const epoch = inputEpoch;
-        void command("player:action", { visitId: membership.visitId, actionId: crypto.randomUUID(), action: input.action }, true)
-          .catch((error: unknown) => {
-            if (epoch === inputEpoch) {
-              fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
-            }
-          });
       }
     },
     async leave(): Promise<void> {
@@ -363,6 +453,12 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       membership = undefined;
     },
     playerId: (): string | undefined => membership?.playerId,
+    canPlace: (): boolean => supportsPlacement,
+    place(position: Vector2): void {
+      if (supportsPlacement && working === true && !paused && !recovering && Number.isFinite(position.x) && Number.isFinite(position.y)) {
+        pendingPosition = { ...position };
+      }
+    },
     chat(current: string, previous: string): void {
       if (disposed || membership === undefined || recovering || !socket.connected) {
         return;

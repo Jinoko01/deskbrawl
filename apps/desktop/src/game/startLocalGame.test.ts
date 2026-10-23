@@ -8,6 +8,7 @@ import type { Bridge, Snapshot } from "@deskbrawl/protocol";
 import type { LocalCommand } from "../native/localGame";
 import { startLocalGame } from "./startLocalGame";
 import type { CharacterSceneSnapshot } from "./characterScene";
+import type { CharacterDrag } from "../native/drag";
 
 const bridge = vi.hoisted(() => ({
   receive: undefined as ((state: Bridge) => void) | undefined,
@@ -16,6 +17,18 @@ const bridge = vi.hoisted(() => ({
   stopCommands: vi.fn(),
   skin: undefined as ((skin: "mochi" | "mint") => void) | undefined,
   stopSkin: vi.fn(),
+  drag: undefined as ((drag: CharacterDrag) => void) | undefined,
+  stopDrag: vi.fn(),
+  place: vi.fn(() => Promise.resolve()),
+  regions: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("../native/drag", () => ({
+  publishDragRegions: bridge.regions,
+  placeNetworkCharacter: bridge.place,
+  watchCharacterDrag: vi.fn((receive: (drag: CharacterDrag) => void) => {
+    bridge.drag = receive;
+    return Promise.resolve(bridge.stopDrag);
+  }),
 }));
 vi.mock("./characterPreference", () => ({
   watchCharacterSkin: vi.fn((receive: (skin: "mochi" | "mint") => void) => {
@@ -42,12 +55,87 @@ let stop: (() => void) | undefined;
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: false }));
+  vi.stubGlobal("window", new EventTarget());
   vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   bridge.receive = undefined;
   bridge.command = undefined;
   bridge.skin = undefined;
+  bridge.drag = undefined;
   vi.clearAllMocks();
+});
+
+it("drags local characters only in WORK, clamps the world edges and clears regions on disposal", async () => {
+  const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, dispose: vi.fn() }, vi.fn());
+  await vi.waitFor(() => expect(bridge.drag).toBeTypeOf("function"));
+  const first = update.mock.lastCall?.[0].characters[0];
+  if (first === undefined) {
+    throw new Error("Missing local character");
+  }
+  bridge.drag?.({
+    id: first.id, dx: 0, dy: 0, phase: "start",
+  });
+  bridge.drag?.({
+    id: first.id, dx: 100, dy: 50, phase: "end",
+  });
+  expect(update.mock.lastCall?.[0].characters[0]?.position).toEqual({ x: first.position.x + 100, y: first.position.y + 50 });
+  bridge.command?.({ kind: "play", seq: 1, movement: { x: 0, y: 0 } });
+  const before = update.mock.lastCall?.[0];
+  bridge.drag?.({
+    id: first.id, dx: 0, dy: 0, phase: "start",
+  });
+  bridge.drag?.({
+    id: first.id, dx: 100, dy: 50, phase: "end",
+  });
+  expect(update.mock.lastCall?.[0]).toEqual(before);
+  bridge.command?.("stop");
+  bridge.drag?.({
+    id: first.id, dx: 0, dy: 0, phase: "start",
+  });
+  bridge.drag?.({
+    id: first.id, dx: -10000, dy: 10000, phase: "end",
+  });
+  expect(update.mock.lastCall?.[0].characters[0]?.position).toEqual({ x: 24, y: 696 });
+  stop();
+  stop = undefined;
+  await Promise.resolve();
+  expect(bridge.stopDrag).toHaveBeenCalledOnce();
+  expect(bridge.regions).toHaveBeenLastCalledWith([]);
+});
+
+it("maps scaled remote drag deltas to the owned character and rejects other players and recovery", async () => {
+  const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+  stop = startLocalGame({ clientWidth: 960, clientHeight: 540 } as HTMLElement, { update, dispose: vi.fn() }, vi.fn());
+  await vi.waitFor(() => expect(bridge.receive).toBeTypeOf("function"));
+  const remote = snapshot();
+  const own = remote.world.players[1];
+  if (own === undefined) {
+    throw new Error("Missing remote player");
+  }
+  bridge.receive?.({ mode: "guest", snapshot: remote, playerId: own.id });
+  bridge.drag?.({
+    id: remote.world.players[0]?.id ?? "other", dx: 0, dy: 0, phase: "start",
+  });
+  bridge.drag?.({
+    id: remote.world.players[0]?.id ?? "other", dx: 20, dy: 10, phase: "end",
+  });
+  expect(bridge.place).not.toHaveBeenCalled();
+  bridge.drag?.({
+    id: own.id, dx: 0, dy: 0, phase: "start",
+  });
+  bridge.drag?.({
+    id: own.id, dx: 20, dy: 10, phase: "end",
+  });
+  expect(bridge.place).toHaveBeenLastCalledWith(own.id, { x: own.position.x + 40, y: own.position.y + 20 });
+  bridge.receive?.({ mode: "recovering", snapshot: remote });
+  bridge.drag?.({
+    id: own.id, dx: 0, dy: 0, phase: "start",
+  });
+  bridge.drag?.({
+    id: own.id, dx: 20, dy: 10, phase: "end",
+  });
+  expect(bridge.place).toHaveBeenCalledTimes(1);
 });
 afterEach(() => {
   stop?.();

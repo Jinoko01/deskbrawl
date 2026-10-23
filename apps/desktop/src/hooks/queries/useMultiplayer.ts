@@ -29,6 +29,7 @@ import {
   watchInvites,
 } from "../../native/network";
 import type { LocalCommand } from "../../native/localGame";
+import { watchCharacterPlacement } from "../../native/drag";
 import { createVisitClient } from "../../realtime/visitClient";
 import type { VisitClient } from "../../realtime/visitClient";
 import { openChat, watchChat, watchChatRequest } from "../../native/chat";
@@ -101,7 +102,8 @@ export function useMultiplayer() {
       listener(snapshot);
     }
     setView((previous) => JSON.stringify(previous.members) === JSON.stringify(snapshot.members) ? previous : { ...previous, members: snapshot.members });
-    void publishNetwork({ mode: mode.current, snapshot }).catch((error: unknown) => report(error));
+    const playerId = client.current?.canPlace() ? client.current.playerId() : undefined;
+    void publishNetwork({ mode: mode.current, snapshot, ...(playerId === undefined ? {} : { playerId }) }).catch((error: unknown) => report(error));
   }
   async function authenticate(nickname: string): Promise<Session> {
     if (session.current !== undefined && session.current.expiresAt - Date.now() > SESSION_REUSE_MARGIN_MS) {
@@ -393,7 +395,7 @@ export function useMultiplayer() {
     let stopFocus: (() => void) | undefined;
     const chatStops: (() => void)[] = [];
     void (async () => {
-      for (const watch of [watchChatRequest(chatRequested), watchChat(chatChanged)]) {
+      for (const watch of [watchChatRequest(chatRequested), watchChat(chatChanged), watchCharacterPlacement((position) => client.current?.place(position))]) {
         const unwatch = await watch;
         if (active) {
           chatStops.push(unwatch);

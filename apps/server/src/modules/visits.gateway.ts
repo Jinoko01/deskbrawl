@@ -11,6 +11,8 @@ import {
   leaveSchema,
   playerActionSchema,
   playerChatSchema,
+  playerModeSchema,
+  playerPositionSchema,
   focusSchema,
   kickSchema,
   clearVisitorsSchema,
@@ -52,6 +54,9 @@ export class VisitsGateway
   ) {}
 
   afterInit(server: Server): void {
+    server.on('connection', (socket) =>
+      socket.emit('server:features', { workDrag: true }),
+    );
     this.sessions.engine.onSnapshot = (room) => {
       this.sessions.engine.expireChats(room, Date.now());
       this.publishSnapshot(room);
@@ -228,6 +233,38 @@ export class VisitsGateway
       const command = playerChatSchema.parse(body);
       const { room, member } = this.sessions.find(socket.id);
       this.sessions.engine.chat(room, member, command, Date.now());
+      return { ok: true as const };
+    });
+  }
+
+  @SubscribeMessage('player:mode')
+  playerMode(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof commandAckSchema>> {
+    return this.command(socket, 20, 'mode', () => {
+      const input = playerModeSchema.parse(body);
+      const { room, member } = this.sessions.find(socket.id);
+      if (input.visitId !== member.visitId) {
+        throw new DomainError('SESSION_ENDED');
+      }
+      this.sessions.engine.setMode(room, member, input.seq, input.playing);
+      return { ok: true as const };
+    });
+  }
+
+  @SubscribeMessage('player:position')
+  playerPosition(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof commandAckSchema>> {
+    return this.command(socket, 40, 'position', () => {
+      const input = playerPositionSchema.parse(body);
+      const { room, member } = this.sessions.find(socket.id);
+      if (input.visitId !== member.visitId) {
+        throw new DomainError('SESSION_ENDED');
+      }
+      this.sessions.engine.place(room, member, input.seq, input.position);
       return { ok: true as const };
     });
   }

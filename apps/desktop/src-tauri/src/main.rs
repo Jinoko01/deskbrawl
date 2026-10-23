@@ -5,7 +5,10 @@ use tauri::{Manager, WindowEvent};
 mod chat;
 mod clipboard;
 mod controls;
+mod drag;
 mod local_game;
+#[cfg(windows)]
+mod native_drag;
 #[cfg(windows)]
 mod native_keyboard;
 #[cfg(windows)]
@@ -41,6 +44,8 @@ fn main() -> tauri::Result<()> {
             local_game::local_available,
             local_game::local_control,
             local_game::local_overlay_status,
+            drag::overlay_drag_regions,
+            drag::overlay_place,
             controls::local_controls,
             controls::local_set_controls,
             network::network_publish,
@@ -54,6 +59,9 @@ fn main() -> tauri::Result<()> {
             app.manage(network::NetworkState::default());
             app.manage(controls::ControlState::default());
             app.manage(chat::ChatState::default());
+            app.manage(drag::DragRegions::default());
+            #[cfg(windows)]
+            native_drag::start(app.handle())?;
             #[cfg(windows)]
             if let Some(main) = app.get_webview_window("main") {
                 native_windows::watch_play_hotkey(&main.as_ref().window())?;

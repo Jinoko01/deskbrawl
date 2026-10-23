@@ -106,7 +106,12 @@ async function findOverlay(exclude) {
     return target;
   }, "Overlay WebView target not found");
   const client = await connect(target);
-  await until(() => client.evaluate("!!document.querySelector('canvas')"), "Native WebView did not render the character");
+  try {
+    await until(() => client.evaluate("!!document.querySelector('canvas')"), "Native WebView did not render the character");
+  } catch (error) {
+    const details = await client.evaluate("({url:location.href, state:document.readyState, text:document.body?.innerText, scripts:[...document.scripts].map(script=>script.src)})");
+    throw new Error(`${error.message}; ${JSON.stringify(details)}`);
+  }
   return client;
 }
 
@@ -129,6 +134,43 @@ async function key(main, code, key, down) {
 }
 
 async function testLocalGame(main) {
+  await overlay.rpc("Page.enable");
+  await overlay.rpc("Page.addScriptToEvaluateOnNewDocument", { runImmediately: true, source: `
+    globalThis.__PIXI_APP_INIT__ = app => { window.__testPixiApp = app; };
+    Object.defineProperty(window, '__testDragRegions', { get() {
+      return (window.__testPixiApp?.stage.children ?? []).filter(child => child.label.startsWith('character:')).map(child => {
+        const size = child.children[0].texture.orig.height * Math.abs(child.children[0].scale.y);
+        return [child.label.slice(10), child.x-size/2, child.y-size/2, child.x+size/2, child.y+size/2];
+      });
+    }});
+  ` });
+  await overlay.rpc("Page.reload");
+  try {
+    await until(() => overlay.evaluate("window.__testDragRegions?.length === 2"), "WORK characters did not render");
+  } catch (error) {
+    const details = await overlay.evaluate("({url:location.href,hook:typeof globalThis.__PIXI_APP_INIT__,app:!!window.__testPixiApp,labels:window.__testPixiApp?.stage?.children?.map(child=>child.label),canvas:!!document.querySelector('canvas'),text:document.body.innerText,invoke:Object.getOwnPropertyDescriptor(window.__TAURI_INTERNALS__,'invoke')})");
+    throw new Error(`${error.message}; ${JSON.stringify(details)}`);
+  }
+  await until(() => main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), "Local overlay subscriptions did not become ready");
+  const region = await overlay.evaluate("window.__testDragRegions[1]");
+  const dpi = await overlay.evaluate("devicePixelRatio");
+  const x = (region[1] + region[3]) / 2;
+  const y = (region[2] + region[4]) / 2;
+  const foregroundBeforeDrag = control("state").foreground;
+  const cursor = JSON.parse(execFileSync("pwsh", ["-NoProfile", "-File", controller, "-AppProcessId", String(app.pid), "-Action", "drag", "-Relative",
+    "-FromX", String(Math.round(x * dpi)), "-FromY", String(Math.round(y * dpi)),
+    "-ToX", String(Math.round((x + 100) * dpi)), "-ToY", String(Math.round((y + 60) * dpi))], { windowsHide: true, encoding: "utf8" }));
+  const draggedX = cursor.x / dpi;
+  const draggedY = cursor.y / dpi;
+  assert.ok(draggedX - x > 50, `Relative mouse moves must accumulate during WORK drag: ${draggedX - x}px`);
+  await until(() => overlay.evaluate(`window.__testDragRegions.some(r => r[0] === ${JSON.stringify(region[0])} && Math.abs((r[1]+r[3])/2 - ${draggedX}) < 2 && Math.abs((r[2]+r[4])/2 - ${draggedY}) < 2)`), "Native WORK drag did not update the character position");
+  assert.equal(control("state").foreground, foregroundBeforeDrag, "Dragging must preserve foreground");
+  // Restore the fixture positions before the existing melee-range checks.
+  execFileSync("pwsh", ["-NoProfile", "-File", controller, "-AppProcessId", String(app.pid), "-Action", "drag",
+    "-FromX", String(cursor.x), "-FromY", String(cursor.y),
+    "-ToX", String(Math.round(x * dpi)), "-ToY", String(Math.round(y * dpi))], { windowsHide: true });
+  await until(() => overlay.evaluate(`window.__testDragRegions.some(r => r[0] === ${JSON.stringify(region[0])} && Math.abs((r[1]+r[3])/2 - ${x}) < 2)`), "WORK drag did not restore the fixture");
+  console.log("PASS: native WORK dragging and DPI conversion preserve foreground without activating overlay");
   await until(() => main.evaluate("document.body.textContent.includes('조작키 설정')"), "Saved controls did not finish loading");
   for (const [skin, name] of Object.entries(CHARACTER_NAMES)) {
     await selectCharacter(main, skin);
@@ -177,6 +219,13 @@ async function testLocalGame(main) {
   }
   assert.equal(failure, "", "Local play failed");
   await until(() => overlay.evaluate("document.querySelector('[aria-label=\"현재 모드\"]')?.textContent?.trim() === 'PLAY'"), "Overlay badge did not show PLAY");
+  assert.equal(await overlay.evaluate("document.querySelector('.play-glow')?.dataset.playing"), "true");
+  assert.equal(await overlay.evaluate("getComputedStyle(document.querySelector('.play-glow')).pointerEvents"), "none");
+  await overlay.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  assert.equal(await overlay.evaluate("getComputedStyle(document.querySelector('.play-glow')).animationName"), "none");
+  const glowImage = await overlay.rpc("Page.captureScreenshot", { format: "png" });
+  writeFileSync(join(profileRoot, "play-mode-glow.png"), Buffer.from(glowImage.data, "base64"));
+  await overlay.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   assert.equal(control("state").foreground, foreground, "PLAY must preserve the foreground window");
   await gameKey(3, true);
   // A defined 150 ms held-key input closes the initial 144-unit gap into melee
@@ -194,7 +243,8 @@ async function testLocalGame(main) {
   await key(main, "Escape", "Escape", true);
   await key(main, "Escape", "Escape", false);
   await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Escape did not return to WORK");
-  await until(() => overlay.evaluate("document.querySelector('[aria-label=\"현재 모드\"]')?.textContent?.trim() === 'WORK'"), "Overlay badge did not return to WORK");
+  await until(() => overlay.evaluate("document.querySelector('.mode-badge')?.dataset.mode === 'work'"), "Overlay badge did not return to WORK");
+  assert.equal(await overlay.evaluate("document.querySelector('.play-glow')?.dataset.playing"), "false");
   control("play");
   await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Ctrl+Shift+G did not enter PLAY again");
   control("play");

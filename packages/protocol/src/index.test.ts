@@ -1,9 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { characterSkinSchema, playerProfileSchema, roomProfilesSchema } from "./index";
+import { playerModeSchema, playerPositionSchema } from "./index";
 import { chatSchema, playerChatSchema, bridgeSchema, resumeSchema, roomSchema, snapshotSchema, worldSchema, clearVisitorsSchema, focusSchema, hostSchema, inputSchema, joinSchema, kickSchema, parseInviteLink, playerActionSchema } from "./index";
 
 const token = "a".repeat(43);
 const visitId = "123e4567-e89b-42d3-a456-426614174000";
+
+it("validates WORK placement and mode changes without accepting a target player or invalid coordinates", () => {
+  expect(playerModeSchema.parse({ visitId, seq: 1, playing: false }).playing).toBe(false);
+  expect(playerPositionSchema.parse({ visitId, seq: 2, position: { x: 100, y: 200 } }).position).toEqual({ x: 100, y: 200 });
+  for (const extra of [{ playerId: visitId }, { targetPlayerId: visitId }]) {
+    expect(playerPositionSchema.safeParse({ visitId, seq: 1, position: { x: 100, y: 200 }, ...extra }).success).toBe(false);
+  }
+  for (const value of [NaN, Infinity, "100", 100001]) {
+    expect(playerPositionSchema.safeParse({ visitId, seq: 1, position: { x: value, y: 200 } }).success).toBe(false);
+  }
+  expect(playerModeSchema.safeParse({ visitId, seq: 0, playing: "false" }).success).toBe(false);
+});
 
 it("validates profile edits and room-scoped character selections", () => {
   expect(characterSkinSchema.options).toHaveLength(8);

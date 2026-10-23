@@ -187,6 +187,11 @@ export class VisitSessionService {
         member.movement = { x: 0, y: 0 };
         member.action = undefined;
         member.seq = 0;
+        member.controlSeq = 0;
+        member.pendingPosition = undefined;
+        if (member.working !== undefined) {
+          member.working = true;
+        }
         member.chatSeq = 0;
         member.appliedSeq = 0;
         member.inputAtTick = room.world.tick;
@@ -234,6 +239,10 @@ export class VisitSessionService {
     found.member.disconnectExpiresAt = Date.now() + 10_000;
     found.member.movement = { x: 0, y: 0 };
     found.member.action = undefined;
+    found.member.pendingPosition = undefined;
+    if (found.member.working !== undefined) {
+      found.member.working = true;
+    }
   }
 
   expireDisconnected(

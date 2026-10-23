@@ -50,6 +50,9 @@ export const inputSchema = leaveSchema.extend({ seq: tick.min(1), movement: move
 export const playerChatSchema = leaveSchema.extend({ seq: tick.min(1), current: z.string().max(50), previous: z.string().max(50) });
 export const chatSchema = z.object({ playerId: idSchema, current: z.string().max(50), previous: z.string().max(50), updatedAt: tick }).strict();
 export const playerActionSchema = leaveSchema.extend({ actionId: idSchema, action: actionSchema });
+export const playerModeSchema = leaveSchema.extend({ seq: tick.min(1), playing: z.boolean() });
+export const playerPositionSchema = leaveSchema.extend({ seq: tick.min(1), position: vector });
+export const serverFeaturesSchema = z.object({ workDrag: z.literal(true) }).strict();
 const positive = z.number().finite().positive().max(100_000);
 const combat = z.object({ meleeReach: positive, meleeCooldownMs: positive, stoneCooldownMs: positive,
   stoneSpeedUnitsPerSecond: positive, stoneRadius: positive, stoneLifetimeMs: positive,
@@ -70,7 +73,7 @@ export const joinedSchema = z.object({ ok: z.literal(true), roomId: idSchema, wo
   playerId: idSchema, resumeToken: tokenSchema, role: z.enum(["host", "guest"]), snapshot: snapshotSchema }).strict();
 export const joinedAckSchema = z.union([joinedSchema, errorSchema]);
 export const commandAckSchema = z.union([okSchema, errorSchema]);
-export const bridgeSchema = z.object({ mode: z.enum(["local", "host", "guest", "recovering", "offline"]), snapshot: snapshotSchema.nullable() }).strict();
+export const bridgeSchema = z.object({ mode: z.enum(["local", "host", "guest", "recovering", "offline"]), snapshot: snapshotSchema.nullable(), playerId: idSchema.optional() }).strict();
 export type Snapshot = z.infer<typeof snapshotSchema>;
 export type Joined = z.infer<typeof joinedSchema>;
 export type Input = z.infer<typeof inputSchema>;

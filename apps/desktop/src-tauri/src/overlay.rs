@@ -425,6 +425,9 @@ pub fn display_changed(app: &AppHandle) -> bool {
 // WebView2 creation and synchronous getters must not block the Windows event loop.
 // Only workers take this lock; UI callbacks update intent without waiting for it.
 fn dispatch(app: &AppHandle, intent: u8) {
+    if intent != VISIBLE {
+        crate::drag::clear(app);
+    }
     let control = app.state::<Control>();
     if control.intent.load(Ordering::SeqCst) == EXITING {
         return;
@@ -490,6 +493,7 @@ fn request_show(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn request_hide(app: &AppHandle) -> tauri::Result<()> {
+    crate::drag::clear(app);
     crate::chat::dismiss(app);
     crate::local_game::on_overlay_visibility(app, false);
     if let Some(window) = app.get_webview_window("overlay") {
@@ -508,6 +512,7 @@ fn handle(app: &AppHandle, result: tauri::Result<()>) {
         return;
     }
     if let Err(error) = result {
+        crate::drag::clear(app);
         app.state::<Control>()
             .intent
             .store(SUSPENDED, Ordering::SeqCst);
@@ -566,6 +571,9 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
 }
 
 pub fn shutdown(app: &AppHandle) {
+    crate::drag::clear(app);
+    #[cfg(windows)]
+    crate::native_drag::stop();
     if let Some(control) = app.try_state::<Control>() {
         control.intent.store(EXITING, Ordering::SeqCst);
     }

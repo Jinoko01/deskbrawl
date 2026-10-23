@@ -44,7 +44,14 @@ pub fn network_publish(window: WebviewWindow, request: Request<'_>) -> Result<()
         .get("mode")
         .and_then(|v| v.as_str())
         .ok_or("INVALID_NETWORK_STATE")?;
-    if fields.len() != 2 || !matches!(mode, "local" | "host" | "guest" | "offline" | "recovering") {
+    if fields
+        .keys()
+        .any(|key| !matches!(key.as_str(), "mode" | "snapshot" | "playerId"))
+        || fields
+            .get("playerId")
+            .is_some_and(|id| id.as_str().is_none_or(|id| id.len() != 36))
+        || !matches!(mode, "local" | "host" | "guest" | "offline" | "recovering")
+    {
         return Err("INVALID_NETWORK_STATE");
     }
     let snapshot = fields.get("snapshot").ok_or("INVALID_NETWORK_STATE")?;
@@ -82,6 +89,7 @@ pub fn network_publish(window: WebviewWindow, request: Request<'_>) -> Result<()
         changed
     };
     if changed {
+        crate::drag::clear(window.app_handle());
         crate::chat::dismiss(window.app_handle());
         crate::local_game::end_play(window.app_handle());
     }

@@ -1,5 +1,7 @@
 import { advance, createWorld, DEFAULT_COMBAT } from "@deskbrawl/game-core";
-import type { PlayerAction, PlayerInput, WorldState } from "@deskbrawl/game-core";
+import type {
+  PlayerAction, PlayerInput, Vector2, WorldState,
+} from "@deskbrawl/game-core";
 import type { LocalCommand } from "../native/localGame";
 import type { CharacterMotion, CharacterSceneSnapshot, CharacterSkin } from "./characterScene";
 import { initialCharacterScene, sameCharacterScene } from "./characterScene";
@@ -80,6 +82,26 @@ export function createLocalGame(width: number, height: number, render: (snapshot
     },
     get playing(): boolean {
       return playing;
+    },
+    place(playerId: string, position: Vector2): void {
+      if (playing || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+        return;
+      }
+      const before = world;
+      const radius = world.rules.playerRadius;
+      world = {
+        ...world,
+        players: world.players.map((player) => player.id === playerId && world.tick >= player.stunnedUntilTick
+          ? {
+              ...player,
+              position: {
+                x: Math.max(radius, Math.min(world.bounds.width - radius, position.x)),
+                y: Math.max(radius, Math.min(world.bounds.height - radius, position.y)),
+              },
+            }
+          : player),
+      };
+      publish(before);
     },
     setSkin(next: CharacterSkin): void {
       skin = next;

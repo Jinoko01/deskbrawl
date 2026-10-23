@@ -2,6 +2,7 @@ import type {
   PlayerInput,
   WorldBounds,
   WorldState,
+  Vector2,
 } from '@deskbrawl/game-core';
 import { advance, createWorld, DEFAULT_COMBAT } from '@deskbrawl/game-core';
 import type {
@@ -39,6 +40,9 @@ export interface Member {
   action: PlayerInput['action'];
   actionIds: string[];
   chatSeq: number;
+  working?: boolean;
+  controlSeq?: number;
+  pendingPosition?: Vector2 | undefined;
 }
 export interface RoomWorld {
   roomId: string;
@@ -179,7 +183,7 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
       return;
     }
     member.seq = input.seq;
-    member.movement = input.movement;
+    member.movement = member.working === true ? { x: 0, y: 0 } : input.movement;
     member.inputAtTick = room.world.tick;
   }
 
@@ -190,6 +194,9 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     if (room.focused) {
       throw new DomainError('ROOM_UNAVAILABLE');
     }
+    if (member.working === true) {
+      return;
+    }
     if (member.actionIds.includes(command.actionId)) {
       return;
     }
@@ -199,6 +206,51 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     }
     // One pending action per member; do not accumulate old attacks through stalled frames.
     member.action ??= command.action;
+  }
+
+  setMode(
+    room: RoomWorld,
+    member: Member,
+    seq: number,
+    playing: boolean,
+  ): void {
+    if (seq <= (member.controlSeq ?? 0)) {
+      return;
+    }
+    if (playing && room.focused) {
+      throw new DomainError('ROOM_UNAVAILABLE');
+    }
+    member.controlSeq = seq;
+    member.working = !playing;
+    member.movement = { x: 0, y: 0 };
+    member.action = undefined;
+    member.pendingPosition = undefined;
+  }
+
+  place(room: RoomWorld, member: Member, seq: number, position: Vector2): void {
+    if (seq <= (member.controlSeq ?? 0)) {
+      return;
+    }
+    const player = room.world.players.find(
+      (player) => player.id === member.playerId,
+    );
+    const radius = room.world.rules.playerRadius;
+    if (
+      room.focused ||
+      member.working !== true ||
+      player === undefined ||
+      room.world.tick < player.stunnedUntilTick ||
+      !Number.isFinite(position.x) ||
+      !Number.isFinite(position.y) ||
+      position.x < radius ||
+      position.x > room.world.bounds.width - radius ||
+      position.y < radius ||
+      position.y > room.world.bounds.height - radius
+    ) {
+      throw new DomainError('INVALID_INPUT');
+    }
+    member.controlSeq = seq;
+    member.pendingPosition = { ...position };
   }
 
   chat(room: RoomWorld, member: Member, command: Chat, nowMs: number): void {
@@ -238,6 +290,10 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     for (const member of room.members.values()) {
       member.movement = { x: 0, y: 0 };
       member.action = undefined;
+      member.pendingPosition = undefined;
+      if (member.working !== undefined) {
+        member.working = true;
+      }
     }
     room.world = { ...room.world, projectiles: [], effects: [] };
   }
@@ -246,6 +302,21 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
     if (room.focused) {
       return this.snapshot(room);
     }
+    room.world = {
+      ...room.world,
+      players: room.world.players.map((player) => {
+        const member = room.members.get(player.id);
+        const position = member?.pendingPosition;
+        if (member !== undefined) {
+          member.pendingPosition = undefined;
+        }
+        return position !== undefined &&
+          member?.working === true &&
+          room.world.tick >= player.stunnedUntilTick
+          ? { ...player, position }
+          : player;
+      }),
+    };
     const inputs = [...room.members.values()].map((member): PlayerInput => {
       const movement =
         room.world.tick - member.inputAtTick <= MAX_INPUT_AGE_TICKS
@@ -303,6 +374,7 @@ export class SimulationEngine implements OnModuleInit, OnModuleDestroy {
         for (const member of room.members.values()) {
           member.movement = { x: 0, y: 0 };
           member.action = undefined;
+          member.pendingPosition = undefined;
         }
       }
     }

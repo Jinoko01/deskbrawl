@@ -57,3 +57,34 @@ body,
 .mode-badge[data-mode="play"] span {
   background: #b1d9be;
 }
+
+.play-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 15px rgb(111 224 148 / 55%), inset 0 0 96px rgb(81 201 122 / 24%);
+  transition: opacity 200ms ease-out;
+}
+
+.play-glow[data-playing="true"] {
+  opacity: 1;
+  animation: play-glow-breathe 5s ease-in-out infinite;
+}
+
+.play-glow[data-reduced="true"] {
+  animation: none;
+}
+
+@keyframes play-glow-breathe {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play-glow[data-playing="true"] {
+    animation: none;
+    transition: none;
+  }
+}

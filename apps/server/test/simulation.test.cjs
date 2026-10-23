@@ -20,6 +20,78 @@ const member = (role) => ({
   chatSeq: 0,
 });
 
+test('WORK placement is bounded, coalesced at a tick, ordered with PLAY and isolated to its member', () => {
+  const engine = new SimulationEngine();
+  const host = member('host');
+  const guest = member('guest');
+  const room = engine.open(randomUUID(), { width: 1280, height: 720 }, host);
+  engine.add(room, guest);
+  const original = engine.snapshot(room);
+  expect(() => engine.place(room, host, 1, { x: 300, y: 200 })).toThrow(
+    'INVALID_INPUT',
+  );
+  engine.setMode(room, host, 1, false);
+  engine.place(room, host, 2, { x: 300, y: 200 });
+  engine.place(room, host, 3, { x: 400, y: 220 });
+  expect(engine.snapshot(room)).toEqual(original);
+  const applied = engine.step(room);
+  expect(applied.world.players[0].position).toEqual({ x: 400, y: 220 });
+  expect(applied.world.players[1]).toEqual(original.world.players[1]);
+  expect(() => engine.place(room, host, 4, { x: -1, y: 200 })).toThrow(
+    'INVALID_INPUT',
+  );
+  engine.place(room, host, 4, { x: 500, y: 300 });
+  engine.setMode(room, host, 5, true);
+  engine.place(room, host, 4, { x: 600, y: 400 });
+  expect(engine.step(room).world.players[0].position).toEqual({
+    x: 400,
+    y: 220,
+  });
+  expect(() => engine.place(room, host, 6, { x: 600, y: 400 })).toThrow(
+    'INVALID_INPUT',
+  );
+});
+
+test('WORK ignores attacks and stale movement; stun blocks placement while focus and clock gaps discard it', () => {
+  const engine = new SimulationEngine();
+  const host = member('host');
+  const room = engine.open(randomUUID(), { width: 1280, height: 720 }, host);
+  engine.setMode(room, host, 1, false);
+  engine.input(room, host, {
+    visitId: host.visitId,
+    seq: 1,
+    movement: { x: 1, y: 0 },
+  });
+  engine.action(room, host, {
+    visitId: host.visitId,
+    actionId: randomUUID(),
+    action: 'stone',
+  });
+  const before = engine.snapshot(room);
+  engine.step(room);
+  expect(room.world.players[0].position).toEqual(
+    before.world.players[0].position,
+  );
+  expect(room.world.projectiles).toHaveLength(0);
+  room.world.players[0].stunnedUntilTick = room.world.tick + 60;
+  expect(() => engine.place(room, host, 2, { x: 300, y: 300 })).toThrow(
+    'INVALID_INPUT',
+  );
+  room.world.players[0].stunnedUntilTick = 0;
+  engine.place(room, host, 2, { x: 300, y: 300 });
+  engine.focus(room, true);
+  engine.focus(room, false);
+  expect(engine.step(room).world.players[0].position).toEqual(
+    before.world.players[0].position,
+  );
+  engine.advanceTime(0);
+  engine.place(room, host, 3, { x: 300, y: 300 });
+  engine.advanceTime(1000);
+  expect(room.world.players[0].position).toEqual(
+    before.world.players[0].position,
+  );
+});
+
 test('fixed ticks apply queued input, reject old sessions and stop stale held input', () => {
   const engine = new SimulationEngine();
   const host = member('host');
