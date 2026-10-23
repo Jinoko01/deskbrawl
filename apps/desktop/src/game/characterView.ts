@@ -1,4 +1,5 @@
-import { AnimatedSprite, Container } from "pixi.js";
+import { AnimatedSprite, Container, Graphics } from "pixi.js";
+import { MAX_HP } from "@deskbrawl/game-core";
 import type { Texture, Ticker } from "pixi.js";
 import type { CharacterFrame, CharacterMotion } from "./characterScene";
 
@@ -22,6 +23,7 @@ export function createCharacterView(animations: CharacterAnimations, stunFrames:
   const body = new AnimatedSprite({ textures: animations.idle, autoUpdate: false });
   const stun = new AnimatedSprite({ textures: stunFrames, autoUpdate: false });
   const container = new Container();
+  const healthBar = new Graphics();
   container.eventMode = "none";
   body.updateAnchor = true;
   body.roundPixels = true;
@@ -29,7 +31,7 @@ export function createCharacterView(animations: CharacterAnimations, stunFrames:
   stun.roundPixels = true;
   stun.animationSpeed = 1000 / (60 * 120);
   stun.visible = false;
-  container.addChild(body, stun);
+  container.addChild(body, stun, healthBar);
   let current: CharacterFrame | undefined;
   let completed = false;
   let horizontalDirection = 1;
@@ -88,6 +90,17 @@ export function createCharacterView(animations: CharacterAnimations, stunFrames:
     body.position.set(0, size * (body.anchor.y - 0.5));
     stun.scale.set(size * 0.55 / stun.texture.orig.height);
     stun.position.set(0, -size * 0.65);
+    healthBar.clear();
+    if (current?.hp !== undefined) {
+      const width = size * 0.65;
+      const height = Math.max(4, size * 0.06);
+      const y = size * 0.42;
+      healthBar.roundRect(-width / 2, y, width, height, height / 2).fill(0x171923);
+      const remaining = (width - 2) * current.hp / MAX_HP;
+      if (remaining > 0) {
+        healthBar.rect(-width / 2 + 1, y + 1, remaining, height - 2).fill(0x8dde8c);
+      }
+    }
   }
 
   return {

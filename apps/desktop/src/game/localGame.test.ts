@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { createLocalGame } from "./localGame";
 import type { LocalCommand } from "../native/localGame";
+import type { CharacterSceneSnapshot } from "./characterScene";
 
 function command(kind: LocalCommand["kind"], seq: number, x: -1 | 0 | 1, action?: LocalCommand["action"]): LocalCommand {
   return {
@@ -50,10 +51,11 @@ test("긴 시계 공백과 일시 정지는 눌린 키와 예약 공격을 버�
 });
 
 test("돌과 피격 상태를 장면에 전달하고 같은 상태의 중복 렌더를 피한다", () => {
-  const scenes: { stones: number; guestHit: boolean }[] = [];
+  const scenes: { stones: number; guestHit: boolean; hp: number | undefined }[] = [];
   const game = createLocalGame(800, 600, (scene) => scenes.push({
     stones: scene.projectiles?.length ?? 0,
     guestHit: scene.characters[1]?.motion.kind === "hit" || scene.characters[1]?.motion.kind === "stun",
+    hp: scene.characters[1]?.hp,
   }));
   game.advanceTime(0);
   game.command(command("play", 1, 0));
@@ -63,7 +65,37 @@ test("돌과 피격 상태를 장면에 전달하고 같은 상태의 중복 렌
   }
   expect(scenes.some((scene) => scene.stones > 0)).toBe(true);
   expect(scenes.some((scene) => scene.guestHit)).toBe(true);
+  expect(scenes[0]?.hp).toBe(50);
+  expect(scenes.at(-1)?.hp).toBe(49);
   const count = scenes.length;
   game.advanceTime(250);
   expect(scenes).toHaveLength(count);
+});
+
+test("로컬 입력으로 HP를 소진하면 기절을 표시하고 3초 후 회복 장면을 전달한다", () => {
+  const render = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+  const game = createLocalGame(320, 200, render);
+  game.advanceTime(0);
+  game.command(command("play", 1, 0));
+  let sequence = 1;
+  let time = 0;
+  while (game.world.players[1]?.hp !== 0 && time < 25000) {
+    const host = game.world.players[0];
+    const guest = game.world.players[1];
+    if (host === undefined || guest === undefined) {
+      throw new Error("Missing local player");
+    }
+    game.command(command("input", ++sequence, guest.position.x - host.position.x > 100 ? 1 : 0, "melee"));
+    game.advanceTime(time += 50);
+  }
+  expect(game.world.players[1]?.hp).toBe(0);
+  expect(render.mock.lastCall?.[0].characters[1]).toMatchObject({ hp: 0, motion: { kind: "stun" } });
+  game.command(command("work", sequence + 1, 0));
+  for (let tick = 0; tick < 59; tick++) {
+    game.advanceTime(time += 50);
+  }
+  expect(game.world.players[1]?.hp).toBe(0);
+  game.advanceTime(time + 50);
+  expect(game.world.players[1]?.hp).toBe(50);
+  expect(render.mock.lastCall?.[0].characters[1]).toMatchObject({ hp: 50, motion: { kind: "idle" } });
 });

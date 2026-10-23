@@ -11,7 +11,9 @@ export function networkScene(snapshot: Snapshot, previous?: Snapshot): Character
       let motion: CharacterMotion;
       const before = previous?.world.players.find((candidate) => candidate.id === player.id);
       const action = player.lastAction;
-      if (world.tick < player.knockbackUntilTick) {
+      if (player.hp === 0) {
+        motion = { kind: "stun" };
+      } else if (world.tick < player.knockbackUntilTick) {
         motion = { kind: "hit", actionId: `${player.id}:hit:${player.lastHitTick}` };
       } else if (world.tick < player.stunnedUntilTick) {
         motion = { kind: "stun" };
@@ -22,6 +24,7 @@ export function networkScene(snapshot: Snapshot, previous?: Snapshot): Character
       }
       return {
         id: player.id,
+        ...(player.hp === undefined ? {} : { hp: player.hp }),
         nickname: `${member?.nickname ?? "친구"} · ${index + 1}`,
         position: player.position,
         facing: player.facing,

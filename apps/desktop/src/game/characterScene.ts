@@ -7,6 +7,7 @@ import type {
 
 export type { CharacterSkin } from "@deskbrawl/protocol";
 import type { CharacterSkin } from "@deskbrawl/protocol";
+import { MAX_HP } from "@deskbrawl/game-core";
 
 export type CharacterMotion =
   | { readonly kind: "idle" | "walk" | "stun" }
@@ -14,6 +15,7 @@ export type CharacterMotion =
 
 // 게임 판정과 분리된 표현 모델. actionId는 동일한 단발 모션의 새 재생을 구분한다.
 export interface CharacterFrame extends Pick<PlayerState, "id" | "position" | "facing"> {
+  readonly hp?: number;
   readonly skin: CharacterSkin;
   readonly motion: CharacterMotion;
   readonly nickname?: string;
@@ -43,6 +45,7 @@ export function sameCharacterScene(a: CharacterSceneSnapshot | undefined, b: Cha
   return a.characters.every((frame, index) => {
     const other = b.characters[index];
     return frame.id === other?.id
+      && frame.hp === other.hp
       && frame.skin === other.skin
       && frame.nickname === other.nickname
       && frame.chat?.current === other.chat?.current
@@ -68,6 +71,7 @@ export function initialCharacterScene(width: number, height: number): CharacterS
     characters: [
       {
         id: "host",
+        hp: MAX_HP,
         skin: "mochi",
         position: { x: width / 2 - offset, y: height / 2 },
         facing: { x: 1, y: 0 },
@@ -75,6 +79,7 @@ export function initialCharacterScene(width: number, height: number): CharacterS
       },
       {
         id: "guest",
+        hp: MAX_HP,
         skin: "mint",
         position: { x: width / 2 + offset, y: height / 2 },
         facing: { x: -1, y: 0 },

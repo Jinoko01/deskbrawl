@@ -8,6 +8,9 @@ import { initialCharacterScene, sameCharacterScene } from "./characterScene";
 export const LOCAL_COMBAT = DEFAULT_COMBAT;
 
 function motion(world: WorldState, player: WorldState["players"][number], moving: boolean): CharacterMotion {
+  if (player.hp === 0) {
+    return { kind: "stun" };
+  }
   if (world.tick < player.knockbackUntilTick) {
     return { kind: "hit", actionId: `${player.id}:hit:${player.lastHitTick}` };
   }
@@ -56,6 +59,7 @@ export function createLocalGame(width: number, height: number, render: (snapshot
       bounds: world.bounds,
       characters: world.players.map((player, index) => ({
         id: player.id,
+        hp: player.hp,
         position: player.position,
         facing: player.facing,
         skin: player.id === "host" ? skin : "mint",

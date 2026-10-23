@@ -12,6 +12,7 @@ import type { SpritesheetData } from "pixi.js";
 // Tauri의 script-src 'self'를 유지하면서 eval 없는 shader 경로를 사용한다.
 import "pixi.js/unsafe-eval";
 import { characterSkinSchema } from "@deskbrawl/protocol";
+import { MAX_HP } from "@deskbrawl/game-core";
 import { CHARACTERS } from "./characters";
 import effectsAtlas from "../../../../packages/game-assets/effects/effects-v2.json";
 import effectsImage from "../../../../packages/game-assets/effects/effects-v2.png";
@@ -221,7 +222,7 @@ export function mountCharacter(
         const label = new Text({
           text: "",
           style: {
-            fontFamily: "Segoe UI, Malgun Gothic, sans-serif", fontSize: 13, fill: 0xffffff, stroke: { color: 0x171923, width: 3 },
+            fontFamily: "Segoe UI, Malgun Gothic, sans-serif", fontSize: 13, align: "center", fill: 0xffffff, stroke: { color: 0x171923, width: 3 },
           },
         });
         label.anchor.set(0.5, 0);
@@ -242,7 +243,8 @@ export function mountCharacter(
       entry.view.apply(frame, reduced(), !document.hidden);
       const caption = captions.get(frame.id);
       if (caption !== undefined) {
-        caption.label.text = frame.nickname ?? "";
+        const health = frame.hp === undefined ? "" : `HP ${frame.hp}/${MAX_HP}${frame.hp === 0 ? " · 기절" : ""}`;
+        caption.label.text = [frame.nickname, health].filter(Boolean).join("\n");
         caption.bubble.text = [frame.chat?.previous, frame.chat?.current].filter(Boolean).join("\n");
         caption.bubble.alpha = caption.background.alpha = frame.chat?.opacity ?? 1;
       }
@@ -268,7 +270,7 @@ export function mountCharacter(
     }
     const names = snapshot.characters.map((frame) => CHARACTERS[frame.skin].name);
     app.canvas.setAttribute("aria-label", names.length === 0 ? "표시된 캐릭터 없음" : `${names.join("와 ")} 캐릭터`);
-    app.canvas.setAttribute("aria-description", `${snapshot.characters.map((frame) => `${CHARACTERS[frame.skin].name}: ${frame.motion.kind}`).join(", ")}, 돌 ${snapshot.projectiles?.length ?? 0}개, 효과 ${snapshot.effects?.length ?? 0}개`);
+    app.canvas.setAttribute("aria-description", `${snapshot.characters.map((frame) => `${CHARACTERS[frame.skin].name}: ${frame.motion.kind}${frame.hp === undefined ? "" : `, 체력 ${frame.hp}/${MAX_HP}${frame.hp === 0 ? ", 3초 동안 기절" : ""}`}`).join(", ")}, 돌 ${snapshot.projectiles?.length ?? 0}개, 효과 ${snapshot.effects?.length ?? 0}개`);
   }
 
   function paint() {
@@ -286,7 +288,10 @@ export function mountCharacter(
       if (caption !== undefined) {
         const x = Math.round(left + frame.position.x * scale);
         const y = Math.round(top + frame.position.y * scale);
-        caption.label.position.set(x, y + size / 2);
+        caption.label.position.set(
+          Math.max(caption.label.width / 2 + 4, Math.min(app.screen.width - caption.label.width / 2 - 4, x)),
+          Math.max(4, Math.min(app.screen.height - caption.label.height - 4, y + size / 2)),
+        );
         const width = caption.bubble.width + 20;
         const height = caption.bubble.height + 14;
         const bubbleX = Math.max(width / 2 + 4, Math.min(app.screen.width - width / 2 - 4, x));

@@ -121,4 +121,25 @@ describe("network presentation", () => {
     buffer.dispose();
     expect(cancel).toHaveBeenCalledWith(1);
   });
+
+  it("redraws HP changes without movement and shows knockout until the server restores HP", () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const render = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+    const buffer = createSnapshotView(render);
+    const initial = fixture();
+    buffer.receive(initial);
+    const updated = (hp: number) => ({
+      ...initial,
+      world: { ...initial.world, tick: 1, players: initial.world.players.map((player) => ({ ...player, hp })) },
+    });
+    buffer.receive(updated(47));
+    expect(render).toHaveBeenCalledTimes(2);
+    expect(render.mock.lastCall?.[0].characters[0]?.hp).toBe(47);
+    buffer.receive(updated(0));
+    expect(render.mock.lastCall?.[0].characters[0]).toMatchObject({ hp: 0, motion: { kind: "stun" } });
+    buffer.receive(updated(50));
+    expect(render.mock.lastCall?.[0].characters[0]).toMatchObject({ hp: 50, motion: { kind: "idle" } });
+    buffer.dispose();
+  });
 });
