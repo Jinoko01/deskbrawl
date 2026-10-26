@@ -1,4 +1,6 @@
 fn main() {
+    // tauri-build does not watch the icon, so a changed logo would not reach dev builds.
+    println!("cargo:rerun-if-changed=icons/icon.ico");
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "overlay_reduced_effects",
