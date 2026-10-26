@@ -93,7 +93,13 @@ export function App() {
           className="brand-mark"
           aria-label="DeskBrawl 본문으로 이동"
         >
-          <span aria-hidden="true">d.</span>
+          <img
+            src="/brand/face.png"
+            alt=""
+            width="128"
+            height="128"
+            draggable={false}
+          />
         </a>
         <nav aria-label="주 메뉴" className="rail-nav">
           <button
