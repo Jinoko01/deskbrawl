@@ -1,0 +1,1514 @@
+{
+  "measuredAtUtc": "2026-11-04T02:25:32.405Z",
+  "completed": true,
+  "settings": {
+    "rooms": [
+      1
+    ],
+    "participants": 6,
+    "repeats": 3,
+    "warmupMs": 3000,
+    "phaseMs": 10000,
+    "longMs": 120000,
+    "churnCycles": 5,
+    "idleSnapshots": false
+  },
+  "sourceSha256": "44f5495fe627dfa2f4dc704f9f6715f7dbdc7d029c87d78e13d55af0f51ba5ef",
+  "environment": {
+    "node": "v24.14.0",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "Intel(R) Core(TM) Ultra 9 185H",
+    "logicalCpus": 22,
+    "memoryGiB": 63.503963470458984,
+    "release": "10.0.26200"
+  },
+  "measurement": {
+    "topology": "Windows server worker + separate Node load-generator process + isolated Docker PostgreSQL",
+    "transport": "loopback HTTP + WebSocket, health:true, idleSnapshots per settings, no TLS or reverse proxy",
+    "tcpBytes": "server HTTP net.Socket.bytesWritten including WebSocket/Engine.IO/Socket.IO framing; excludes IP/TCP headers, retransmissions, TLS and DB traffic; not provider-billed egress",
+    "jsonBytes": "sum of JSON.stringify(snapshot) UTF-8 bytes received by all peers",
+    "authLookups": "Prisma deviceIdentity.findUnique calls selecting revokedAt; logical auth lookup attempts, not PostgreSQL SQL statement count",
+    "tick": "room step duration excludes gateway publish; scheduler execution includes step and synchronous publish; lateness = max(0, callback gap - 25ms)",
+    "database": "isolated container cgroup v2 CPU cumulative usage and memory including page cache; samples bracket each phase; not process RSS",
+    "ack": "input emit to acceptance ack; not tick application, rendered response, or WAN latency",
+    "inputs": "10 inputs/s/player, direction flips every second; 1 alternating melee/stone and 1 chat/s/player; no injected loss",
+    "memory": "server and client RSS peak sampled every 100ms; no forced GC; retained RSS does not prove a leak"
+  },
+  "cases": [
+    {
+      "roomCount": 1,
+      "phases": [
+        {
+          "label": "1 rooms / empty #1",
+          "durationMs": 10000,
+          "elapsedMs": 10006.527900000001,
+          "peers": 0,
+          "server": {
+            "cpuPercentOfOneCore": 0.9293933013468137,
+            "rssMiB": 106.9296875,
+            "peakRssMiB": 140.07421875,
+            "heapUsedMiB": 31.83238983154297,
+            "authLookupCalls": 0,
+            "tcpBytesWritten": 0,
+            "tcpBytesPerSecond": 0,
+            "roomSteps": 0,
+            "roomStepMs": {
+              "count": 0,
+              "mean": null,
+              "p50": null,
+              "p95": null,
+              "max": null
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.011542056074715128,
+              "p50": 0.009500000000116415,
+              "p95": 0.018600000001242734,
+              "max": 0.327900000000227
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.213064062499998,
+              "p50": 6.218299999998635,
+              "p95": 6.995499999999083,
+              "max": 7.72609999999986
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 0,
+            "members": 0,
+            "httpConnections": 0
+          },
+          "client": {
+            "cpuPercentOfOneCore": 0,
+            "peakRssMiB": 76.12109375
+          },
+          "database": {
+            "before": {
+              "wallMs": 5304.078,
+              "cpuMicroseconds": 21946085,
+              "memoryBytes": 99115008
+            },
+            "after": {
+              "wallMs": 15555.1954,
+              "cpuMicroseconds": 21972953,
+              "memoryBytes": 98168832
+            },
+            "cpuPercentOfOneCore": 0.2620982567227257,
+            "memoryMiB": 93.62109375
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 0,
+          "snapshotJsonBytes": 0,
+          "snapshotJsonBytesPerSecond": 0,
+          "hostSnapshotBytes": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / empty #2",
+          "durationMs": 10000,
+          "elapsedMs": 10011.849799999998,
+          "peers": 0,
+          "server": {
+            "cpuPercentOfOneCore": 0.30963309097985076,
+            "rssMiB": 107.4375,
+            "peakRssMiB": 107.4375,
+            "heapUsedMiB": 32.37458038330078,
+            "authLookupCalls": 0,
+            "tcpBytesWritten": 0,
+            "tcpBytesPerSecond": 0,
+            "roomSteps": 0,
+            "roomStepMs": {
+              "count": 0,
+              "mean": null,
+              "p50": null,
+              "p95": null,
+              "max": null
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.007819937694660658,
+              "p50": 0.006799999999202555,
+              "p95": 0.01359999999840511,
+              "max": 0.11170000000129221
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.2097246875,
+              "p50": 6.2358000000022,
+              "p95": 7.0702000000019325,
+              "max": 8.65480000000025
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 0,
+            "members": 0,
+            "httpConnections": 0
+          },
+          "client": {
+            "cpuPercentOfOneCore": 0.1598106276025036,
+            "peakRssMiB": 70.82421875
+          },
+          "database": {
+            "before": {
+              "wallMs": 15797.8126,
+              "cpuMicroseconds": 21994973,
+              "memoryBytes": 99004416
+            },
+            "after": {
+              "wallMs": 26077.7736,
+              "cpuMicroseconds": 22022578,
+              "memoryBytes": 98840576
+            },
+            "cpuPercentOfOneCore": 0.26853214715503293,
+            "memoryMiB": 94.26171875
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 0,
+          "snapshotJsonBytes": 0,
+          "snapshotJsonBytesPerSecond": 0,
+          "hostSnapshotBytes": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / empty #3",
+          "durationMs": 10000,
+          "elapsedMs": 10003.548700000003,
+          "peers": 0,
+          "server": {
+            "cpuPercentOfOneCore": 0.30989002932529325,
+            "rssMiB": 108.046875,
+            "peakRssMiB": 108.046875,
+            "heapUsedMiB": 32.047401428222656,
+            "authLookupCalls": 0,
+            "tcpBytesWritten": 0,
+            "tcpBytesPerSecond": 0,
+            "roomSteps": 0,
+            "roomStepMs": {
+              "count": 0,
+              "mean": null,
+              "p50": null,
+              "p95": null,
+              "max": null
+            },
+            "schedulerExecutionMs": {
+              "count": 320,
+              "mean": 0.006561562499996398,
+              "p50": 0.006000000001222361,
+              "p95": 0.010499999996682163,
+              "max": 0.031500000000960426
+            },
+            "schedulerLateMs": {
+              "count": 319,
+              "mean": 6.21754514106583,
+              "p50": 6.2084000000031665,
+              "p95": 7.161500000001979,
+              "max": 7.761099999999715
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 0,
+            "members": 0,
+            "httpConnections": 0
+          },
+          "client": {
+            "cpuPercentOfOneCore": 0.1499467883832064,
+            "peakRssMiB": 71.3515625
+          },
+          "database": {
+            "before": {
+              "wallMs": 26356.7283,
+              "cpuMicroseconds": 22043981,
+              "memoryBytes": 98627584
+            },
+            "after": {
+              "wallMs": 36595.9256,
+              "cpuMicroseconds": 22072388,
+              "memoryBytes": 98902016
+            },
+            "cpuPercentOfOneCore": 0.27743385704658696,
+            "memoryMiB": 94.3203125
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 0,
+          "snapshotJsonBytes": 0,
+          "snapshotJsonBytesPerSecond": 0,
+          "hostSnapshotBytes": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / solo-idle #1",
+          "durationMs": 10000,
+          "elapsedMs": 10009.657099999997,
+          "peers": 1,
+          "server": {
+            "cpuPercentOfOneCore": 2.6574336897115094,
+            "rssMiB": 115.89453125,
+            "peakRssMiB": 115.89453125,
+            "heapUsedMiB": 34.89311218261719,
+            "authLookupCalls": 10,
+            "tcpBytesWritten": 204995,
+            "tcpBytesPerSecond": 20479.722527158305,
+            "roomSteps": 201,
+            "roomStepMs": {
+              "count": 201,
+              "mean": 0.0614004975127749,
+              "p50": 0.0488000000041211,
+              "p95": 0.09280000000580912,
+              "max": 0.3683000000019092
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.3263763239873728,
+              "p50": 0.41530000000057044,
+              "p95": 0.6717000000062399,
+              "max": 2.0732999999963795
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.229973437500007,
+              "p50": 6.218699999997625,
+              "p95": 7.074499999995169,
+              "max": 10.201399999998102
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 1,
+            "httpConnections": 1
+          },
+          "client": {
+            "cpuPercentOfOneCore": 1.0889483916487013,
+            "peakRssMiB": 73.390625
+          },
+          "database": {
+            "before": {
+              "wallMs": 40456.619,
+              "cpuMicroseconds": 22143988,
+              "memoryBytes": 100990976
+            },
+            "after": {
+              "wallMs": 50708.0663,
+              "cpuMicroseconds": 22171980,
+              "memoryBytes": 101453824
+            },
+            "cpuPercentOfOneCore": 0.2730541276840003,
+            "memoryMiB": 96.75390625
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 201,
+          "snapshotJsonBytes": 199970,
+          "snapshotJsonBytesPerSecond": 19977.707328256038,
+          "hostSnapshotBytes": {
+            "count": 201,
+            "mean": 994.8756218905472,
+            "p50": 995,
+            "p95": 995,
+            "max": 995
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 200,
+            "mean": 49.96763500000001,
+            "p50": 61.66820000000007,
+            "p95": 63.40260000000126,
+            "max": 64.48660000000382
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / solo-idle #2",
+          "durationMs": 10000,
+          "elapsedMs": 10002.0199,
+          "peers": 1,
+          "server": {
+            "cpuPercentOfOneCore": 1.5596849592350843,
+            "rssMiB": 115.796875,
+            "peakRssMiB": 115.9609375,
+            "heapUsedMiB": 35.54530334472656,
+            "authLookupCalls": 10,
+            "tcpBytesWritten": 204000,
+            "tcpBytesPerSecond": 20395.8802361511,
+            "roomSteps": 200,
+            "roomStepMs": {
+              "count": 200,
+              "mean": 0.05813800000014453,
+              "p50": 0.044800000003306195,
+              "p95": 0.08840000000054715,
+              "max": 0.7232999999978347
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.3038277258571138,
+              "p50": 0.4006999999983236,
+              "p95": 0.636899999997695,
+              "max": 1.0914000000047963
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.183812499999999,
+              "p50": 6.21140000000014,
+              "p95": 7.290600000000268,
+              "max": 8.289800000005926
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 1,
+            "httpConnections": 1
+          },
+          "client": {
+            "cpuPercentOfOneCore": 0.45990710336419155,
+            "peakRssMiB": 73.23046875
+          },
+          "database": {
+            "before": {
+              "wallMs": 50957.1636,
+              "cpuMicroseconds": 22201559,
+              "memoryBytes": 101343232
+            },
+            "after": {
+              "wallMs": 61257.9626,
+              "cpuMicroseconds": 22235535,
+              "memoryBytes": 100577280
+            },
+            "cpuPercentOfOneCore": 0.32983849116947145,
+            "memoryMiB": 95.91796875
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 200,
+          "snapshotJsonBytes": 199000,
+          "snapshotJsonBytesPerSecond": 19895.981210755243,
+          "hostSnapshotBytes": {
+            "count": 200,
+            "mean": 995,
+            "p50": 995,
+            "p95": 995,
+            "max": 995
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 199,
+            "mean": 49.989983919598004,
+            "p50": 61.522799999998824,
+            "p95": 63.48879999999917,
+            "max": 64.94139999999607
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / solo-idle #3",
+          "durationMs": 10000,
+          "elapsedMs": 10003.321700000008,
+          "peers": 1,
+          "server": {
+            "cpuPercentOfOneCore": 0.4598472525381241,
+            "rssMiB": 115.7421875,
+            "peakRssMiB": 115.80859375,
+            "heapUsedMiB": 35.280662536621094,
+            "authLookupCalls": 10,
+            "tcpBytesWritten": 205023,
+            "tcpBytesPerSecond": 20495.49201241822,
+            "roomSteps": 201,
+            "roomStepMs": {
+              "count": 201,
+              "mean": 0.04428507462707151,
+              "p50": 0.034899999998742715,
+              "p95": 0.06759999999485444,
+              "max": 0.3726999999998952
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.27174267912778305,
+              "p50": 0.3444999999992433,
+              "p95": 0.5794000000023516,
+              "max": 1.708199999993667
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.208003124999982,
+              "p50": 6.193199999994249,
+              "p95": 7.175900000002002,
+              "max": 7.908300000010058
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 1,
+            "httpConnections": 1
+          },
+          "client": {
+            "cpuPercentOfOneCore": 0.789737672837213,
+            "peakRssMiB": 73.34765625
+          },
+          "database": {
+            "before": {
+              "wallMs": 61498.5171,
+              "cpuMicroseconds": 22256224,
+              "memoryBytes": 100962304
+            },
+            "after": {
+              "wallMs": 71739.6779,
+              "cpuMicroseconds": 22281106,
+              "memoryBytes": 101232640
+            },
+            "cpuPercentOfOneCore": 0.24296073937243526,
+            "memoryMiB": 96.54296875
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 201,
+          "snapshotJsonBytes": 199995,
+          "snapshotJsonBytesPerSecond": 19992.858972035243,
+          "hostSnapshotBytes": {
+            "count": 201,
+            "mean": 995,
+            "p50": 995,
+            "p95": 995,
+            "max": 995
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 200,
+            "mean": 49.932403500000035,
+            "p50": 61.476599999994505,
+            "p95": 63.58850000001257,
+            "max": 64.50440000000526
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / full-idle #1",
+          "durationMs": 10000,
+          "elapsedMs": 10003.204899999997,
+          "peers": 6,
+          "server": {
+            "cpuPercentOfOneCore": 2.0393464098691014,
+            "rssMiB": 119.7578125,
+            "peakRssMiB": 119.7578125,
+            "heapUsedMiB": 37.31218719482422,
+            "authLookupCalls": 60,
+            "tcpBytesWritten": 3804930,
+            "tcpBytesPerSecond": 380371.09486780595,
+            "roomSteps": 201,
+            "roomStepMs": {
+              "count": 201,
+              "mean": 0.05613333333304803,
+              "p50": 0.04700000000593718,
+              "p95": 0.08909999999741558,
+              "max": 0.38360000000102445
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.6916791277257958,
+              "p50": 0.8276000000041677,
+              "p95": 1.510099999999511,
+              "max": 4.39440000000468
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.175676874999999,
+              "p50": 6.137199999997392,
+              "p95": 7.138200000001234,
+              "max": 9.39549999999872
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 6,
+            "httpConnections": 6
+          },
+          "client": {
+            "cpuPercentOfOneCore": 1.4095482538801145,
+            "peakRssMiB": 73.96484375
+          },
+          "database": {
+            "before": {
+              "wallMs": 75607.4822,
+              "cpuMicroseconds": 22362974,
+              "memoryBytes": 100945920
+            },
+            "after": {
+              "wallMs": 85853.0872,
+              "cpuMicroseconds": 22389649,
+              "memoryBytes": 101548032
+            },
+            "cpuPercentOfOneCore": 0.2603555378135309,
+            "memoryMiB": 96.84375
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 1206,
+          "snapshotJsonBytes": 3774780,
+          "snapshotJsonBytesPerSecond": 377357.06083557295,
+          "hostSnapshotBytes": {
+            "count": 201,
+            "mean": 3130,
+            "p50": 3130,
+            "p95": 3130,
+            "max": 3130
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 200,
+            "mean": 49.88217750000003,
+            "p50": 61.409599999999045,
+            "p95": 63.49760000000242,
+            "max": 64.57719999999972
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / full-idle #2",
+          "durationMs": 10000,
+          "elapsedMs": 10003.732699999993,
+          "peers": 6,
+          "server": {
+            "cpuPercentOfOneCore": 5.1480783767843015,
+            "rssMiB": 122.87109375,
+            "peakRssMiB": 122.87109375,
+            "heapUsedMiB": 37.77642059326172,
+            "authLookupCalls": 60,
+            "tcpBytesWritten": 3787137,
+            "tcpBytesPerSecond": 378572.390283879,
+            "roomSteps": 200,
+            "roomStepMs": {
+              "count": 200,
+              "mean": 0.06268849999993108,
+              "p50": 0.05400000000372529,
+              "p95": 0.09900000000197906,
+              "max": 0.38030000000435393
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.6242838006225364,
+              "p50": 0.7574000000022352,
+              "p95": 1.3849999999947613,
+              "max": 2.093699999997625
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.177688750000016,
+              "p50": 6.197299999999814,
+              "p95": 7.133799999995972,
+              "max": 9.732099999993807
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 6,
+            "httpConnections": 6
+          },
+          "client": {
+            "cpuPercentOfOneCore": 2.179186575027141,
+            "peakRssMiB": 74.09765625
+          },
+          "database": {
+            "before": {
+              "wallMs": 86093.3234,
+              "cpuMicroseconds": 22410469,
+              "memoryBytes": 101711872
+            },
+            "after": {
+              "wallMs": 96338.0371,
+              "cpuMicroseconds": 22440389,
+              "memoryBytes": 100360192
+            },
+            "cpuPercentOfOneCore": 0.29205306147305976,
+            "memoryMiB": 95.7109375
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 1200,
+          "snapshotJsonBytes": 3757134,
+          "snapshotJsonBytesPerSecond": 375573.2097879827,
+          "hostSnapshotBytes": {
+            "count": 200,
+            "mean": 3130.945,
+            "p50": 3131,
+            "p95": 3131,
+            "max": 3131
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 199,
+            "mean": 49.97296733668337,
+            "p50": 61.49549999998999,
+            "p95": 63.48479999999108,
+            "max": 64.25800000000163
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / full-idle #3",
+          "durationMs": 10000,
+          "elapsedMs": 10011.7543,
+          "peers": 6,
+          "server": {
+            "cpuPercentOfOneCore": 4.834317598065705,
+            "rssMiB": 122.91796875,
+            "peakRssMiB": 122.91796875,
+            "heapUsedMiB": 36.47029113769531,
+            "authLookupCalls": 60,
+            "tcpBytesWritten": 3787215,
+            "tcpBytesPerSecond": 378276.8620280663,
+            "roomSteps": 200,
+            "roomStepMs": {
+              "count": 200,
+              "mean": 0.06259299999990617,
+              "p50": 0.05789999999979045,
+              "p95": 0.08550000000104774,
+              "max": 0.36860000000160653
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.6345143302181856,
+              "p50": 0.7418999999936204,
+              "p95": 1.3611999999993714,
+              "max": 2.9962999999988824
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.230184999999983,
+              "p50": 6.20690000000468,
+              "p95": 7.157900000005611,
+              "max": 9.053299999999581
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 6,
+            "httpConnections": 6
+          },
+          "client": {
+            "cpuPercentOfOneCore": 1.867804526525386,
+            "peakRssMiB": 74.234375
+          },
+          "database": {
+            "before": {
+              "wallMs": 96573.8719,
+              "cpuMicroseconds": 22461637,
+              "memoryBytes": 101060608
+            },
+            "after": {
+              "wallMs": 106824.8538,
+              "cpuMicroseconds": 22487920,
+              "memoryBytes": 99930112
+            },
+            "cpuPercentOfOneCore": 0.2563949508095415,
+            "memoryMiB": 95.30078125
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 1200,
+          "snapshotJsonBytes": 3757200,
+          "snapshotJsonBytesPerSecond": 375278.8859391006,
+          "hostSnapshotBytes": {
+            "count": 200,
+            "mean": 3131,
+            "p50": 3131,
+            "p95": 3131,
+            "max": 3131
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 199,
+            "mean": 50.06114723618086,
+            "p50": 61.80030000000261,
+            "p95": 63.447000000000116,
+            "max": 64.03170000000682
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        },
+        {
+          "label": "1 rooms / full-active #1",
+          "durationMs": 10000,
+          "elapsedMs": 10014.496199999994,
+          "peers": 6,
+          "server": {
+            "cpuPercentOfOneCore": 12.322137582917058,
+            "rssMiB": 133.98828125,
+            "peakRssMiB": 133.98828125,
+            "heapUsedMiB": 37.984405517578125,
+            "authLookupCalls": 708,
+            "tcpBytesWritten": 5658975,
+            "tcpBytesPerSecond": 565078.3511206488,
+            "roomSteps": 200,
+            "roomStepMs": {
+              "count": 200,
+              "mean": 0.0979410000002099,
+              "p50": 0.08209999999962747,
+              "p95": 0.151400000002468,
+              "max": 0.4751000000105705
+            },
+            "schedulerExecutionMs": {
+              "count": 322,
+              "mean": 0.7085555900619127,
+              "p50": 0.8885000000009313,
+              "p95": 1.572599999999511,
+              "max": 2.610499999995227
+            },
+            "schedulerLateMs": {
+              "count": 321,
+              "mean": 6.199196884735173,
+              "p50": 6.158599999995204,
+              "p95": 7.19999999999709,
+              "max": 13.70810000000347
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 6,
+            "httpConnections": 6
+          },
+          "client": {
+            "cpuPercentOfOneCore": 3.734586269052658,
+            "peakRssMiB": 76.44921875
+          },
+          "database": {
+            "before": {
+              "wallMs": 110566.7676,
+              "cpuMicroseconds": 22613889,
+              "memoryBytes": 111325184
+            },
+            "after": {
+              "wallMs": 120824.4888,
+              "cpuMicroseconds": 22780773,
+              "memoryBytes": 112001024
+            },
+            "cpuPercentOfOneCore": 1.6269110531099247,
+            "memoryMiB": 106.8125
+          },
+          "sentCommands": 654,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 546,
+            "mean": 5.9162342490843125,
+            "p50": 5.766399999993155,
+            "p95": 8.145300000003772,
+            "max": 11.410799999997835
+          },
+          "snapshots": 1200,
+          "snapshotJsonBytes": 5616300,
+          "snapshotJsonBytesPerSecond": 560817.0284192632,
+          "hostSnapshotBytes": {
+            "count": 200,
+            "mean": 4680.25,
+            "p50": 4419,
+            "p95": 5388,
+            "max": 5425
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 199,
+            "mean": 49.98150904522609,
+            "p50": 61.4030999999959,
+            "p95": 63.74130000000878,
+            "max": 69.54909999998927
+          },
+          "observedProjectiles": 122,
+          "observedEffects": 176
+        },
+        {
+          "label": "1 rooms / full-active #2",
+          "durationMs": 10000,
+          "elapsedMs": 10014.47129999999,
+          "peers": 6,
+          "server": {
+            "cpuPercentOfOneCore": 9.995535161202179,
+            "rssMiB": 146.41015625,
+            "peakRssMiB": 146.41015625,
+            "heapUsedMiB": 43.72515869140625,
+            "authLookupCalls": 714,
+            "tcpBytesWritten": 5629671,
+            "tcpBytesPerSecond": 562153.590674328,
+            "roomSteps": 200,
+            "roomStepMs": {
+              "count": 200,
+              "mean": 0.09862899999956426,
+              "p50": 0.07820000000356231,
+              "p95": 0.19610000000102445,
+              "max": 0.6028000000078464
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.7222738317753417,
+              "p50": 0.8519999999989523,
+              "p95": 1.6362999999983003,
+              "max": 4.0473000000056345
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.209176874999957,
+              "p50": 6.185700000001816,
+              "p95": 7.259500000000116,
+              "max": 13.21020000000135
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 6,
+            "httpConnections": 6
+          },
+          "client": {
+            "cpuPercentOfOneCore": 2.6561561966830967,
+            "peakRssMiB": 77.1796875
+          },
+          "database": {
+            "before": {
+              "wallMs": 121065.9541,
+              "cpuMicroseconds": 22800806,
+              "memoryBytes": 111464448
+            },
+            "after": {
+              "wallMs": 131330.2358,
+              "cpuMicroseconds": 22959517,
+              "memoryBytes": 111521792
+            },
+            "cpuPercentOfOneCore": 1.5462455594920015,
+            "memoryMiB": 106.35546875
+          },
+          "sentCommands": 654,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 546,
+            "mean": 5.7613186813188015,
+            "p50": 5.599000000001979,
+            "p95": 8.443199999994249,
+            "max": 12.538000000000466
+          },
+          "snapshots": 1200,
+          "snapshotJsonBytes": 5586576,
+          "snapshotJsonBytesPerSecond": 557850.3180692131,
+          "hostSnapshotBytes": {
+            "count": 200,
+            "mean": 4655.48,
+            "p50": 4421,
+            "p95": 5397,
+            "max": 5437
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 199,
+            "mean": 50.02285075376887,
+            "p50": 61.33650000000489,
+            "p95": 63.62870000000112,
+            "max": 71.20320000000356
+          },
+          "observedProjectiles": 88,
+          "observedEffects": 176
+        },
+        {
+          "label": "1 rooms / full-active #3",
+          "durationMs": 10000,
+          "elapsedMs": 10002.631200000003,
+          "peers": 6,
+          "server": {
+            "cpuPercentOfOneCore": 3.7390161900600702,
+            "rssMiB": 146.5,
+            "peakRssMiB": 147.30078125,
+            "heapUsedMiB": 46.55810546875,
+            "authLookupCalls": 714,
+            "tcpBytesWritten": 5642181,
+            "tcpBytesPerSecond": 564069.6819852758,
+            "roomSteps": 200,
+            "roomStepMs": {
+              "count": 200,
+              "mean": 0.08722500000076253,
+              "p50": 0.0746999999973923,
+              "p95": 0.12729999999282882,
+              "max": 0.4763000000093598
+            },
+            "schedulerExecutionMs": {
+              "count": 321,
+              "mean": 0.6598348909667315,
+              "p50": 0.7854999999981374,
+              "p95": 1.463000000017928,
+              "max": 3.9034000000101514
+            },
+            "schedulerLateMs": {
+              "count": 320,
+              "mean": 6.199690000000009,
+              "p50": 6.18849999998929,
+              "p95": 7.190600000001723,
+              "max": 14.846099999995204
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 6,
+            "httpConnections": 6
+          },
+          "client": {
+            "cpuPercentOfOneCore": 0.4598789966384043,
+            "peakRssMiB": 77.4609375
+          },
+          "database": {
+            "before": {
+              "wallMs": 131572.2915,
+              "cpuMicroseconds": 22980461,
+              "memoryBytes": 111456256
+            },
+            "after": {
+              "wallMs": 141814.9878,
+              "cpuMicroseconds": 23145654,
+              "memoryBytes": 111505408
+            },
+            "cpuPercentOfOneCore": 1.6127882264750917,
+            "memoryMiB": 106.33984375
+          },
+          "sentCommands": 654,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 546,
+            "mean": 5.421075641025679,
+            "p50": 5.100600000005215,
+            "p95": 8.68049999998766,
+            "max": 16.274600000004284
+          },
+          "snapshots": 1200,
+          "snapshotJsonBytes": 5599098,
+          "snapshotJsonBytesPerSecond": 559762.5152869775,
+          "hostSnapshotBytes": {
+            "count": 200,
+            "mean": 4665.915,
+            "p50": 4419,
+            "p95": 5551,
+            "max": 5589
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 199,
+            "mean": 50.005492964824114,
+            "p50": 61.546100000006845,
+            "p95": 63.500700000004144,
+            "max": 66.93869999999879
+          },
+          "observedProjectiles": 94,
+          "observedEffects": 186
+        },
+        {
+          "label": "1 rooms / long-active",
+          "durationMs": 120000,
+          "elapsedMs": 120011.47,
+          "peers": 6,
+          "server": {
+            "cpuPercentOfOneCore": 10.507329007802337,
+            "rssMiB": 231.328125,
+            "peakRssMiB": 231.328125,
+            "heapUsedMiB": 83.65189361572266,
+            "authLookupCalls": 8610,
+            "tcpBytesWritten": 68234134,
+            "tcpBytesPerSecond": 568563.438144704,
+            "roomSteps": 2400,
+            "roomStepMs": {
+              "count": 2400,
+              "mean": 0.09465362500014939,
+              "p50": 0.07839999999850988,
+              "p95": 0.13310000000637956,
+              "max": 4.510399999999208
+            },
+            "schedulerExecutionMs": {
+              "count": 3845,
+              "mean": 0.7010197659296432,
+              "p50": 0.8416000000142958,
+              "p95": 1.5430000000051223,
+              "max": 5.977899999998044
+            },
+            "schedulerLateMs": {
+              "count": 3844,
+              "mean": 6.2133423257023965,
+              "p50": 6.195099999982631,
+              "p95": 7.137399999977788,
+              "max": 16.042599999986123
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 1,
+            "members": 6,
+            "httpConnections": 6
+          },
+          "client": {
+            "cpuPercentOfOneCore": 4.101274653164402,
+            "peakRssMiB": 82.2890625
+          },
+          "database": {
+            "before": {
+              "wallMs": 142606.7155,
+              "cpuMicroseconds": 23170098,
+              "memoryBytes": 112369664
+            },
+            "after": {
+              "wallMs": 262865.9187,
+              "cpuMicroseconds": 24884708,
+              "memoryBytes": 111210496
+            },
+            "cpuPercentOfOneCore": 1.425761982763578,
+            "memoryMiB": 106.05859375
+          },
+          "sentCommands": 7896,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 6588,
+            "mean": 5.512736369155925,
+            "p50": 5.262300000002142,
+            "p95": 8.078799999988405,
+            "max": 13.101900000008754
+          },
+          "snapshots": 14400,
+          "snapshotJsonBytes": 67713006,
+          "snapshotJsonBytesPerSecond": 564221.1198646263,
+          "hostSnapshotBytes": {
+            "count": 2400,
+            "mean": 4702.292083333334,
+            "p50": 4425,
+            "p95": 5555,
+            "max": 5599
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 2399,
+            "mean": 49.98693722384327,
+            "p50": 61.58910000001197,
+            "p95": 63.60099999999511,
+            "max": 67.7271999999939
+          },
+          "observedProjectiles": 1302,
+          "observedEffects": 2526
+        },
+        {
+          "label": "1 rooms / post-close",
+          "durationMs": 65000,
+          "elapsedMs": 65014.106499999994,
+          "peers": 0,
+          "server": {
+            "cpuPercentOfOneCore": 0.3599218886442745,
+            "rssMiB": 230.640625,
+            "peakRssMiB": 232.12890625,
+            "heapUsedMiB": 63.99121856689453,
+            "authLookupCalls": 0,
+            "tcpBytesWritten": 0,
+            "tcpBytesPerSecond": 0,
+            "roomSteps": 0,
+            "roomStepMs": {
+              "count": 0,
+              "mean": null,
+              "p50": null,
+              "p95": null,
+              "max": null
+            },
+            "schedulerExecutionMs": {
+              "count": 2082,
+              "mean": 0.007665177713889507,
+              "p50": 0.006600000022444874,
+              "p95": 0.009799999999813735,
+              "max": 0.3498999999719672
+            },
+            "schedulerLateMs": {
+              "count": 2081,
+              "mean": 6.227010379625164,
+              "p50": 6.214099999982864,
+              "p95": 7.105900000024121,
+              "max": 10.767200000002049
+            },
+            "schedulerGapsOver250Ms": 0,
+            "rooms": 0,
+            "members": 0,
+            "httpConnections": 0
+          },
+          "client": {
+            "cpuPercentOfOneCore": 0.09536391921344026,
+            "peakRssMiB": 83.18359375
+          },
+          "database": {
+            "before": {
+              "wallMs": 263348.0888,
+              "cpuMicroseconds": 24939984,
+              "memoryBytes": 111333376
+            },
+            "after": {
+              "wallMs": 328603.354,
+              "cpuMicroseconds": 24990412,
+              "memoryBytes": 98238464
+            },
+            "cpuPercentOfOneCore": 0.07727805541122837,
+            "memoryMiB": 93.6875
+          },
+          "sentCommands": 0,
+          "failedCommands": {},
+          "inputAckRttMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "snapshots": 0,
+          "snapshotJsonBytes": 0,
+          "snapshotJsonBytesPerSecond": 0,
+          "hostSnapshotBytes": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "hostSnapshotIntervalMs": {
+            "count": 0,
+            "mean": null,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "observedProjectiles": 0,
+          "observedEffects": 0
+        }
+      ],
+      "recovery": [
+        {
+          "role": "guest",
+          "resumeAndStaleCheckMs": 7.044399999984307,
+          "sameWorld": true,
+          "tokenRotated": true,
+          "staleVisitRejected": true,
+          "members": 6
+        },
+        {
+          "role": "host",
+          "resumeAndStaleCheckMs": 4.153599999990547,
+          "sameWorld": true,
+          "tokenRotated": true,
+          "staleVisitRejected": true,
+          "members": 6
+        }
+      ],
+      "churn": [
+        {
+          "cycle": 1,
+          "type": "metrics",
+          "id": "310da3a6-9e23-41dc-93f3-92a5db262ffa",
+          "wallMs": 262631.1667,
+          "cpu": {
+            "user": 12421000,
+            "system": 6609000
+          },
+          "memory": {
+            "rss": 243236864,
+            "heapTotal": 181723136,
+            "heapUsed": 42134472,
+            "external": 9861783,
+            "arrayBuffers": 79503
+          },
+          "peakRss": 242577408,
+          "authLookups": 11245,
+          "tcpBytesWritten": 102447931,
+          "rooms": 1,
+          "members": 6,
+          "httpConnections": 6,
+          "roomSteps": 2406,
+          "roomStepMs": {
+            "count": 2406,
+            "mean": 0.0945842061514649,
+            "p50": 0.07830000002286397,
+            "p95": 0.13310000000637956,
+            "max": 4.510399999999208
+          },
+          "schedulerExecutionMs": {
+            "count": 3855,
+            "mean": 0.7004634760050589,
+            "p50": 0.8413000000000466,
+            "p95": 1.5430000000051223,
+            "max": 5.977899999998044
+          },
+          "schedulerLateMs": {
+            "count": 3854,
+            "mean": 6.210000492994284,
+            "p50": 6.193300000013551,
+            "p95": 7.137399999977788,
+            "max": 16.042599999986123
+          },
+          "schedulerGapsOver250Ms": 0
+        },
+        {
+          "cycle": 2,
+          "type": "metrics",
+          "id": "dda29a35-1d66-418c-ab03-5bd23dc00f59",
+          "wallMs": 262672.4075,
+          "cpu": {
+            "user": 12468000,
+            "system": 6609000
+          },
+          "memory": {
+            "rss": 243240960,
+            "heapTotal": 181723136,
+            "heapUsed": 46644008,
+            "external": 9894092,
+            "arrayBuffers": 111812
+          },
+          "peakRss": 243236864,
+          "authLookups": 11253,
+          "tcpBytesWritten": 102540038,
+          "rooms": 1,
+          "members": 6,
+          "httpConnections": 6,
+          "roomSteps": 2407,
+          "roomStepMs": {
+            "count": 2407,
+            "mean": 0.09455492314100751,
+            "p50": 0.07830000002286397,
+            "p95": 0.13310000000637956,
+            "max": 4.510399999999208
+          },
+          "schedulerExecutionMs": {
+            "count": 3856,
+            "mean": 0.7003518412861677,
+            "p50": 0.8409000000101514,
+            "p95": 1.5430000000051223,
+            "max": 5.977899999998044
+          },
+          "schedulerLateMs": {
+            "count": 3855,
+            "mean": 6.208389597924765,
+            "p50": 6.193300000013551,
+            "p95": 7.137399999977788,
+            "max": 16.042599999986123
+          },
+          "schedulerGapsOver250Ms": 0
+        },
+        {
+          "cycle": 3,
+          "type": "metrics",
+          "id": "5a470670-9e78-4531-be00-799a4028358b",
+          "wallMs": 262712.8045,
+          "cpu": {
+            "user": 12515000,
+            "system": 6609000
+          },
+          "memory": {
+            "rss": 243245056,
+            "heapTotal": 181985280,
+            "heapUsed": 51149568,
+            "external": 9934593,
+            "arrayBuffers": 152313
+          },
+          "peakRss": 243236864,
+          "authLookups": 11261,
+          "tcpBytesWritten": 102638451,
+          "rooms": 1,
+          "members": 6,
+          "httpConnections": 6,
+          "roomSteps": 2408,
+          "roomStepMs": {
+            "count": 2408,
+            "mean": 0.09452753322276775,
+            "p50": 0.07829999999376014,
+            "p95": 0.13310000000637956,
+            "max": 4.510399999999208
+          },
+          "schedulerExecutionMs": {
+            "count": 3858,
+            "mean": 0.7001188698806211,
+            "p50": 0.8407000000006519,
+            "p95": 1.5430000000051223,
+            "max": 5.977899999998044
+          },
+          "schedulerLateMs": {
+            "count": 3857,
+            "mean": 6.205621519315524,
+            "p50": 6.193299999984447,
+            "p95": 7.137399999977788,
+            "max": 16.042599999986123
+          },
+          "schedulerGapsOver250Ms": 0
+        },
+        {
+          "cycle": 4,
+          "type": "metrics",
+          "id": "a43eef73-bc20-4b9a-a1e4-67afafed2b60",
+          "wallMs": 262758.6777,
+          "cpu": {
+            "user": 12562000,
+            "system": 6609000
+          },
+          "memory": {
+            "rss": 243253248,
+            "heapTotal": 181985280,
+            "heapUsed": 55672088,
+            "external": 9975094,
+            "arrayBuffers": 192814
+          },
+          "peakRss": 243249152,
+          "authLookups": 11269,
+          "tcpBytesWritten": 102741298,
+          "rooms": 1,
+          "members": 6,
+          "httpConnections": 6,
+          "roomSteps": 2409,
+          "roomStepMs": {
+            "count": 2409,
+            "mean": 0.09451199667928646,
+            "p50": 0.07829999999376014,
+            "p95": 0.13310000000637956,
+            "max": 4.510399999999208
+          },
+          "schedulerExecutionMs": {
+            "count": 3860,
+            "mean": 0.6999341191708335,
+            "p50": 0.839799999987008,
+            "p95": 1.5424000000057276,
+            "max": 5.977899999998044
+          },
+          "schedulerLateMs": {
+            "count": 3859,
+            "mean": 6.202558719875609,
+            "p50": 6.193199999979697,
+            "p95": 7.137399999977788,
+            "max": 16.042599999986123
+          },
+          "schedulerGapsOver250Ms": 0
+        },
+        {
+          "cycle": 5,
+          "type": "metrics",
+          "id": "efbc4c3a-33d4-490c-89e8-dbc7a924cf2c",
+          "wallMs": 262807.7924,
+          "cpu": {
+            "user": 12609000,
+            "system": 6609000
+          },
+          "memory": {
+            "rss": 243261440,
+            "heapTotal": 181985280,
+            "heapUsed": 60192656,
+            "external": 10007391,
+            "arrayBuffers": 225111
+          },
+          "peakRss": 243249152,
+          "authLookups": 11277,
+          "tcpBytesWritten": 102844145,
+          "rooms": 1,
+          "members": 6,
+          "httpConnections": 6,
+          "roomSteps": 2410,
+          "roomStepMs": {
+            "count": 2410,
+            "mean": 0.0944848132781666,
+            "p50": 0.07829999999376014,
+            "p95": 0.13310000000637956,
+            "max": 4.510399999999208
+          },
+          "schedulerExecutionMs": {
+            "count": 3862,
+            "mean": 0.6997374676331932,
+            "p50": 0.8396000000066124,
+            "p95": 1.5424000000057276,
+            "max": 5.977899999998044
+          },
+          "schedulerLateMs": {
+            "count": 3861,
+            "mean": 6.199573426573408,
+            "p50": 6.1929999999993015,
+            "p95": 7.1344999999855645,
+            "max": 16.042599999986123
+          },
+          "schedulerGapsOver250Ms": 0
+        }
+      ],
+      "fixtureCleanup": true
+    }
+  ]
+}
