@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { characterSkinSchema, playerProfileSchema, roomProfilesSchema } from "./index";
-import { playerModeSchema, playerPositionSchema } from "./index";
+import { playerModeSchema, playerPositionSchema, socketCapabilitiesSchema } from "./index";
 import { chatSchema, playerChatSchema, bridgeSchema, resumeSchema, roomSchema, snapshotSchema, worldSchema, clearVisitorsSchema, focusSchema, hostSchema, inputSchema, joinSchema, kickSchema, parseInviteLink, playerActionSchema } from "./index";
 
 const token = "a".repeat(43);
@@ -104,4 +104,12 @@ it("accepts negotiated HP from 0 to 50 and legacy players without HP", () => {
   for (const hp of [0, 2, 47, 50]) expect(schema.parse({ ...player, hp }).hp).toBe(hp);
   for (const hp of [-1, 51, 2.5, Infinity, NaN, "50", null]) expect(schema.safeParse({ ...player, hp }).success).toBe(false);
   expect(schema.omit({ hp: true }).safeParse(player).success).toBe(true);
+});
+describe("server cost stage 1 capability", () => {
+  it("reads optional handshake flags beside version and token, rejecting non-boolean values", () => {
+    expect(socketCapabilitiesSchema.parse({ version: 2, token: "t", health: true, idleSnapshots: true })).toEqual({ health: true, idleSnapshots: true });
+    expect(socketCapabilitiesSchema.parse({ version: 2, token: "t" })).toEqual({});
+    expect(socketCapabilitiesSchema.safeParse({ idleSnapshots: "yes" }).success).toBe(false);
+    expect(socketCapabilitiesSchema.safeParse(null).success).toBe(false);
+  });
 });

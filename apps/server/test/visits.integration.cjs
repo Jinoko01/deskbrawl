@@ -596,3 +596,139 @@ test('two clients share authoritative hits, enforce room isolation, and close on
   gs.disconnect();
   ts.disconnect();
 });
+
+// Collects snapshots for a bounded window instead of waiting for silence forever.
+async function collect(socket, ms) {
+  const received = [];
+  const listener = (snapshot) => received.push(snapshot);
+  socket.on('world:snapshot', listener);
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  socket.off('world:snapshot', listener);
+  return received;
+}
+
+test('idle snapshots are skipped only for opted-in sockets and resume on changes, motions and explicit events', async () => {
+  const host = await register('Idle host');
+  const guest = await register('Legacy guest');
+  const hs = await connect(host, {
+    auth: {
+      version: 2,
+      token: host.accessToken,
+      health: true,
+      idleSnapshots: true,
+    },
+  });
+  const gs = await connect(guest);
+  const hosted = await ack(hs, 'room:host', {
+    version: 2,
+    bounds: { width: 1280, height: 720 },
+  });
+  const invitation = (await apiFor(host).post('/v1/rooms/me/invites')).body;
+  const entered = await ack(gs, 'visit:join', {
+    version: 2,
+    token: new URL(invitation.link).pathname.slice(6),
+  });
+  expect(entered.ok).toBe(true);
+  const { SimulationEngine } = await import('../dist/app.mjs');
+  const room = app.get(SimulationEngine).rooms.get(hosted.roomId);
+  const hostPlayer = (snapshot) =>
+    snapshot.world.players.find((player) => player.id === host.deviceId);
+
+  // Mixed room: the legacy guest keeps 20 Hz, the opted-in host goes quiet.
+  await collect(hs, 200);
+  const tickBefore = room.world.tick;
+  const [quietHost, legacyGuest] = await Promise.all([
+    collect(hs, 600),
+    collect(gs, 600),
+  ]);
+  expect(quietHost).toHaveLength(0);
+  expect(legacyGuest.length).toBeGreaterThanOrEqual(8);
+  expect(legacyGuest[0].world.players[0]).not.toHaveProperty('hp');
+  expect(room.world.tick - tickBefore).toBeGreaterThanOrEqual(8);
+
+  // Movement: applied sequence and every step arrive, then one settling frame.
+  const moving = collect(hs, 900);
+  expect(
+    (
+      await ack(hs, 'player:input', {
+        visitId: hosted.visitId,
+        seq: 1,
+        movement: { x: 1, y: 0 },
+      })
+    ).ok,
+  ).toBe(true);
+  const moved = await moving;
+  expect(moved[0].lastProcessedSeq[host.deviceId]).toBe(1);
+  const xs = moved.map((snapshot) => hostPlayer(snapshot).position.x);
+  expect(xs.at(-1)).toBe(xs.at(-2));
+  expect(new Set(xs.slice(0, -1)).size).toBe(xs.length - 1);
+  expect(await collect(hs, 300)).toHaveLength(0);
+
+  // A repeated input that does not move still delivers its new sequence.
+  const held = until(
+    hs,
+    'world:snapshot',
+    (snapshot) => snapshot.lastProcessedSeq[host.deviceId] === 2,
+  );
+  await ack(hs, 'player:input', {
+    visitId: hosted.visitId,
+    seq: 2,
+    movement: { x: 0, y: 0 },
+  });
+  await held;
+  await collect(hs, 200);
+
+  // Attack: snapshots continue through the motion and cooldown boundaries.
+  const attacking = collect(hs, 1200);
+  await ack(hs, 'player:action', {
+    visitId: hosted.visitId,
+    actionId: randomUUID(),
+    action: 'melee',
+  });
+  const attack = await attacking;
+  const acted = attack.find((snapshot) => hostPlayer(snapshot).lastAction);
+  const { tick: actionTick } = hostPlayer(acted).lastAction;
+  const ticks = attack.map((snapshot) => snapshot.world.tick);
+  for (const boundary of [actionTick + 8, hostPlayer(acted).meleeReadyAtTick]) {
+    expect(ticks).toContain(boundary);
+  }
+  expect(ticks.at(-1)).toBe(hostPlayer(acted).meleeReadyAtTick);
+  expect(await collect(hs, 300)).toHaveLength(0);
+
+  // Chat stays on the periodic path until it is removed.
+  await ack(hs, 'player:chat', {
+    visitId: hosted.visitId,
+    seq: 1,
+    current: '안녕',
+    previous: '',
+  });
+  expect((await collect(hs, 300)).length).toBeGreaterThanOrEqual(4);
+  const cleared = collect(hs, 400);
+  await ack(hs, 'player:chat', {
+    visitId: hosted.visitId,
+    seq: 2,
+    current: '',
+    previous: '',
+  });
+  const afterClear = await cleared;
+  expect(afterClear.at(-1).chats).toEqual([]);
+  expect(afterClear.length).toBeLessThanOrEqual(4);
+  expect(await collect(hs, 300)).toHaveLength(0);
+
+  // Explicit events send the full current state even while idle.
+  const renamed = until(hs, 'world:snapshot', (snapshot) =>
+    snapshot.members.some((member) => member.nickname === 'Renamed guest'),
+  );
+  await ack(gs, 'player:profile', {
+    visitId: entered.visitId,
+    nickname: 'Renamed guest',
+  });
+  await renamed;
+  const departed = until(
+    hs,
+    'world:snapshot',
+    (snapshot) => snapshot.members.length === 1,
+  );
+  await ack(gs, 'visit:leave', { visitId: entered.visitId });
+  expect((await departed).world.players).toHaveLength(1);
+});

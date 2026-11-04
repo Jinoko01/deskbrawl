@@ -13,6 +13,7 @@ import {
   playerChatSchema,
   playerModeSchema,
   playerPositionSchema,
+  socketCapabilitiesSchema,
   focusSchema,
   kickSchema,
   clearVisitorsSchema,
@@ -38,6 +39,14 @@ import type { RoomWorld } from '../game/simulation';
 import { AuthService } from './auth.service';
 import { VisitSessionService } from './visit-session.service';
 
+// Client display windows for attack motions (desktop networkScene).
+const ATTACK_DISPLAY_MS = { melee: 400, stone: 300 } as const;
+
+interface SentSnapshot {
+  key: string;
+  settled: boolean;
+}
+
 @WebSocketGateway({ transports: ['websocket'], maxHttpBufferSize: 8192 })
 export class VisitsGateway
   implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy
@@ -46,6 +55,8 @@ export class VisitsGateway
   server!: Server;
   private readonly limits = new RateLimit();
   private expiryTimer: ReturnType<typeof setInterval> | undefined;
+  // Last snapshot sent per room; released together with the room object.
+  private readonly sent = new WeakMap<RoomWorld, SentSnapshot>();
 
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
@@ -59,7 +70,7 @@ export class VisitsGateway
     );
     this.sessions.engine.onSnapshot = (room) => {
       this.sessions.engine.expireChats(room, Date.now());
-      this.publishSnapshot(room);
+      this.publishSnapshot(room, true);
     };
     server.use((socket, next) => {
       void this.validateHandshake(socket).then(
@@ -306,14 +317,15 @@ export class VisitsGateway
     });
   }
 
+  private capabilities(
+    socket: Socket,
+  ): z.infer<typeof socketCapabilitiesSchema> {
+    const result = socketCapabilitiesSchema.safeParse(socket.handshake.auth);
+    return result.success ? result.data : {};
+  }
+
   private clientSnapshot(socket: Socket, snapshot: Snapshot): Snapshot {
-    const auth: unknown = socket.handshake.auth;
-    if (
-      typeof auth === 'object' &&
-      auth !== null &&
-      'health' in auth &&
-      auth.health === true
-    ) {
+    if (this.capabilities(socket).health === true) {
       return snapshot;
     }
     // Existing v2 clients reject unknown player fields in their strict schema.
@@ -330,14 +342,67 @@ export class VisitsGateway
     };
   }
 
-  private publishSnapshot(room: RoomWorld): void {
+  // Periodic tick snapshots may be skipped for idleSnapshots clients once the
+  // world has settled; explicit events always send the full current state.
+  private publishSnapshot(room: RoomWorld, periodic = false): void {
     const snapshot = this.sessions.engine.snapshot(room);
+    const skipIdle = this.isSettledRepeat(room, snapshot, periodic);
     for (const member of room.members.values()) {
       const socket = this.server.sockets.sockets.get(member.socketId);
-      if (socket?.rooms.has(room.worldId)) {
-        socket.emit('world:snapshot', this.clientSnapshot(socket, snapshot));
+      if (!socket?.rooms.has(room.worldId)) {
+        continue;
       }
+      if (skipIdle && this.capabilities(socket).idleSnapshots === true) {
+        continue;
+      }
+      socket.emit('world:snapshot', this.clientSnapshot(socket, snapshot));
     }
+  }
+
+  private isSettledRepeat(
+    room: RoomWorld,
+    snapshot: Snapshot,
+    periodic: boolean,
+  ): boolean {
+    // Only the auto-incrementing tick is excluded from the comparison.
+    const key = JSON.stringify({
+      ...snapshot,
+      world: { ...snapshot.world, tick: 0 },
+    });
+    const previous = this.sent.get(room);
+    if (!periodic || previous?.key !== key || this.isAnimating(snapshot)) {
+      this.sent.set(room, { key, settled: false });
+      return false;
+    }
+    if (previous.settled) {
+      return true;
+    }
+    // One unchanged snapshot lets clients finish walk/attack/stun motions.
+    previous.settled = true;
+    return false;
+  }
+
+  // Raw fields can stay equal while the rendered motion still depends on tick.
+  private isAnimating(snapshot: Snapshot): boolean {
+    const { tick, rules, players, projectiles, effects } = snapshot.world;
+    if (
+      snapshot.chats.length > 0 ||
+      projectiles.length > 0 ||
+      effects.length > 0
+    ) {
+      return true;
+    }
+    return players.some(
+      (player) =>
+        tick < player.knockbackUntilTick ||
+        tick < player.stunnedUntilTick ||
+        tick < player.invulnerableUntilTick ||
+        tick < player.meleeReadyAtTick ||
+        tick < player.stoneReadyAtTick ||
+        (player.lastAction !== null &&
+          (tick - player.lastAction.tick) * rules.tickMs <
+            ATTACK_DISPLAY_MS[player.lastAction.kind]),
+    );
   }
 
   private async controlRoom(

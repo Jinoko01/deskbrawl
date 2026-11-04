@@ -53,6 +53,9 @@ export const playerActionSchema = leaveSchema.extend({ actionId: idSchema, actio
 export const playerModeSchema = leaveSchema.extend({ seq: tick.min(1), playing: z.boolean() });
 export const playerPositionSchema = leaveSchema.extend({ seq: tick.min(1), position: vector });
 export const serverFeaturesSchema = z.object({ workDrag: z.literal(true) }).strict();
+// Optional Socket.IO handshake auth flags beside version/token. Servers ignore unknown flags, so a new client
+// still works with an old server. idleSnapshots: the client tolerates skipped snapshots while nothing changes.
+export const socketCapabilitiesSchema = z.object({ health: z.boolean().optional(), idleSnapshots: z.boolean().optional() });
 const positive = z.number().finite().positive().max(100_000);
 const combat = z.object({ meleeReach: positive, meleeCooldownMs: positive, stoneCooldownMs: positive,
   stoneSpeedUnitsPerSecond: positive, stoneRadius: positive, stoneLifetimeMs: positive,
