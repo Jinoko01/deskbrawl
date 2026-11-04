@@ -29,7 +29,10 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     reconnectionAttempts: 3,
     reconnectionDelay: 500,
     reconnectionDelayMax: 1500,
-    auth: { version: PROTOCOL_VERSION, token: session.accessToken, health: true },
+    // idleSnapshots is safe only with createSnapshotView's one-tick interpolation cap.
+    auth: {
+      version: PROTOCOL_VERSION, token: session.accessToken, health: true, idleSnapshots: true,
+    },
     timeout: 5000,
   });
   let membership: Joined | undefined;

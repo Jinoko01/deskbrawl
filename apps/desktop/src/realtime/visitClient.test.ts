@@ -15,6 +15,7 @@ const transport = vi.hoisted(() => {
   const manager = new Map<string, () => void>();
   const emit = vi.fn((event: string, body: unknown, reply: Reply) => sent.push({ event, body, reply }));
   return {
+    options: [] as unknown[],
     listeners,
     sent,
     manager,
@@ -30,13 +31,19 @@ const transport = vi.hoisted(() => {
     },
   };
 });
-vi.mock("socket.io-client", () => ({ io: () => transport.socket }));
+vi.mock("socket.io-client", () => ({
+  io: (_origin: string, options: unknown) => {
+    transport.options.push(options);
+    return transport.socket;
+  },
+}));
 
 const clients: VisitClient[] = [];
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
   transport.sent.length = 0;
+  transport.options.length = 0;
   transport.listeners.clear();
   transport.manager.clear();
   transport.socket.connected = true;
@@ -357,4 +364,20 @@ it("resumes a paused visitor when a quick focus toggle is cancelled before chang
   client.resumeInput();
   await vi.advanceTimersByTimeAsync(50);
   expect(pending("player:input").body).toMatchObject({ visitId: joined.visitId, movement: { x: 0, y: 0 } });
+});
+
+it("opts into idle snapshots and stays connected through a long snapshot gap", async () => {
+  const {
+    client, joined, receive, ended,
+  } = await host();
+  expect(transport.options[0]).toMatchObject({ auth: { version: 2, health: true, idleSnapshots: true } });
+  receive.mockClear();
+  // An idle server may send nothing for minutes; only Socket.IO disconnects end the visit.
+  await vi.advanceTimersByTimeAsync(120000);
+  expect(ended).not.toHaveBeenCalled();
+  expect(receive).not.toHaveBeenCalled();
+  pending("player:input").reply(null, { ok: true });
+  client.input({ kind: "input", seq: 1, movement: { x: 1, y: 0 } });
+  await vi.advanceTimersByTimeAsync(50);
+  expect(pending("player:input").body).toEqual({ visitId: joined.visitId, seq: 2, movement: { x: 1, y: 0 } });
 });

@@ -122,6 +122,34 @@ describe("network presentation", () => {
     expect(cancel).toHaveBeenCalledWith(1);
   });
 
+  it("interpolates the first move after a long snapshot gap over one tick only", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => frames.push(callback)));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const time = vi.spyOn(performance, "now").mockReturnValue(1000);
+    const render = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+    const buffer = createSnapshotView(render);
+    const first = fixture();
+    const player = first.world.players[0];
+    if (player === undefined) {
+      throw new Error("Missing fixture player");
+    }
+    buffer.receive(first);
+    // 600 ticks (30 s) without snapshots, then one 12-unit step.
+    buffer.receive({ ...first, world: { ...first.world, tick: 600, players: [{ ...player, position: { x: 112, y: 100 } }] } });
+    expect(render.mock.lastCall?.[0].characters[0]).toMatchObject({ position: { x: 100 }, motion: { kind: "walk" } });
+    frames.shift()?.(1025);
+    expect(render.mock.lastCall?.[0].characters[0]?.position.x).toBe(106);
+    frames.shift()?.(1050);
+    expect(render.mock.lastCall?.[0].characters[0]?.position.x).toBe(112);
+    expect(frames).toHaveLength(0);
+    // The settling snapshot with an unchanged position ends the walk motion.
+    buffer.receive({ ...first, world: { ...first.world, tick: 601, players: [{ ...player, position: { x: 112, y: 100 } }] } });
+    expect(render.mock.lastCall?.[0].characters[0]).toMatchObject({ position: { x: 112 }, motion: { kind: "idle" } });
+    buffer.dispose();
+    time.mockRestore();
+  });
+
   it("redraws HP changes without movement and shows knockout until the server restores HP", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());

@@ -51,7 +51,9 @@ export function createSnapshotView(render: (scene: CharacterSceneSnapshot) => vo
     }
     const scene = networkScene(current, previous);
     const sameWorld = previous?.worldId === current.worldId;
-    const duration = sameWorld && previous !== undefined ? Math.max(1, (current.world.tick - previous.world.tick) * current.world.rules.tickMs) : 1;
+    // Idle servers may skip snapshots; cap at one tick so the first move after a long pause is not slowed down.
+    const { tickMs } = current.world.rules;
+    const duration = sameWorld && previous !== undefined ? Math.min(tickMs, Math.max(1, (current.world.tick - previous.world.tick) * tickMs)) : 1;
     const alpha = Math.min(1, Math.max(0, (now - receivedAt) / duration));
     const interpolated = {
       ...scene,
