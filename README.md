@@ -123,4 +123,4 @@ apps/server/          NestJS·Prisma·서버 권위 시뮬레이션·통합 테�
 docs/                기획·구현 계획·개발 가이드
 ```
 
-앱 로고는 기본 캐릭터의 얼굴·민트 헤드셋을 사용합니다. 원본은 `apps/desktop/public/brand/face.png`이며 사이드바·웹 파비콘·Windows 앱/트레이 아이콘에 적용합니다. UI는 OS의 라이트·다크 설정에 맞춰 민트 테마를 전환합니다. 색상과 아이콘 재생성 방법은 [브랜딩 안내](docs/branding.md)를 참고합니다.
+앱 로고는 기본 캐릭터의 얼굴·민트 헤드셋을 사용합니다. 원본은 `apps/desktop/public/brand/face.png`이며 사이드바·웹 파비콘·Windows 앱/트레이 아이콘에 적용합니다. UI는 OS의 라이트·다크 설정에 맞춰 민트 테마를 전환합니다. 브랜드 성격·색상·말투는 [브랜딩 안내](docs/branding.md)를 참고합니다.
