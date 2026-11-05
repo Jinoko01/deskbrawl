@@ -1,6 +1,7 @@
 const request = require('supertest');
 const { io } = require('socket.io-client');
-const { randomBytes, randomUUID } = require('node:crypto');
+const { Buffer } = require('node:buffer');
+const { createHmac, randomBytes, randomUUID } = require('node:crypto');
 
 // This suite requires an isolated PostgreSQL database with migrations applied.
 if (
@@ -88,6 +89,40 @@ async function connect(user, extra = {}) {
 }
 function ack(socket, event, body) {
   return socket.timeout(3000).emitWithAck(event, body);
+}
+// Same claims as AuthService.issue(), with a caller-chosen expiry (seconds).
+function signAccessToken(deviceId, exp) {
+  const part = (value) =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  const body = `${part({ alg: 'HS256', typ: 'JWT' })}.${part({
+    sub: deviceId,
+    iss: 'deskbrawl',
+    aud: 'deskbrawl-desktop',
+    iat: Math.floor(Date.now() / 1000),
+    exp,
+  })}`;
+  const signature = createHmac('sha256', config.JWT_SECRET)
+    .update(body)
+    .digest('base64url');
+  return `${body}.${signature}`;
+}
+function disconnected(socket, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('Timed out waiting for disconnect')),
+      timeoutMs,
+    );
+    socket.once('disconnect', () => {
+      clearTimeout(timeout);
+      resolve(Date.now());
+    });
+  });
+}
+async function hostRoom(socket) {
+  return ack(socket, 'room:host', {
+    version: 2,
+    bounds: { width: 1280, height: 720 },
+  });
 }
 function until(socket, event, predicate) {
   return new Promise((resolve, reject) => {
@@ -731,4 +766,104 @@ test('idle snapshots are skipped only for opted-in sockets and resume on changes
   );
   await ack(gs, 'visit:leave', { visitId: entered.visitId });
   expect((await departed).world.players).toHaveLength(1);
+});
+
+test('commands reuse handshake authentication without per-command device lookups', async () => {
+  const host = await register('Auth cache host');
+  const hs = await connect(host);
+  const hosted = await hostRoom(hs);
+  const { Database } = await import('../dist/app.mjs');
+  const db = app.get(Database);
+  let lookups = 0;
+  const find = db.deviceIdentity.findUnique.bind(db.deviceIdentity);
+  db.deviceIdentity.findUnique = (args) => {
+    if (args.select?.revokedAt === true) {
+      lookups++;
+    }
+    return find(args);
+  };
+  for (let seq = 1; seq <= 20; seq++) {
+    expect(
+      (
+        await ack(hs, 'player:input', {
+          visitId: hosted.visitId,
+          seq,
+          movement: { x: 0, y: 0 },
+        })
+      ).ok,
+    ).toBe(true);
+  }
+  expect(lookups).toBe(0);
+});
+
+test('revoking a connected device ends its connection within the check interval and blocks reconnects', async () => {
+  const host = await register('Revoked host');
+  const other = await register('Unrevoked device');
+  const hs = await connect(host);
+  const os = await connect(other);
+  await hostRoom(hs);
+  const { Database } = await import('../dist/app.mjs');
+  const db = app.get(Database);
+  const closed = disconnected(hs, 2500);
+  await db.deviceIdentity.update({
+    where: { id: host.deviceId },
+    data: { revokedAt: new Date() },
+  });
+  await closed;
+  expect(os.connected).toBe(true);
+  await expect(connect(host)).rejects.toThrow('UNAUTHORIZED');
+});
+
+test('an expired access token is disconnected without waiting for reconnect', async () => {
+  const host = await register('Expiring host');
+  const exp = Math.floor(Date.now() / 1000) + 2;
+  const hs = await connect(host, {
+    auth: { version: 2, token: signAccessToken(host.deviceId, exp) },
+  });
+  const closed = disconnected(hs, 5000);
+  expect((await hostRoom(hs)).role).toBe('host');
+  expect(await closed).toBeGreaterThanOrEqual(exp * 1000);
+  await expect(
+    connect(host, {
+      auth: { version: 2, token: signAccessToken(host.deviceId, exp) },
+    }),
+  ).rejects.toThrow('UNAUTHORIZED');
+});
+
+test('existing connections keep working while the batched device check fails', async () => {
+  const host = await register('DB outage host');
+  const hs = await connect(host);
+  const hosted = await hostRoom(hs);
+  const { Database } = await import('../dist/app.mjs');
+  const db = app.get(Database);
+  const findMany = db.deviceIdentity.findMany;
+  let failures = 0;
+  const failedTwice = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('Device check did not run')),
+      3500,
+    );
+    db.deviceIdentity.findMany = () => {
+      if (++failures === 2) {
+        clearTimeout(timeout);
+        resolve();
+      }
+      return Promise.reject(new Error('database unavailable'));
+    };
+  });
+  try {
+    await failedTwice;
+    expect(hs.connected).toBe(true);
+    expect(
+      (
+        await ack(hs, 'player:input', {
+          visitId: hosted.visitId,
+          seq: 1,
+          movement: { x: 0, y: 0 },
+        })
+      ).ok,
+    ).toBe(true);
+  } finally {
+    db.deviceIdentity.findMany = findMany;
+  }
 });

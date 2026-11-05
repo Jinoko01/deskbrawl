@@ -19,7 +19,7 @@ import {
   clearVisitorsSchema,
 } from '@deskbrawl/protocol';
 import type { OnModuleDestroy } from '@nestjs/common';
-import { Inject } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import type { OnGatewayDisconnect, OnGatewayInit } from '@nestjs/websockets';
 import {
   ConnectedSocket,
@@ -36,6 +36,7 @@ import { DomainError } from '../domain.error';
 import { failure } from '../errors';
 import { RateLimit } from '../rate-limit';
 import type { RoomWorld } from '../game/simulation';
+import type { AccessClaims } from './auth.service';
 import { AuthService } from './auth.service';
 import { VisitSessionService } from './visit-session.service';
 
@@ -57,6 +58,11 @@ export class VisitsGateway
   private expiryTimer: ReturnType<typeof setInterval> | undefined;
   // Last snapshot sent per room; released together with the room object.
   private readonly sent = new WeakMap<RoomWorld, SentSnapshot>();
+  // Handshake auth result per connection; released with the socket.
+  private readonly claims = new WeakMap<Socket, AccessClaims>();
+  private readonly logger = new Logger(VisitsGateway.name);
+  private checking = false;
+  private checkFailing = false;
 
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
@@ -80,16 +86,63 @@ export class VisitsGateway
     });
     // Token expiry/revocation must end idle sessions too.
     this.expiryTimer = setInterval(() => {
-      for (const socket of server.sockets.sockets.values()) {
-        void this.authenticate(socket).catch(() => {
-          this.endSession(socket);
-          socket.disconnect(true);
-        });
-      }
+      void this.checkDevices(server);
       for (const result of this.sessions.expireDisconnected()) {
         this.announceDeparture(result);
       }
     }, 1000);
+  }
+
+  // Revocation reaches open connections within one interval (accepted ~1s).
+  // During a DB outage open connections keep their verified token until it
+  // expires; new handshakes still need the DB.
+  private async checkDevices(server: Server): Promise<void> {
+    if (this.checking) {
+      return;
+    }
+    this.checking = true;
+    try {
+      const now = Date.now();
+      const byDevice = new Map<string, Socket[]>();
+      for (const socket of server.sockets.sockets.values()) {
+        const claims = this.claims.get(socket);
+        if (claims === undefined || claims.expiresAt <= now) {
+          this.closeSession(socket);
+          continue;
+        }
+        byDevice.set(claims.deviceId, [
+          ...(byDevice.get(claims.deviceId) ?? []),
+          socket,
+        ]);
+      }
+      if (byDevice.size === 0) {
+        return;
+      }
+
+      let inactive: Set<string>;
+      try {
+        inactive = await this.auth.inactiveDevices([...byDevice.keys()]);
+      } catch {
+        if (!this.checkFailing) {
+          this.logger.warn('Device revocation check failed; retrying');
+        }
+        this.checkFailing = true;
+        return;
+      }
+      this.checkFailing = false;
+      for (const deviceId of inactive) {
+        for (const socket of byDevice.get(deviceId) ?? []) {
+          this.closeSession(socket);
+        }
+      }
+    } finally {
+      this.checking = false;
+    }
+  }
+
+  private closeSession(socket: Socket): void {
+    this.endSession(socket);
+    socket.disconnect(true);
   }
 
   onModuleDestroy(): void {
@@ -115,16 +168,17 @@ export class VisitsGateway
       throw new DomainError('INCOMPATIBLE_VERSION');
     }
     const token: unknown = 'token' in auth ? auth.token : undefined;
-    await this.auth.verify(token);
+    this.claims.set(socket, await this.auth.authenticate(token));
   }
 
-  private async authenticate(socket: Socket): Promise<string> {
-    const auth: unknown = socket.handshake.auth;
-    return this.auth.verify(
-      typeof auth === 'object' && auth !== null && 'token' in auth
-        ? auth.token
-        : undefined,
-    );
+  // The handshake token is fixed for the connection, so commands only need
+  // the expiry; revocation is checked in batch by checkDevices().
+  private authenticated(socket: Socket): string {
+    const claims = this.claims.get(socket);
+    if (claims === undefined || claims.expiresAt <= Date.now()) {
+      throw new DomainError('UNAUTHORIZED');
+    }
+    return claims.deviceId;
   }
 
   private async command<T>(
@@ -135,7 +189,7 @@ export class VisitsGateway
   ): Promise<T | ReturnType<typeof failure>> {
     try {
       this.limits.take(`${kind}:${socket.id}`, limit);
-      const device = await this.authenticate(socket);
+      const device = this.authenticated(socket);
       if (!socket.connected) {
         throw new DomainError('CONNECTION_LOST');
       }

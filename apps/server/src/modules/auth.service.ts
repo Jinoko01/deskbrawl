@@ -15,6 +15,12 @@ import { DomainError } from '../domain.error';
 import { RateLimit } from '../rate-limit';
 import { hash } from './token-hash';
 
+export interface AccessClaims {
+  deviceId: string;
+  // JWT exp in epoch milliseconds.
+  expiresAt: number;
+}
+
 @Injectable()
 export class AuthService {
   readonly limits = new RateLimit();
@@ -72,31 +78,55 @@ export class AuthService {
   }
 
   async verify(token: unknown): Promise<string> {
-    if (typeof token !== 'string' || token.length > 4096) {
-      throw new DomainError('UNAUTHORIZED');
-    }
-    let sub: unknown;
-    try {
-      sub = this.jwt.verify<{ sub: unknown }>(token, {
-        secret: this.config.JWT_SECRET,
-        algorithms: ['HS256'],
-        issuer: 'deskbrawl',
-        audience: 'deskbrawl-desktop',
-      }).sub;
-    } catch {
-      throw new DomainError('UNAUTHORIZED');
-    }
-    const parsed = idSchema.safeParse(sub);
-    if (!parsed.success) {
-      throw new DomainError('UNAUTHORIZED');
-    }
+    return (await this.authenticate(token)).deviceId;
+  }
+
+  // Signature, claims and current device state; used once per connection.
+  async authenticate(token: unknown): Promise<AccessClaims> {
+    const claims = this.verifyToken(token);
     const device = await this.db.deviceIdentity.findUnique({
-      where: { id: parsed.data },
+      where: { id: claims.deviceId },
       select: { revokedAt: true },
     });
     if (device === null || device.revokedAt !== null) {
       throw new DomainError('UNAUTHORIZED');
     }
-    return parsed.data;
+    return claims;
+  }
+
+  // One query for any number of connections: ids that are revoked or deleted.
+  async inactiveDevices(ids: string[]): Promise<Set<string>> {
+    const devices = await this.db.deviceIdentity.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, revokedAt: true },
+    });
+    const active = new Set(
+      devices
+        .filter((device) => device.revokedAt === null)
+        .map((device) => device.id),
+    );
+    return new Set(ids.filter((id) => !active.has(id)));
+  }
+
+  private verifyToken(token: unknown): AccessClaims {
+    if (typeof token !== 'string' || token.length > 4096) {
+      throw new DomainError('UNAUTHORIZED');
+    }
+    let payload: { sub: unknown; exp: unknown };
+    try {
+      payload = this.jwt.verify<{ sub: unknown; exp: unknown }>(token, {
+        secret: this.config.JWT_SECRET,
+        algorithms: ['HS256'],
+        issuer: 'deskbrawl',
+        audience: 'deskbrawl-desktop',
+      });
+    } catch {
+      throw new DomainError('UNAUTHORIZED');
+    }
+    const parsed = idSchema.safeParse(payload.sub);
+    if (!parsed.success || typeof payload.exp !== 'number') {
+      throw new DomainError('UNAUTHORIZED');
+    }
+    return { deviceId: parsed.data, expiresAt: payload.exp * 1000 };
   }
 }
