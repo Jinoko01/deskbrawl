@@ -112,6 +112,13 @@ async function worker() {
     }
     return find(args);
   };
+  const findMany = db.deviceIdentity.findMany.bind(db.deviceIdentity);
+  db.deviceIdentity.findMany = (args) => {
+    if (args?.select?.revokedAt === true) {
+      authLookups++;
+    }
+    return findMany(args);
+  };
   let tickSamples = [],
     schedulerSamples = [],
     schedulerLate = [],
@@ -692,7 +699,7 @@ async function main() {
       jsonBytes:
         'sum of JSON.stringify(snapshot) UTF-8 bytes received by all peers',
       authLookups:
-        'Prisma deviceIdentity.findUnique calls selecting revokedAt; logical auth lookup attempts, not PostgreSQL SQL statement count',
+        'Prisma deviceIdentity.findUnique/findMany calls selecting revokedAt (one batched findMany counts once); logical auth lookup attempts, not PostgreSQL SQL statement count',
       tick: 'room step duration excludes gateway publish; scheduler execution includes step and synchronous publish; lateness = max(0, callback gap - 25ms)',
       database:
         'isolated container cgroup v2 CPU cumulative usage and memory including page cache; samples bracket each phase; not process RSS',
