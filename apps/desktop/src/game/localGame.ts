@@ -3,7 +3,9 @@ import type {
   PlayerAction, PlayerInput, Vector2, WorldState,
 } from "@deskbrawl/game-core";
 import type { LocalCommand } from "../native/localGame";
-import type { CharacterMotion, CharacterSceneSnapshot, CharacterSkin } from "./characterScene";
+import type {
+  CharacterMotion, CharacterPositionInterpolation, CharacterSceneSnapshot, CharacterSkin,
+} from "./characterScene";
 import { initialCharacterScene, sameCharacterScene } from "./characterScene";
 
 // 로컬 검증용 조정값이다. 제품 확정값은 추후 실기기 검증으로 결정한다.
@@ -47,6 +49,7 @@ export function createLocalGame(width: number, height: number, render: (snapshot
   let pending: PlayerAction | undefined;
   let previousTime: number | undefined;
   let accumulated = 0;
+  let previousPlayers = world.players;
   let previousScene: CharacterSceneSnapshot | undefined;
   let skin: CharacterSkin = "mochi";
 
@@ -54,6 +57,7 @@ export function createLocalGame(width: number, height: number, render: (snapshot
     playing = false;
     movement = { x: 0, y: 0 };
     pending = undefined;
+    previousPlayers = world.players;
   }
 
   function publish(before: WorldState): void {
@@ -126,7 +130,7 @@ export function createLocalGame(width: number, height: number, render: (snapshot
       // 한 tick에 보관하는 공격은 하나이며, 프레임 지연 뒤 오래된 공격을 몰아 실행하지 않는다.
       pending = command.action ?? pending;
     },
-    advanceTime(nowMs: number): void {
+    advanceTime(nowMs: number): CharacterPositionInterpolation | undefined {
       if (!Number.isFinite(nowMs)) {
         throw new Error("Invalid local clock");
       }
@@ -147,10 +151,16 @@ export function createLocalGame(width: number, height: number, render: (snapshot
           ...(pending === undefined ? {} : { action: pending }),
         };
         world = advance(world, playing ? [input] : []);
+        previousPlayers = before.players;
         pending = undefined;
         accumulated -= world.rules.tickMs;
         publish(before);
       }
+      if (playing) {
+        // 화면은 마지막 두 고정 tick 사이를 그린다. 판정은 항상 최신 world를 사용한다.
+        return { previous: previousPlayers, alpha: accumulated / world.rules.tickMs };
+      }
+      return undefined;
     },
     pause(): void {
       stop();

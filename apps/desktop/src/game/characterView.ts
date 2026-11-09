@@ -35,6 +35,8 @@ export function createCharacterView(animations: CharacterAnimations, stunFrames:
   let current: CharacterFrame | undefined;
   let completed = false;
   let horizontalDirection = 1;
+  let healthBarSize = 0;
+  let displayedHp: number | undefined;
   body.onComplete = () => {
     completed = true;
   };
@@ -90,13 +92,19 @@ export function createCharacterView(animations: CharacterAnimations, stunFrames:
     body.position.set(0, size * (body.anchor.y - 0.5));
     stun.scale.set(size * 0.55 / stun.texture.orig.height);
     stun.position.set(0, -size * 0.65);
+    const hp = current?.hp;
+    if (size === healthBarSize && hp === displayedHp) {
+      return;
+    }
+    healthBarSize = size;
+    displayedHp = hp;
     healthBar.clear();
-    if (current?.hp !== undefined) {
+    if (hp !== undefined) {
       const width = size * 0.65;
       const height = Math.max(4, size * 0.06);
       const y = size * 0.42;
       healthBar.roundRect(-width / 2, y, width, height, height / 2).fill(0x171923);
-      const remaining = (width - 2) * current.hp / MAX_HP;
+      const remaining = (width - 2) * hp / MAX_HP;
       if (remaining > 0) {
         healthBar.rect(-width / 2 + 1, y + 1, remaining, height - 2).fill(0x8dde8c);
       }

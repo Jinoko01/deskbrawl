@@ -29,6 +29,11 @@ export interface CharacterSceneSnapshot {
   readonly effects?: readonly WorldEffect[];
 }
 
+export interface CharacterPositionInterpolation {
+  readonly previous: readonly Pick<PlayerState, "position">[];
+  readonly alpha: number;
+}
+
 // M0의 표시 크기를 유지한다. 제품의 최종 캐릭터 크기·충돌 반지름을 정하는 값은 아니다.
 export const CHARACTER_SIZE_PX = 96;
 

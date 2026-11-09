@@ -23,7 +23,9 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
   const render = (snapshot: CharacterSceneSnapshot) => {
     currentScene = snapshot;
     scene.update(snapshot);
-    updateRegions();
+    if (!playing) {
+      updateRegions();
+    }
   };
   const game = createLocalGame(host.clientWidth, host.clientHeight, render, () => {
     setPlaying(false);
@@ -62,8 +64,18 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
   function setPlaying(next: boolean): void {
     playing = next;
     activeDrag = undefined;
+    scene.setPlaying(next, next && mode === "local" ? advanceLocalTime : undefined);
     onModeChange?.(next);
     updateRegions();
+  }
+  function advanceLocalTime(nowMs: number) {
+    try {
+      return game.advanceTime(nowMs);
+    } catch (error) {
+      game.pause();
+      onError(error);
+      return undefined;
+    }
   }
   function visibility() {
     if (document.hidden) {
@@ -168,14 +180,8 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
       document.addEventListener("visibilitychange", visibility);
       window.addEventListener("resize", updateRegions);
       timer = setInterval(() => {
-        if (document.hidden || mode !== "local") {
-          return;
-        }
-        try {
-          game.advanceTime(performance.now());
-        } catch (error) {
-          game.pause();
-          onError(error);
+        if (!document.hidden && mode === "local" && !playing) {
+          advanceLocalTime(performance.now());
         }
       }, game.world.rules.tickMs);
       visibility();

@@ -9,6 +9,7 @@ import type { LocalCommand } from "../native/localGame";
 import { startLocalGame } from "./startLocalGame";
 import type { CharacterSceneSnapshot } from "./characterScene";
 import type { CharacterDrag } from "../native/drag";
+import type { MountedCharacterScene } from "./mountCharacter";
 
 const bridge = vi.hoisted(() => ({
   receive: undefined as ((state: Bridge) => void) | undefined,
@@ -67,7 +68,7 @@ beforeEach(() => {
 
 it("drags local characters only in WORK, clamps the world edges and clears regions on disposal", async () => {
   const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
-  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, dispose: vi.fn() }, vi.fn());
+  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, setPlaying: vi.fn(), dispose: vi.fn() }, vi.fn());
   await vi.waitFor(() => expect(bridge.drag).toBeTypeOf("function"));
   const first = update.mock.lastCall?.[0].characters[0];
   if (first === undefined) {
@@ -106,7 +107,7 @@ it("drags local characters only in WORK, clamps the world edges and clears regio
 
 it("maps scaled remote drag deltas to the owned character and rejects other players and recovery", async () => {
   const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
-  stop = startLocalGame({ clientWidth: 960, clientHeight: 540 } as HTMLElement, { update, dispose: vi.fn() }, vi.fn());
+  stop = startLocalGame({ clientWidth: 960, clientHeight: 540 } as HTMLElement, { update, setPlaying: vi.fn(), dispose: vi.fn() }, vi.fn());
   await vi.waitFor(() => expect(bridge.receive).toBeTypeOf("function"));
   const remote = snapshot();
   const own = remote.world.players[1];
@@ -166,7 +167,7 @@ function snapshot(): Snapshot {
 it("renders the shared host and guest world on the desktop overlay and restores it after returning", async () => {
   const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
   const failure = vi.fn();
-  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, dispose: vi.fn() }, failure);
+  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, setPlaying: vi.fn(), dispose: vi.fn() }, failure);
   await vi.waitFor(() => expect(bridge.receive).toBeTypeOf("function"));
   const remote = snapshot();
   bridge.receive?.({ mode: "guest", snapshot: remote });
@@ -181,7 +182,8 @@ it("renders the shared host and guest world on the desktop overlay and restores 
 
 it.each(["local", "offline"] as const)("restores visible local characters immediately on %s after host closure, then accepts local PLAY", async (mode) => {
   const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
-  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, dispose: vi.fn() }, vi.fn());
+  const setPlaying = vi.fn<MountedCharacterScene["setPlaying"]>();
+  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, setPlaying, dispose: vi.fn() }, vi.fn());
   await vi.waitFor(() => expect(bridge.receive).toBeTypeOf("function"));
   const initial = update.mock.calls[0]?.[0];
   bridge.receive?.({ mode: "guest", snapshot: snapshot() });
@@ -189,7 +191,15 @@ it.each(["local", "offline"] as const)("restores visible local characters immedi
   expect(update.mock.lastCall?.[0]).toEqual(initial);
   bridge.command?.({ kind: "play", seq: 1, movement: { x: 0, y: 0 } });
   bridge.command?.({ kind: "input", seq: 2, movement: { x: 1, y: 0 } });
-  await vi.advanceTimersByTimeAsync(150);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(update.mock.lastCall?.[0]).toEqual(initial);
+  const advanceFrame = setPlaying.mock.lastCall?.[1];
+  expect(advanceFrame).toBeTypeOf("function");
+  advanceFrame?.(0);
+  advanceFrame?.(50);
+  const interpolation = advanceFrame?.(75);
+  expect(interpolation?.alpha).toBe(0.5);
+  expect(interpolation?.previous[0]?.position).toEqual(initial?.characters[0]?.position);
   expect(update.mock.lastCall?.[0].characters[0]?.position.x).toBeGreaterThan(initial?.characters[0]?.position.x ?? Infinity);
   stop();
   stop = undefined;
@@ -199,7 +209,7 @@ it.each(["local", "offline"] as const)("restores visible local characters immedi
 
 it("keeps the shared world frozen during recovery and ignores local commands until the fresh snapshot", async () => {
   const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
-  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, dispose: vi.fn() }, vi.fn());
+  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, setPlaying: vi.fn(), dispose: vi.fn() }, vi.fn());
   await vi.waitFor(() => expect(bridge.receive).toBeTypeOf("function"));
   const remote = snapshot();
   bridge.receive?.({ mode: "guest", snapshot: remote });
@@ -218,7 +228,7 @@ it("keeps the shared world frozen during recovery and ignores local commands unt
 it("updates the mode badge from native commands in local and remote rooms and restores the selected local skin", async () => {
   const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
   const mode = vi.fn();
-  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, dispose: vi.fn() }, vi.fn(), mode);
+  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, setPlaying: vi.fn(), dispose: vi.fn() }, vi.fn(), mode);
   await vi.waitFor(() => expect(bridge.receive).toBeTypeOf("function"));
   bridge.skin?.("mint");
   expect(update.mock.lastCall?.[0].characters[0]?.skin).toBe("mint");

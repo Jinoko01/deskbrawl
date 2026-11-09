@@ -117,6 +117,18 @@ export async function testOverlayRendering() {
         check(first.x === 80 && body.scale.x < 0, "효과 감소 중 위치·방향 갱신 실패");
         check(second.children[1].visible && !currentApp.ticker.started, "효과 감소 중 기절 상태 표현 실패");
         check(second.children[0].currentFrame === 1, "기절 시 마지막 피격 자세 누락");
+        if (!document.hidden) {
+          scene.setPlaying(true, () => ({ previous: snapshot.characters, alpha: 0.5 }));
+          check(currentApp.ticker.started && Math.round(currentApp.ticker.maxFPS) === 60, "PLAY에서 60FPS 이동 루프가 시작되지 않음");
+          scene.update({ ...snapshot, characters: [{ ...snapshot.characters[0], position: { x: 110, y: 110 } }, snapshot.characters[1]] });
+          check(first.x === 80, "PLAY 장면 갱신이 ticker보다 먼저 그려짐");
+          currentApp.ticker.update(currentApp.ticker.lastTime + 100);
+          check(first.x === 95, "효과 감소 중에도 PLAY의 중간 위치가 표시되어야 함");
+          scene.setPlaying(false);
+          check(first.x === 110 && !currentApp.ticker.started && Math.round(currentApp.ticker.maxFPS) === 30,
+            "WORK 복귀 시 현재 위치와 저전력 렌더링을 복원하지 못함");
+          scene.update(snapshot);
+        }
         scene.update({ ...snapshot,
           projectiles: [{ id: "stone-1", ownerId: "host", position: { x: 140, y: 110 }, velocity: { x: 1, y: 0 }, expiresAtTick: 10 }],
           effects: [{ id: "impact-1", kind: "impact", position: { x: 230, y: 110 }, startedAtTick: 1, expiresAtTick: 5 }],

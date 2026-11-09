@@ -21,12 +21,15 @@ import propsImage from "../../../../packages/game-assets/props/props-v2.png";
 import { reportRendererFailure, watchReducedEffects } from "../native/overlay";
 import { initialCharacterScene } from "./characterScene";
 import { sceneLayout } from "./sceneLayout";
-import type { CharacterSceneSnapshot, CharacterSkin } from "./characterScene";
+import type { CharacterPositionInterpolation, CharacterSceneSnapshot, CharacterSkin } from "./characterScene";
 import { createCharacterView } from "./characterView";
 import type { CharacterAnimations } from "./characterView";
 
+type AdvanceFrame = (nowMs: number) => CharacterPositionInterpolation | undefined;
+
 export interface MountedCharacterScene {
   update: (snapshot: CharacterSceneSnapshot) => void;
+  setPlaying(playing: boolean, advanceFrame?: AdvanceFrame): void;
   dispose(): void;
 }
 
@@ -46,13 +49,17 @@ export function mountCharacter(
   const views = new Map<string, { skin: CharacterSkin; view: ReturnType<typeof createCharacterView> }>();
   const stones = new Map<string, AnimatedSprite>();
   const effects = new Map<string, AnimatedSprite>();
-  const captions = new Map<string, { container: Container; label: Text; bubble: Text; background: Graphics }>();
+  const captions = new Map<string, {
+    container: Container; label: Text; bubble: Text; background: Graphics; bubbleWidth: number; bubbleHeight: number;
+  }>();
   let stunFrames: Texture[] = [];
   let stoneFrames: Texture[] = [];
   let impactFrames: Texture[] = [];
   let dustFrames: Texture[] = [];
   let supplied: CharacterSceneSnapshot | undefined;
   let current: CharacterSceneSnapshot | undefined;
+  let playing = false;
+  let advanceFrame: AdvanceFrame | undefined;
   let observer: ResizeObserver | undefined;
   let reducedEffects = true;
   let stopPreferences: (() => void) | undefined;
@@ -87,6 +94,7 @@ export function mountCharacter(
     dustFrames = [];
     supplied = undefined;
     current = undefined;
+    advanceFrame = undefined;
   }
 
   function fail(error: unknown) {
@@ -124,9 +132,7 @@ export function mountCharacter(
       for (const sprite of [...stones.values(), ...effects.values()]) {
         syncSprite(sprite);
       }
-      syncTicker();
-      paint();
-      app.render();
+      syncRender();
     } catch (error) {
       fail(error);
     }
@@ -174,6 +180,10 @@ export function mountCharacter(
   }
 
   function syncTicker() {
+    if (!document.hidden && playing) {
+      app.start();
+      return;
+    }
     if (!document.hidden && !reduced()) {
       for (const { view } of views.values()) {
         if (view.playing) {
@@ -187,6 +197,16 @@ export function mountCharacter(
       }
     }
     app.stop();
+  }
+
+  function syncRender() {
+    syncTicker();
+    if (!playing) {
+      paint();
+    }
+    if (!app.ticker.started && !document.hidden) {
+      app.render();
+    }
   }
 
   function refresh(snapshot: CharacterSceneSnapshot) {
@@ -238,7 +258,12 @@ export function mountCharacter(
         container.addChild(label, background, bubble);
         app.stage.addChild(container);
         captions.set(frame.id, {
-          container, label, bubble, background,
+          container,
+          label,
+          bubble,
+          background,
+          bubbleWidth: 0,
+          bubbleHeight: 0,
         });
       }
       entry.view.apply(frame, reduced(), !document.hidden);
@@ -274,31 +299,40 @@ export function mountCharacter(
     app.canvas.setAttribute("aria-description", `${snapshot.characters.map((frame) => `${CHARACTERS[frame.skin].name}: ${frame.motion.kind}${frame.hp === undefined ? "" : `, 체력 ${frame.hp}/${MAX_HP}${frame.hp === 0 ? ", 3초 동안 기절" : ""}`}`).join(", ")}, 돌 ${snapshot.projectiles?.length ?? 0}개, 효과 ${snapshot.effects?.length ?? 0}개`);
   }
 
-  function paint() {
+  function paint(interpolation?: CharacterPositionInterpolation) {
     if (current === undefined) {
       return;
     }
     const {
       scale, left, top, size,
     } = sceneLayout(current.bounds, app.screen.width, app.screen.height);
-    for (const frame of current.characters) {
-      views.get(frame.id)?.view.layout(left + frame.position.x * scale, top + frame.position.y * scale, size);
+    const alpha = interpolation?.alpha ?? 1;
+    for (const [index, frame] of current.characters.entries()) {
+      const before = interpolation?.previous[index]?.position ?? frame.position;
+      const x = left + (before.x + (frame.position.x - before.x) * alpha) * scale;
+      const y = top + (before.y + (frame.position.y - before.y) * alpha) * scale;
+      views.get(frame.id)?.view.layout(x, y, size);
       const caption = captions.get(frame.id);
       if (caption !== undefined) {
-        const x = Math.round(left + frame.position.x * scale);
-        const y = Math.round(top + frame.position.y * scale);
+        const anchorX = Math.round(x);
+        const anchorY = Math.round(y);
         caption.label.position.set(
-          Math.max(caption.label.width / 2 + 4, Math.min(app.screen.width - caption.label.width / 2 - 4, x)),
-          Math.max(4, Math.min(app.screen.height - caption.label.height - 4, y + size / 2)),
+          Math.max(caption.label.width / 2 + 4, Math.min(app.screen.width - caption.label.width / 2 - 4, anchorX)),
+          Math.max(4, Math.min(app.screen.height - caption.label.height - 4, anchorY + size / 2)),
         );
-        const width = caption.bubble.width + 20;
-        const height = caption.bubble.height + 14;
-        const bubbleX = Math.max(width / 2 + 4, Math.min(app.screen.width - width / 2 - 4, x));
-        const bubbleY = Math.max(height + 4, y - size / 2 - 12);
-        caption.bubble.position.set(bubbleX, bubbleY - 7);
-        caption.background.clear();
-        if (caption.bubble.text !== "") {
-          caption.background.roundRect(bubbleX - width / 2, bubbleY - height, width, height, 9).fill(0xffffff);
+        caption.background.visible = caption.bubble.text !== "";
+        if (caption.background.visible) {
+          const width = caption.bubble.width + 20;
+          const height = caption.bubble.height + 14;
+          if (width !== caption.bubbleWidth || height !== caption.bubbleHeight) {
+            caption.bubbleWidth = width;
+            caption.bubbleHeight = height;
+            caption.background.clear().roundRect(-width / 2, -height, width, height, 9).fill(0xffffff);
+          }
+          const bubbleX = Math.max(width / 2 + 4, Math.min(app.screen.width - width / 2 - 4, anchorX));
+          const bubbleY = Math.max(height + 4, anchorY - size / 2 - 12);
+          caption.bubble.position.set(bubbleX, bubbleY - 7);
+          caption.background.position.set(bubbleX, bubbleY);
         }
       }
     }
@@ -410,9 +444,13 @@ export function mountCharacter(
         throw new Error("전투 이펙트 프레임이 없습니다.");
       }
       app.stage.eventMode = "none";
-      app.ticker.maxFPS = 30;
+      app.ticker.maxFPS = playing ? 60 : 30;
       app.ticker.add((ticker) => {
         try {
+          const interpolation = advanceFrame?.(ticker.lastTime + ticker.elapsedMS);
+          if (!ready) {
+            return;
+          }
           for (const { view } of views.values()) {
             view.update(ticker);
           }
@@ -421,7 +459,7 @@ export function mountCharacter(
               sprite.update(ticker);
             }
           }
-          paint();
+          paint(interpolation);
           syncTicker();
         } catch (error) {
           fail(error);
@@ -456,6 +494,18 @@ export function mountCharacter(
 
   void start();
   return {
+    setPlaying(next, advance) {
+      playing = next;
+      advanceFrame = advance;
+      if (ready) {
+        try {
+          app.ticker.maxFPS = playing ? 60 : 30;
+          syncRender();
+        } catch (error) {
+          fail(error);
+        }
+      }
+    },
     update(snapshot) {
       if (disposed || failed) {
         return;
@@ -480,7 +530,7 @@ export function mountCharacter(
         supplied = snapshot;
         if (ready) {
           refresh(snapshot);
-          syncMotion();
+          syncRender();
         }
       } catch (error) {
         fail(error);
