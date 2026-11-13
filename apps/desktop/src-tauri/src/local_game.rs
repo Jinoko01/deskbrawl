@@ -60,6 +60,24 @@ pub fn local_available(window: WebviewWindow) -> Result<bool, &'static str> {
 }
 
 #[tauri::command]
+pub fn local_start(window: WebviewWindow) -> Result<(), &'static str> {
+    if !local_available(window.clone())? {
+        return Err("PLAY_UNAVAILABLE");
+    }
+    let app = window.app_handle();
+    if playing(app) || capturing(app) {
+        return Ok(());
+    }
+    #[cfg(windows)]
+    return crate::native_windows::start_play(app).map_err(|error| {
+        eprintln!("Could not start PLAY: {error}");
+        "PLAY_UNAVAILABLE"
+    });
+    #[cfg(not(windows))]
+    Err("PLAY_UNAVAILABLE")
+}
+
+#[tauri::command]
 pub fn local_overlay_status(window: WebviewWindow, ready: bool) -> Result<(), &'static str> {
     if window.label() != "overlay" {
         return Err("OVERLAY_ONLY");

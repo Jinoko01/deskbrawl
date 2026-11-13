@@ -12,6 +12,7 @@ function required<E extends HTMLElement>(selector: string): E {
 const input = required<HTMLInputElement>("#message");
 const previous = required<HTMLElement>("#previous");
 const status = required<HTMLElement>("#status");
+const instructions = status.innerText;
 let closed = false;
 const editor = createChatEditor({
   publish: (current, line) => {
@@ -38,7 +39,7 @@ function opened(): void {
   editor.open();
   input.value = "";
   previous.textContent = "";
-  status.textContent = "Enter 이전 줄 · Esc 닫기 · 50자";
+  status.textContent = instructions;
   input.focus();
 }
 input.addEventListener("input", () => editor.input(input.value));

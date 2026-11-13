@@ -11,6 +11,7 @@ import { testDesktopDesign } from "./test-desktop-design.mjs";
 
 // --dev는 Vite와 Tauri 개발 빌드가 준비된 경우에만 소스 기반 WebGL 검증도 실행한다.
 const development = process.argv.includes("--dev");
+const designOnly = process.argv.includes("--design-only");
 const localGame = process.argv.includes("--local");
 const hostControls = process.argv.includes("--m3");
 const chatOnly = process.argv.includes("--chat");
@@ -203,22 +204,22 @@ async function testLocalGame(main) {
   control("hide");
   await until(() => main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available').then(value => !value)"), "Hidden overlay still accepted input");
   control("show");
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('플레이할 수 있음')"), "Local controls did not become ready");
+  await until(() => main.evaluate("document.querySelector('.mode-panel .button-primary:not(:disabled)') !== null"), "Local controls did not become ready");
   control("home");
   await until(() => main.evaluate("document.hasFocus()"), "Tray home did not focus the controller");
   const foreground = control("state").foreground;
   control("play");
-  const started = await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·') || !!document.querySelector('[role=alert]')"), "PLAY did not start")
+  const started = await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '플레이 모드' || !!document.querySelector('[role=alert]')"), "PLAY did not start")
     .then(() => true, (error) => error);
   const failure = await main.evaluate("document.querySelector('[role=alert]')?.textContent ?? ''");
   if (started !== true || failure === "플레이 시작 실패: MAIN_NOT_FOCUSED") {
     if (await main.evaluate("document.hasFocus()")) throw started === true ? new Error(failure) : started;
-    assert.equal(await main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), true);
+    assert.equal(await main.evaluate("document.querySelector('#play-mode')?.textContent === '작업 모드'"), true);
     console.log("SKIP: native PLAY input requires an interactive foreground main window");
     return;
   }
   assert.equal(failure, "", "Local play failed");
-  await until(() => overlay.evaluate("document.querySelector('[aria-label=\"현재 모드\"]')?.textContent?.trim() === 'PLAY'"), "Overlay badge did not show PLAY");
+  await until(() => overlay.evaluate("document.querySelector('.mode-badge:not([hidden])')?.dataset.mode === 'play'"), "Overlay badge did not show PLAY");
   assert.equal(await overlay.evaluate("document.querySelector('.play-glow')?.dataset.playing"), "true");
   assert.equal(await overlay.evaluate("getComputedStyle(document.querySelector('.play-glow')).pointerEvents"), "none");
   await overlay.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
@@ -242,13 +243,13 @@ async function testLocalGame(main) {
   await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-description')?.includes('돌 0개')"), "Stone was not cleaned up");
   await key(main, "Escape", "Escape", true);
   await key(main, "Escape", "Escape", false);
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Escape did not return to WORK");
+  await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '작업 모드'"), "Escape did not return to WORK");
   await until(() => overlay.evaluate("document.querySelector('.mode-badge')?.dataset.mode === 'work'"), "Overlay badge did not return to WORK");
   assert.equal(await overlay.evaluate("document.querySelector('.play-glow')?.dataset.playing"), "false");
   control("play");
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Ctrl+Shift+G did not enter PLAY again");
+  await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '플레이 모드'"), "Ctrl+Shift+G did not enter PLAY again");
   control("play");
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"),
+  await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '작업 모드'"),
     "Ctrl+Shift+G did not return to WORK");
   assert.equal(control("state").foreground, foreground, "WORK must preserve the foreground window");
   await testBackgroundInput(main, bindings[1]);
@@ -289,7 +290,7 @@ async function testBackgroundInput(main, code) {
     await wait(() => control("state").mainMinimized, "Main did not minimize");
     const foreground = control("state").foreground;
     send("toggle");
-    await wait(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Minimized main did not enter PLAY");
+    await wait(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '플레이 모드'"), "Minimized main did not enter PLAY");
     assert.equal(control("state").mainMinimized, true, "PLAY must leave main minimized");
     assert.equal(control("state").foreground, foreground, "Background PLAY must preserve foreground");
     // Input is sent only while the probe owns foreground. PLAY must consume it first.
@@ -301,7 +302,7 @@ async function testBackgroundInput(main, code) {
     assert.ok(!output.includes(`KEY:${virtualKey}\n`), "PLAY game keys must not reach the work window");
     send("down 27 1 0");
     send("up 27 1 0");
-    await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Native Escape did not stop background PLAY");
+    await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '작업 모드'"), "Native Escape did not stop background PLAY");
     assert.equal(control("state").foreground, foreground, "WORK must preserve foreground");
     assert.equal(control("state").mainMinimized, true, "WORK must leave main minimized");
     send(`down ${virtualKey} ${scan} ${extended}`);
@@ -340,21 +341,21 @@ async function testHostControls(main, guestSocket, entered, ownLink) {
       `${command} must stay main-only`);
   }
   const unavailable = nextEvent(guestSocket, "room:closed");
-  await click("집중 모드 켜기");
+  await click("집중 모드");
   assert.equal((await unavailable).code, "ROOM_UNAVAILABLE");
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"), "Focus status did not reach main");
+  await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '집중 모드'"), "Focus status did not reach main");
   await until(() => !control("state").visible, "Focus did not hide the overlay");
   assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), false);
   assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_control',{kind:'play',seq:1,movement:{x:0,y:0}}).then(() => false, () => true)"), true,
     "Focus must reject native PLAY");
   control("play-tray");
-  assert.equal(await main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"), true);
+  assert.equal(await main.evaluate("document.querySelector('#play-mode')?.textContent === '집중 모드'"), true);
   const rejected = await joinGuest();
   assert.equal(rejected.ok, false);
   assert.equal(rejected.code, "ROOM_UNAVAILABLE");
   assert.equal(await main.evaluate("[...document.querySelectorAll('label')].find(l => l.textContent.startsWith('내 방문 링크')).querySelector('input').value"), ownLink,
     "Focus must preserve the invitation");
-  await click("집중 모드 끄기");
+  await click("집중 모드");
   await until(() => control("state").visible, "Unfocus did not restore the overlay");
   entered = await joinGuest();
   assert.equal(entered.ok, true, "The existing link must work after unfocus");
@@ -391,17 +392,18 @@ async function testHostControls(main, guestSocket, entered, ownLink) {
   await until(() => main.evaluate(`!!document.querySelector('button[aria-label="M2 테스트 방문자 내보내기"]')`), "Rejoined member did not appear");
   const cleared = nextEvent(guestSocket, "room:closed");
   await click("모두 내보내기");
+  await main.evaluate("document.querySelector('#clear-title').closest('dialog').querySelector('.button-danger').click()");
   assert.equal((await cleared).code, "KICKED");
   await until(() => main.evaluate("document.body.textContent.includes('아직 방문자가 없어요.')"), "Clear visitors did not update member list");
 
   control("minimize-home");
   await until(() => control("state").mainMinimized, "Main did not minimize");
   control("focus");
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"), "Tray focus did not synchronize with main");
+  await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '집중 모드'"), "Tray focus did not synchronize with main");
   control("show");
   assert.equal(control("state").visible, false, "Tray show must not bypass focus");
   control("focus");
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK')"), "Tray unfocus did not synchronize with main");
+  await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '작업 모드'"), "Tray unfocus did not synchronize with main");
   control("home");
   await until(() => !control("state").mainMinimized && control("state").mainVisible && control("state").visible, "Tray recovery failed");
   console.log("PASS: M3 focus, admission denial, link preservation, native input denial, single/all kick, stale input rejection, tray clipboard and background hosting");
@@ -424,7 +426,6 @@ async function testNetwork(main) {
     await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '내 공간 연결').click()");
     await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Native main did not host a room");
     await until(() => overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(v => JSON.parse(v).mode === 'host')"), "Host world did not reach overlay");
-    await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '방문 링크 생성').click()");
     let ownLink;
     await until(async () => {
       ownLink = await main.evaluate("[...document.querySelectorAll('label')].find(l => l.textContent.startsWith('내 방문 링크'))?.querySelector('input')?.value");
@@ -491,21 +492,21 @@ async function testNetwork(main) {
     const screenshot = await main.rpc("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(profileRoot, "m2-visit-preview.png"), Buffer.from(screenshot.data, "base64"));
     if (hostControls) {
-      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드 켜기').click()");
-      await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨') && document.querySelector('[role=status]')?.textContent?.includes('FOCUS')"),
+      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드').click()");
+      await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨') && document.querySelector('#play-mode')?.textContent === '집중 모드'"),
         "Focus while visiting did not leave and protect own room");
       await until(() => !control("state").visible, "Visiting focus left the overlay visible");
-      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드 끄기').click()");
+      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드').click()");
       await until(() => main.evaluate("document.body.textContent.includes('친구 공간 방문 중')"), "Unfocus did not restore the previous friend room");
       assert.equal(await overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(v => JSON.parse(v).snapshot.worldId)"), externalHost.worldId);
-      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드 켜기').click()");
-      await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨') && [...document.querySelectorAll('button')].some(b => b.textContent === '집중 모드 끄기' && !b.disabled)"), "Second focus did not finish");
+      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드').click()");
+      await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨') && [...document.querySelectorAll('button')].some(b => b.textContent === '집중 모드' && !b.disabled)"), "Second focus did not finish");
       assert.equal((await ack("room:focus", { visitId: externalHost.visitId, commandId: crypto.randomUUID(), focused: true })).ok, true);
-      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드 끄기').click()");
-      await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨') && document.body.textContent.includes('이전 방으로 돌아가지 못했어요.')"), "Unavailable previous room did not fall back to own room with an explanation");
+      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '집중 모드').click()");
+      await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨') && document.body.textContent.includes('이전 공간으로 돌아가지 못했어요.')"), "Unavailable previous room did not fall back to own room with an explanation");
       assert.equal((await ack("room:focus", { visitId: externalHost.visitId, commandId: crypto.randomUUID(), focused: false })).ok, true);
     } else {
-      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '귀환').click()");
+      await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === '내 공간으로 돌아가기').click()");
     }
     await until(() => main.evaluate("document.body.textContent.includes('내 공간 연결됨')"), "Return did not restore own hosted room");
     await selectCharacter(main, "mochi");
@@ -515,7 +516,15 @@ async function testNetwork(main) {
     const finalGuest = await ack("visit:join", { version: 2, token: new URL(ownLink).pathname.slice(6) });
     assert.equal(finalGuest.ok, true);
     const hostClosed = nextEvent(guestSocket, "room:closed");
+    control("close-home");
+    await until(() => !control("state").mainVisible, "Window X must hide main before tray exit");
     control("exit");
+    await until(() => main.evaluate("document.querySelector('#exit-title').closest('dialog').open"), "Tray exit did not prompt with a visitor");
+    await main.evaluate("document.querySelector('#exit-title').closest('dialog').querySelector('.button-secondary').click()");
+    assert.equal(app.exitCode, null, "Cancelling exit must keep the room open");
+    control("exit");
+    await until(() => main.evaluate("document.querySelector('#exit-title').closest('dialog').open"), "Tray exit must prompt again after cancelling");
+    await main.evaluate("document.querySelector('#exit-title').closest('dialog').querySelector('.button-danger').click()");
     assert.equal((await hostClosed).code, "HOST_OFFLINE", "Normal app exit must bypass disconnect grace");
     await until(() => app.exitCode !== null, "Test app did not exit before cold deep-link check");
     assert.equal((await ack("room:host", { version: 2, bounds: { width: 1280, height: 720 } })).ok, true);
@@ -526,7 +535,7 @@ async function testNetwork(main) {
     main = await connect(target);
     await until(() => main.evaluate("document.body.textContent.includes('친구 공간 방문 중') && !!document.querySelector('canvas')"), "Cold-start deep link did not restore device identity and join");
     guestSocket.disconnect();
-    await until(() => main.evaluate("!!document.querySelector('[role=alert]')"), "Host closure did not report session end");
+    await until(() => main.evaluate("document.querySelector('.room-panel .notice[role=status]')?.textContent === '친구가 공간을 닫았어요.'"), "Host closure did not show a neutral notice");
     await until(() => overlay.evaluate("window.__TAURI_INTERNALS__.invoke('network_read').then(v => JSON.parse(v).mode === 'local')"), "Host closure did not restore local mode");
     await until(() => overlay.evaluate("document.querySelector('canvas')?.getAttribute('aria-label') === '모찌와 민트 캐릭터'"), "Host closure left local characters invisible");
     assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), true, "Local PLAY must remain available after host closure");
@@ -627,7 +636,7 @@ async function testNativeChat(main, peer) {
   execFileSync(join(process.env.WINDIR, "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe"),
     ["/nologo", "/r:System.Windows.Forms.dll", `/out:${probePath}`, source], { windowsHide: true });
   control("play-tray");
-  await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Background PLAY did not start for chat");
+  await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '플레이 모드'"), "Background PLAY did not start for chat");
   const probe = spawn(probePath, [], { windowsHide: false });
   let output = "";
   let snapshot;
@@ -664,7 +673,7 @@ async function testNativeChat(main, peer) {
     await until(() => control("state").foreground === foreground, "Closing chat did not restore borrowed work focus")
       .catch((error) => { throw new Error(`${error.message}; expected=${foreground}; actual=${control("state").foreground}`); });
     assert.equal(control("state").mainMinimized, true);
-    await until(() => main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Escape must resume background PLAY");
+    await until(() => main.evaluate("document.querySelector('#play-mode')?.textContent === '플레이 모드'"), "Escape must resume background PLAY");
     send("slash");
     // The hidden editor window is reused, so the same page regains focus.
     await until(() => chat.evaluate("document.hasFocus()"), "Resumed PLAY slash did not reopen chat");
@@ -674,7 +683,7 @@ async function testNativeChat(main, peer) {
     await until(() => slashes() === 1, "Slash after leaving chat must pass through to work window");
     send("slash");
     await until(() => slashes() === 2, "Leaving chat by focus must stay in WORK");
-    assert.equal(await main.evaluate("document.querySelector('[role=status]')?.textContent?.includes('WORK ·')"), true, "Leaving chat by focus must stay in WORK");
+    assert.equal(await main.evaluate("document.querySelector('#play-mode')?.textContent === '작업 모드'"), true, "Leaving chat by focus must stay in WORK");
     assert.ok(!output.includes("ERROR:"), output);
     console.log("PASS: native slash, minimized home, IME-capable Korean draft, two lines, IPC scope, Escape cleanup with PLAY resume, borrowed focus restore and WORK after leaving chat");
   } finally {
@@ -698,7 +707,7 @@ async function launch(args = []) {
   catch (error) { throw new Error(`${error.message}; app exit=${app.exitCode}; ${startupError}`); }
 }
 
-try {
+checks: try {
   await launch();
   originalPreference = await preference();
   assert.equal(typeof originalPreference, "boolean");
@@ -708,9 +717,20 @@ try {
   let main = await connect(mainTarget);
   assert.equal(await main.evaluate("window.__TAURI_INTERNALS__.invoke('overlay_reduced_effects').then(() => false, () => true)"), true,
     "Main must be denied the overlay-only command");
-  if (process.argv.includes("--design")) {
-    control("home");
+  if (designOnly || process.argv.includes("--design")) {
     await testDesktopDesign(main, profileRoot, until);
+  }
+  if (designOnly) {
+    await main.evaluate("document.querySelector('.mode-panel .button-primary').click()");
+    await until(() => main.evaluate("document.querySelector('#play-mode').textContent === '플레이 모드'"), "Main button did not start native PLAY");
+    control("close-home");
+    await until(() => !control("state").mainVisible, "Window X must hide main");
+    assert.equal(await main.evaluate("document.querySelector('#play-mode').textContent"), "플레이 모드", "Hiding main must preserve PLAY");
+    assert.equal(control("state").visible, true, "Hiding main must preserve the character");
+    await main.evaluate("setTimeout(() => document.querySelector('.app-header button').click(), 0)");
+    await until(() => app.exitCode !== null, "Explicit exit did not terminate the app");
+    assert.equal(app.exitCode, 0);
+    break checks;
   }
   if (localGame) await testLocalGame(main);
   if (networkGame) main = await testNetwork(main);
@@ -772,20 +792,24 @@ try {
   assert.equal(control("state").visible, true, "Tray did not recover failed renderer");
   assert.equal(await overlay.evaluate("getComputedStyle(document.body).backgroundColor"), "rgba(0, 0, 0, 0)");
   console.log("PASS: native monitor bounds, IPC denial, tray effects, idle stop, preference persistence, GPU failure hide and fresh renderer recovery");
-  // Both user-visible exit paths must terminate the process, overlay and tray,
-  // including when native PLAY capture is active.
-  for (const method of ["button", "window-close"]) {
+  // Both explicit exit paths must stop native PLAY and remove the overlay and tray.
+  for (const method of ["button", "tray"]) {
     const target = (await pages()).find((page) => page.type === "page" && !page.url.includes("overlay.html"));
     const home = await connect(target);
-    await until(() => home.evaluate("document.querySelector('[role=status]')?.textContent?.includes('플레이할 수 있음')"), "Exit test app did not become ready");
+    await until(() => home.evaluate("document.querySelector('.mode-panel .button-primary:not(:disabled)') !== null"), "Exit test app did not become ready");
     assert.equal(await overlay.evaluate("window.__TAURI_INTERNALS__.invoke('plugin:window|close').then(() => false, () => true)"), true,
       "Overlay must not receive window-close permission");
-    control("play-tray");
-    await until(() => home.evaluate("document.querySelector('[role=status]')?.textContent?.includes('PLAY ·')"), "Exit test did not start PLAY");
+    control("home");
+    await home.evaluate("document.querySelector('.mode-panel .button-primary').click()");
+    await until(() => home.evaluate("document.querySelector('#play-mode')?.textContent === '플레이 모드'"), "Exit test did not start PLAY");
     if (method === "button") {
       await home.evaluate("setTimeout(() => [...document.querySelectorAll('button')].find(button => button.textContent === '종료').click(), 0)");
     } else {
       control("close-home");
+      await until(() => !control("state").mainVisible, "Window X must hide main");
+      assert.equal(await home.evaluate("document.querySelector('#play-mode').textContent"), "플레이 모드", "Hiding main must preserve PLAY");
+      assert.equal(control("state").visible, true, "Hiding main must preserve the character");
+      control("exit");
     }
     await until(() => app.exitCode !== null, `${method} did not terminate app`);
     assert.equal(app.exitCode, 0);
@@ -798,7 +822,8 @@ try {
     if (typeof originalPreference === "boolean") {
       try { await setPreference(originalPreference); } catch (error) { console.error("Could not restore preference:", error.message); }
     }
-    try { control("exit"); } catch { app.kill(); }
+    if (designOnly) app.kill();
+    else try { control("exit"); } catch { app.kill(); }
     await until(() => app.exitCode !== null, "Test process did not exit").catch(() => app.kill());
   }
   clients.forEach((client) => client.close());

@@ -13,9 +13,12 @@ import type {
   Joined, PlayerProfile, Session, Snapshot,
 } from "@deskbrawl/protocol";
 import { readCharacterSkin, saveCharacterSkin } from "../../game/characterPreference";
+import { CHARACTERS } from "../../game/characters";
 import {
   getRoom,
   registerDevice,
+  RoomError,
+  roomErrorMessage,
   restoreDevice,
   revokeInvite,
   rotateInvite,
@@ -40,6 +43,7 @@ import {
 interface MultiplayerView {
   phase: "local" | "connecting" | "reconnecting" | "host" | "guest" | "error";
   error?: string;
+  notice?: string;
   members: Snapshot["members"];
 }
 
@@ -54,6 +58,7 @@ export function useMultiplayer() {
   const live = useRef(false);
   const session = useRef<Session | undefined>(undefined);
   const operation = useRef<Promise<void> | undefined>(undefined);
+  const disconnectTask = useRef<Promise<void> | undefined>(undefined);
   const pendingInvite = useRef<string | undefined>(undefined);
   const [focused, setFocused] = useState(false);
   const [focusLoaded, setFocusLoaded] = useState(false);
@@ -64,6 +69,8 @@ export function useMultiplayer() {
   const focusReturnToken = useRef<string | undefined>(undefined);
   const [skin, setSkin] = useState(readCharacterSkin);
   const skinValue = useRef(skin);
+  const nicknameValue = useRef<string>(undefined);
+  const [savedNickname, setSavedNickname] = useState<string>();
   const abort = useRef<AbortController | undefined>(undefined);
   const queryClient = useQueryClient();
   const [deviceId, setDeviceId] = useState<string>();
@@ -72,7 +79,7 @@ export function useMultiplayer() {
     enabled: deviceId !== undefined,
     queryFn: ({ signal }) => {
       if (session.current === undefined) {
-        throw new Error("UNAUTHORIZED");
+        throw new RoomError(ERROR_MESSAGES.UNAUTHORIZED);
       }
       return getRoom(session.current, signal);
     },
@@ -80,22 +87,39 @@ export function useMultiplayer() {
     staleTime: Infinity,
   });
 
+  async function resetConnection(next: MultiplayerView): Promise<void> {
+    current.current = undefined;
+    setView(next);
+    await Promise.all([publishInviteLink(null), publishNetwork({ mode: "local", snapshot: null })]);
+  }
   function report(error: unknown): void {
-    if (!live.current) {
+    finishConnection(error);
+  }
+  function finishConnection(error: unknown, notice?: string): void {
+    if (!live.current || disconnectTask.current || abort.current?.signal.aborted) {
       return;
     }
     client.current?.dispose();
     client.current = undefined;
-    current.current = undefined;
-    void publishInviteLink(null).catch((failure: unknown) => console.error("트레이 링크 정리 실패", failure));
-    setView({ phase: "error", error: error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST, members: [] });
-    void publishNetwork({ mode: "local", snapshot: null }).catch((failure: unknown) => {
-      console.error("네트워크 종료 상태 전달 실패", failure);
-    });
+    if (notice === undefined && !(error instanceof RoomError)) {
+      console.error("공간 연결 처리 실패", error);
+    }
+    const next: MultiplayerView = notice === undefined
+      ? { phase: "error", error: roomErrorMessage(error), members: [] }
+      : { phase: "local", notice, members: [] };
+    void resetConnection(next).catch((failure: unknown) => console.error("연결 상태 정리 실패", failure));
+  }
+  function defaultNickname(): string {
+    return nicknameValue.current ?? CHARACTERS[skinValue.current].name;
   }
   function receive(snapshot: Snapshot): void {
-    if (!live.current) {
+    if (!live.current || disconnectTask.current || abort.current?.signal.aborted) {
       return;
+    }
+    const self = snapshot.members.find((member) => member.playerId === session.current?.deviceId);
+    if (self !== undefined && self.nickname !== nicknameValue.current) {
+      nicknameValue.current = self.nickname;
+      setSavedNickname(self.nickname);
     }
     current.current = snapshot;
     for (const listener of listeners.current) {
@@ -105,38 +129,43 @@ export function useMultiplayer() {
     const playerId = client.current?.canPlace() ? client.current.playerId() : undefined;
     void publishNetwork({ mode: mode.current, snapshot, ...(playerId === undefined ? {} : { playerId }) }).catch((error: unknown) => report(error));
   }
-  async function authenticate(nickname: string): Promise<Session> {
+  async function authenticate(nickname: string, signal: AbortSignal): Promise<Session> {
     if (session.current !== undefined && session.current.expiresAt - Date.now() > SESSION_REUSE_MARGIN_MS) {
       return session.current;
     }
-    abort.current?.abort();
-    const controller = new AbortController();
-    abort.current = controller;
     const credential = await readCredential(SERVER_ORIGIN);
+    signal.throwIfAborted();
     let result: Session;
     if (credential !== undefined) {
-      result = await restoreDevice(credential, controller.signal);
+      result = await restoreDevice(credential, signal);
     } else {
-      const registered = await registerDevice(nickname, controller.signal);
+      const registered = await registerDevice(nickname, signal);
       // Persist before hosting. A storage failure must not silently leave an unrecoverable identity.
       await storeCredential(SERVER_ORIGIN, { deviceId: registered.deviceId, secret: registered.secret });
       result = { deviceId: registered.deviceId, accessToken: registered.accessToken, expiresAt: registered.expiresAt };
     }
-    if (!live.current) {
-      throw new Error("Connection cancelled");
-    }
+    signal.throwIfAborted();
     session.current = result;
     setDeviceId(result.deviceId);
     return result;
   }
-  async function enter(token: string | undefined, nickname: string): Promise<void> {
+  async function enter(token: string | undefined, nickname = defaultNickname(), saveNickname = false): Promise<void> {
+    if (disconnectTask.current !== undefined) {
+      await disconnectTask.current.catch(() => { /* Local state is reset even when leave fails. */ });
+      if (!live.current) {
+        return;
+      }
+    }
     if (token !== undefined && focusValue.current) {
-      throw new Error(ERROR_MESSAGES.ROOM_UNAVAILABLE);
+      throw new RoomError(ERROR_MESSAGES.ROOM_UNAVAILABLE);
     }
     if (operation.current !== undefined) {
       pendingInvite.current = token ?? pendingInvite.current;
       return operation.current;
     }
+    const controller = new AbortController();
+    abort.current = controller;
+    const { signal } = controller;
     const task = (async () => {
       try {
         setView({ phase: "connecting", members: [] });
@@ -147,9 +176,11 @@ export function useMultiplayer() {
           previous?.dispose();
           throw error;
         }
+        signal.throwIfAborted();
         await publishInviteLink(null);
         const previousSession = session.current;
-        const auth = await authenticate(nickname);
+        const auth = await authenticate(nickname, signal);
+        signal.throwIfAborted();
         if (auth !== previousSession) {
           previous?.dispose();
           previous = undefined;
@@ -159,8 +190,14 @@ export function useMultiplayer() {
         }
         mode.current = token === undefined ? "host" : "guest";
         // Room switches reuse the authenticated socket instead of spending another handshake.
-        const connection = previous ?? createVisitClient(auth, receive, (message) => report(new Error(message)), (state) => {
-          if (!live.current) {
+        const connection = previous ?? createVisitClient(auth, receive, (message, closure) => {
+          if (closure === undefined) {
+            report(new RoomError(message));
+          } else {
+            finishConnection(new RoomError(message), closure === "HOST_OFFLINE" ? "친구가 공간을 닫았어요." : message);
+          }
+        }, (state) => {
+          if (!live.current || disconnectTask.current || abort.current?.signal.aborted) {
             return;
           }
           setView((previous) => ({ ...previous, phase: state === "reconnecting" ? "reconnecting" : mode.current }));
@@ -172,29 +209,33 @@ export function useMultiplayer() {
                 listener(frozen);
               }
             }
-            void publishNetwork({ mode: "recovering", snapshot: frozen }).catch(report);
+            void publishNetwork({ mode: "recovering", snapshot: frozen, playerId: auth.deviceId }).catch(report);
           }
         });
         client.current = connection;
         if (previous === undefined) {
           await connection.connect();
         }
-        if (!live.current) {
-          connection.dispose();
-          return;
-        }
+        signal.throwIfAborted();
+        const bounds = token === undefined ? await hostBounds() : undefined;
+        signal.throwIfAborted();
         const joined: Joined = token === undefined
-          ? await connection.enter("room:host", { version: PROTOCOL_VERSION, bounds: await hostBounds(), focused: focusValue.current })
+          ? await connection.enter("room:host", { version: PROTOCOL_VERSION, bounds, focused: focusValue.current })
           : await connection.enter("visit:join", { version: PROTOCOL_VERSION, token });
+        signal.throwIfAborted();
         guestToken.current = token;
-        await connection.setProfile({ skin: skinValue.current });
+        await connection.setProfile({ skin: skinValue.current, ...(saveNickname ? { nickname } : {}) });
+        signal.throwIfAborted();
         if (live.current) {
           setView((previous) => ({ ...previous, phase: joined.role }));
-          if (joined.role === "host" && invite.data !== undefined) {
+          if (joined.role === "host" && invite.data !== undefined && invite.data.expiresAt > Date.now()) {
             await publishInviteLink(invite.data.link);
           }
         }
       } catch (error) {
+        if (signal.aborted) {
+          return;
+        }
         report(error);
         throw error;
       }
@@ -204,25 +245,37 @@ export function useMultiplayer() {
       await task;
     } finally {
       operation.current = undefined;
+      if (abort.current === controller && !signal.aborted) {
+        abort.current = undefined;
+      }
       const pending = pendingInvite.current;
       pendingInvite.current = undefined;
-      if (live.current && pending !== undefined && pending !== token) {
-        void enter(pending, nickname).catch(() => {
+      if (live.current && !signal.aborted && pending !== undefined && pending !== token) {
+        void enter(pending).catch(() => {
           // enter가 report를 통해 연결 오류와 정리를 처리한다.
         });
       }
     }
   }
-  const connect = useMutation({ mutationFn: (nickname: string) => enter(undefined, nickname), retry: false });
+  const connect = useMutation({
+    mutationFn: ({ nickname, edited }: { nickname: string; edited: boolean }) => enter(undefined, nickname, edited),
+    onSuccess: () => {
+      const needsLink = invite.data === undefined || invite.data.expiresAt <= Date.now();
+      if (!disconnectTask.current && !abort.current?.signal.aborted && mode.current === "host" && client.current && needsLink) {
+        invite.mutate();
+      }
+    },
+    retry: false,
+  });
   const join = useMutation({
-    mutationFn: ({ link, nickname }: { link: string; nickname: string }) => {
+    mutationFn: ({ link, nickname, edited }: { link: string; nickname: string; edited: boolean }) => {
       let token: string;
       try {
         token = parseInviteLink(link, SERVER_ORIGIN);
       } catch {
-        throw new Error(ERROR_MESSAGES.INVALID_INVITE);
+        throw new RoomError(ERROR_MESSAGES.INVALID_INVITE);
       }
-      return enter(token, nickname);
+      return enter(token, nickname, edited);
     },
     retry: false,
   });
@@ -230,7 +283,7 @@ export function useMultiplayer() {
     mutationFn: async () => {
       try {
         focusReturnToken.current = undefined;
-        await enter(undefined, "친구");
+        await enter(undefined);
       } catch (error) {
         report(error);
         throw error;
@@ -242,7 +295,7 @@ export function useMultiplayer() {
     mutationFn: async (next: PlayerProfile) => {
       const nickname = next.nickname === undefined ? undefined : nicknameSchema.safeParse(next.nickname);
       if (nickname !== undefined && !nickname.success) {
-        throw new Error("닉네임을 1~24자로 입력해 주세요.");
+        throw new RoomError("닉네임을 1~24자로 입력해 주세요.");
       }
       if (client.current !== undefined) {
         await client.current.setProfile({ ...next, ...(nickname?.success ? { nickname: nickname.data } : {}) });
@@ -258,12 +311,12 @@ export function useMultiplayer() {
   const invite = useMutation({
     mutationFn: async () => {
       if (session.current === undefined) {
-        throw new Error("먼저 내 공간을 연결해 주세요.");
+        throw new RoomError("먼저 내 공간을 연결해 주세요.");
       }
       return rotateInvite(session.current);
     },
     onSuccess: async (data) => {
-      if (live.current && mode.current === "host" && client.current !== undefined) {
+      if (live.current && !disconnectTask.current && mode.current === "host" && client.current !== undefined) {
         await publishInviteLink(data.link);
       }
     },
@@ -272,7 +325,7 @@ export function useMultiplayer() {
   const revoke = useMutation({
     mutationFn: async () => {
       if (session.current === undefined) {
-        throw new Error("UNAUTHORIZED");
+        throw new RoomError(ERROR_MESSAGES.UNAUTHORIZED);
       }
       return revokeInvite(session.current);
     },
@@ -303,7 +356,7 @@ export function useMultiplayer() {
       }
       if (mode.current === "guest" && next) {
         focusReturnToken.current = guestToken.current;
-        await enter(undefined, "친구");
+        await enter(undefined);
       } else if (mode.current === "guest") {
         client.current.resumeInput();
       } else if (mode.current === "host") {
@@ -312,11 +365,11 @@ export function useMultiplayer() {
         if (!next && token !== undefined) {
           focusReturnToken.current = undefined;
           try {
-            await enter(token, "친구");
+            await enter(token);
           } catch (error) {
             if (live.current) {
-              await enter(undefined, "친구");
-              setView((previous) => ({ ...previous, error: `이전 방으로 돌아가지 못했어요. ${error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST}` }));
+              await enter(undefined);
+              setView((previous) => ({ ...previous, error: `이전 공간으로 돌아가지 못했어요. ${roomErrorMessage(error)}` }));
             }
           }
         }
@@ -336,29 +389,29 @@ export function useMultiplayer() {
   const kick = useMutation({
     mutationFn: async (targetPlayerId: string) => {
       if (client.current === undefined) {
-        throw new Error(ERROR_MESSAGES.CONNECTION_LOST);
+        throw new RoomError(ERROR_MESSAGES.CONNECTION_LOST);
       }
       await client.current.kick(targetPlayerId);
     },
-    onError: report,
     retry: false,
   });
   const clearVisitors = useMutation({
     mutationFn: async () => {
       if (client.current === undefined) {
-        throw new Error(ERROR_MESSAGES.CONNECTION_LOST);
+        throw new RoomError(ERROR_MESSAGES.CONNECTION_LOST);
       }
       await client.current.clearVisitors();
     },
-    onError: report,
     retry: false,
   });
 
   const acceptInvite = useEffectEvent((link: string) => {
     try {
       const token = parseInviteLink(link, SERVER_ORIGIN);
-      void enter(token, "친구").catch(() => {
-        // enter가 report를 통해 연결 오류와 정리를 처리한다.
+      void enter(token).catch((error: unknown) => {
+        if (focusValue.current) {
+          setView((previous) => ({ ...previous, error: roomErrorMessage(error) }));
+        }
       });
     } catch {
       setView((previous) => ({ ...previous, error: ERROR_MESSAGES.INVALID_INVITE }));
@@ -374,7 +427,7 @@ export function useMultiplayer() {
       return;
     }
     void openChat(player.position, snapshot.world.bounds).catch(() => {
-      setView((previous) => ({ ...previous, error: "채팅 입력창을 열지 못했어요. PLAY에서 / 키로 다시 시도해 주세요." }));
+      setView((previous) => ({ ...previous, error: "채팅 입력창을 열지 못했어요. 플레이 모드에서 / 키를 다시 눌러 주세요." }));
     });
   });
   const chatChanged = useEffectEvent((current: string, previous: string) => client.current?.chat(current, previous));
@@ -454,6 +507,42 @@ export function useMultiplayer() {
       queryClient.removeQueries({ queryKey: ["room"] });
     };
   }, [queryClient]);
+  function disconnect(): Promise<void> {
+    if (disconnectTask.current !== undefined) {
+      return disconnectTask.current;
+    }
+    const controller = abort.current;
+    controller?.abort();
+    pendingInvite.current = undefined;
+    focusReturnToken.current = undefined;
+    guestToken.current = undefined;
+    const task = (async () => {
+      // A pending join can already have reached the server. Wait for its ack so
+      // leave can close that membership before the socket is disposed.
+      await operation.current?.catch(() => { /* Connection errors are reported by enter. */ });
+      const connection = client.current;
+      client.current = undefined;
+      try {
+        await connection?.leave();
+      } catch (error) {
+        console.error("공간 연결 해제 확인 실패", error);
+      } finally {
+        connection?.dispose();
+        if (abort.current === controller) {
+          abort.current = undefined;
+        }
+        await resetConnection({ phase: "local", members: [] });
+      }
+    })().finally(() => {
+      disconnectTask.current = undefined;
+    });
+    disconnectTask.current = task;
+    return task;
+  }
+  const disconnecting = useMutation({
+    mutationFn: disconnect,
+    retry: false,
+  });
   return {
     view,
     room,
@@ -463,22 +552,22 @@ export function useMultiplayer() {
     invite,
     revoke,
     focused,
-    focusLoaded,
     focus,
     kick,
     clearVisitors,
     profile,
     skin,
+    nickname: savedNickname ?? CHARACTERS[skin].name,
+    savedNickname,
     self: view.members.find((member) => member.playerId === deviceId),
-    disconnect: async (): Promise<void> => {
-      try {
-        await client.current?.leave();
-      } finally {
-        client.current?.dispose();
-      }
-    },
+    connectionBusy: !focusLoaded || view.phase === "connecting" || view.phase === "reconnecting"
+      || connect.isPending || join.isPending || returning.isPending || disconnecting.isPending,
+    disconnect,
+    disconnecting,
     input: (command: LocalCommand): void => {
-      client.current?.input(command);
+      if (!disconnectTask.current) {
+        client.current?.input(command);
+      }
     },
     subscribe,
   };

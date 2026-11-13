@@ -16,6 +16,12 @@ if (url.origin !== SERVER_ORIGIN || !["http:", "https:"].includes(url.protocol))
   throw new Error("Invalid VITE_SERVER_URL");
 }
 
+export class RoomError extends Error {}
+
+export function roomErrorMessage(error: unknown): string {
+  return error instanceof RoomError ? error.message : ERROR_MESSAGES.INTERNAL_ERROR;
+}
+
 async function request(path: string, method: string, token?: string, body?: unknown, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(`${SERVER_ORIGIN}${path}`, {
     method,
@@ -28,17 +34,17 @@ async function request(path: string, method: string, token?: string, body?: unkn
     if (signal?.aborted) {
       throw error;
     }
-    throw new Error("서버에 연결하지 못했습니다. 서버 실행 상태와 주소를 확인해 주세요.");
+    throw new RoomError("공간에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.");
   });
   if (response.status === 503) {
-    throw new Error("서버가 준비되지 않았어요. 서버의 PostgreSQL 실행 상태를 확인한 뒤 다시 연결해 주세요.");
+    throw new RoomError("공간 연결을 준비 중이에요. 잠시 후 다시 연결해 주세요.");
   }
   const json: unknown = await response.json().catch(() => {
-    throw new Error("서버 응답 형식이 올바르지 않습니다.");
+    throw new RoomError("응답을 확인하지 못했어요. 잠시 후 다시 연결해 주세요.");
   });
   if (!response.ok) {
     const error = errorSchema.safeParse(json);
-    throw new Error(error.success ? ERROR_MESSAGES[error.data.code] : "서버 요청에 실패했습니다.");
+    throw new RoomError(error.success ? ERROR_MESSAGES[error.data.code] : ERROR_MESSAGES.INTERNAL_ERROR);
   }
   return json;
 }

@@ -84,30 +84,30 @@ export function controlsProblem(controls: Controls): string | undefined {
   for (const [index, action] of GAME_ACTIONS.entries()) {
     const code = controls.keys[action];
     if (code === "Escape") {
-      return `${ACTION_LABELS[action]}: Esc는 플레이 종료 키라서 쓸 수 없습니다.`;
+      return `${ACTION_LABELS[action]}: Esc는 플레이 종료 키라서 쓸 수 없어요.`;
     }
     if (!isGameKey(code)) {
-      return `${ACTION_LABELS[action]}: ${keyLabel(code)} 키는 쓸 수 없습니다. 문자·숫자·숫자 패드·방향키·Space 중에서 고르세요.`;
+      return `${ACTION_LABELS[action]}: ${keyLabel(code)} 키는 쓸 수 없어요. 문자·숫자·숫자 패드·방향키·Space 중에서 골라 주세요.`;
     }
     const other = GAME_ACTIONS.slice(0, index).find((previous) => controls.keys[previous] === code);
     if (other !== undefined) {
-      return `${and(ACTION_LABELS[other])} ${ACTION_LABELS[action]}에 같은 키(${keyLabel(code)})를 쓸 수 없습니다.`;
+      return `${and(ACTION_LABELS[other])} ${ACTION_LABELS[action]}에 같은 키(${keyLabel(code)})를 쓸 수 없어요.`;
     }
   }
   if (!isShortcut(controls.toggle)) {
-    return `전환 단축키 ${shortcutLabel(controls.toggle)}는 쓸 수 없습니다. Ctrl 또는 Alt를 포함한 수정키 두 개 이상과 문자·숫자·F1~F12 키를 함께 누르세요.`;
+    return `전환 단축키 ${shortcutLabel(controls.toggle)}는 쓸 수 없어요. Ctrl 또는 Alt를 포함한 수정키 두 개 이상과 문자·숫자·F1~F12 키를 함께 눌러 주세요.`;
   }
   return undefined;
 }
 
 export function controlsErrorMessage(code: string): string {
   switch (code) {
-    case "SHORTCUT_IN_USE": return "다른 앱이 이미 쓰는 단축키입니다. 다른 조합을 고르세요.";
-    case "DUPLICATE_KEY": return "같은 키를 두 동작에 쓸 수 없습니다.";
-    case "INVALID_KEY": case "INVALID_SHORTCUT": case "INVALID_CONTROLS": return "쓸 수 없는 키가 있습니다.";
-    case "PLAYING": return "플레이 중에는 조작키를 바꿀 수 없습니다. Esc로 작업 모드에 돌아온 뒤 저장하세요.";
-    case "CONTROLS_LOADING": return "조작키 설정을 아직 불러오는 중입니다. 잠시 후 다시 저장하세요.";
-    case "SAVE_FAILED": return "설정 파일을 저장하지 못했습니다. 이전 조작키를 유지합니다.";
-    default: return `조작키 저장 실패: ${code}`;
+    case "SHORTCUT_IN_USE": return "다른 앱이 이미 쓰는 단축키예요. 다른 조합을 골라 주세요.";
+    case "DUPLICATE_KEY": return "같은 키를 두 동작에 쓸 수 없어요.";
+    case "INVALID_KEY": case "INVALID_SHORTCUT": case "INVALID_CONTROLS": return "쓸 수 없는 키가 있어요. 다른 키를 골라 주세요.";
+    case "PLAYING": return "플레이 중에는 조작키를 바꿀 수 없어요. Esc로 작업 모드에 돌아온 뒤 저장해 주세요.";
+    case "CONTROLS_LOADING": return "조작키 설정을 아직 불러오는 중이에요. 잠시 후 다시 저장해 주세요.";
+    case "SAVE_FAILED": return "조작키를 저장하지 못했어요. 잠시 후 다시 저장해 주세요.";
+    default: return "조작키를 저장하지 못했어요. 잠시 후 다시 저장해 주세요.";
   }
 }

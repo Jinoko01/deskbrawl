@@ -27,7 +27,6 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
   useLayoutEffect(() => {
     commandSink.current = onCommand;
   }, [onCommand]);
-  const region = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -90,7 +89,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
       if (wasActive) {
         void enqueue("work", zero, undefined, restore).catch((cause: unknown) => {
           if (live) {
-            setError(`작업 모드 전환 실패: ${String(cause)}`);
+            console.error("작업 모드 전환 실패", cause);
+            setError("작업 모드로 돌아가지 못했어요. Esc를 다시 누르거나 앱을 다시 실행해 주세요.");
           }
         });
       }
@@ -141,7 +141,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
         if (!live || current !== revision) {
           return;
         }
-        setError(`플레이 시작 실패: ${String(cause)}`);
+        console.error("플레이 시작 실패", cause);
+        setError("플레이를 시작하지 못했어요. 캐릭터가 보이는지 확인하고 다시 시도해 주세요.");
         leave();
       });
     }
@@ -169,7 +170,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
     }
     function inputFailed(cause: unknown): void {
       if (live) {
-        setError(`입력 전달 실패: ${String(cause)}`);
+        console.error("입력 전달 실패", cause);
+        setError("조작 입력이 끊겨 플레이를 멈췄어요. 플레이 시작을 다시 눌러 주세요.");
         leave();
       }
     }
@@ -195,7 +197,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
       if (result.changed) {
         void enqueue("input", keys.movement(), result.action).catch((cause: unknown) => {
           if (live) {
-            setError(`입력 전달 실패: ${String(cause)}`);
+            console.error("입력 전달 실패", cause);
+            setError("조작 입력이 끊겨 플레이를 멈췄어요. 플레이 시작을 다시 눌러 주세요.");
             leave();
           }
         });
@@ -208,7 +211,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
       event.preventDefault();
       void enqueue("input", keys.movement()).catch((cause: unknown) => {
         if (live) {
-          setError(`입력 전달 실패: ${String(cause)}`);
+          console.error("입력 전달 실패", cause);
+          setError("조작 입력이 끊겨 플레이를 멈췄어요. 플레이 시작을 다시 눌러 주세요.");
           leave();
         }
       });
@@ -254,7 +258,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
         }
       } catch (cause) {
         if (live) {
-          setError(`오버레이 상태 확인 실패: ${String(cause)}`);
+          console.error("오버레이 상태 확인 실패", cause);
+          setError("캐릭터 상태를 확인하지 못했어요. 트레이에서 캐릭터를 다시 표시해 주세요.");
         }
       }
     })();
@@ -265,7 +270,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
           applyControls(snapshot);
         }, (cause) => {
           if (live) {
-            setControlsError(`조작키 설정 확인 실패: ${String(cause)}`);
+            console.error("조작키 설정 확인 실패", cause);
+            setControlsError("조작키를 불러오지 못했어요. 앱을 다시 실행해 주세요.");
           }
         });
         if (!live) {
@@ -280,7 +286,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
         }
       } catch (cause) {
         if (live) {
-          setControlsError(`조작키 설정 확인 실패: ${String(cause)}`);
+          console.error("조작키 설정 확인 실패", cause);
+          setControlsError("조작키를 불러오지 못했어요. 앱을 다시 실행해 주세요.");
         }
       }
     })();
@@ -308,7 +315,6 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
   }
 
   return {
-    region,
     ready,
     playing,
     busy,

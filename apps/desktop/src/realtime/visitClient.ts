@@ -14,13 +14,13 @@ import {
   serverFeaturesSchema,
 } from "@deskbrawl/protocol";
 import type {
-  CharacterSkin, Joined, PlayerProfile, Session, Snapshot,
+  CharacterSkin, ErrorCode, Joined, PlayerProfile, Session, Snapshot,
 } from "@deskbrawl/protocol";
 import type { LocalCommand } from "../native/localGame";
-import { SERVER_ORIGIN } from "../api/rooms";
+import { RoomError, roomErrorMessage, SERVER_ORIGIN } from "../api/rooms";
 import type { PlayerAction, Vector2 } from "@deskbrawl/game-core";
 
-export function createVisitClient(session: Session, onSnapshot: (snapshot: Snapshot) => void, onEnded: (message: string) => void,
+export function createVisitClient(session: Session, onSnapshot: (snapshot: Snapshot) => void, onEnded: (message: string, closure?: ErrorCode) => void,
   onRecovery: (state: "reconnecting" | "recovered") => void = () => { /* Optional outside the desktop session. */ }) {
   const socket = io(SERVER_ORIGIN, {
     autoConnect: false,
@@ -82,7 +82,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     disposed = true;
     draft = undefined;
     membership = undefined;
-    connectingReject?.(new Error("Connection cancelled"));
+    connectingReject?.(new RoomError("Connection cancelled"));
     connectingReject = undefined;
     if (timer !== undefined) {
       clearInterval(timer);
@@ -91,18 +91,22 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     socket.io.off("reconnect_failed", reconnectFailed);
     socket.disconnect();
   }
-  function fail(message: string): void {
+  function fail(message: string, closure?: ErrorCode): void {
     if (disposed) {
       return;
     }
     movement = { x: 0, y: 0 };
     dispose();
-    onEnded(message);
+    if (closure === undefined) {
+      onEnded(message);
+    } else {
+      onEnded(message, closure);
+    }
   }
   socket.on("world:snapshot", (body: unknown) => {
     const result = snapshotSchema.safeParse(body);
     if (!result.success) {
-      fail("서버 게임 상태가 올바르지 않습니다.");
+      fail("게임 상태를 불러오지 못했어요. 공간에 다시 연결해 주세요.");
       socket.disconnect();
       return;
     }
@@ -136,7 +140,8 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
   });
   socket.on("room:closed", (body: unknown) => {
     const parsed = errorSchema.safeParse(body);
-    fail(parsed.success ? ERROR_MESSAGES[parsed.data.code] : ERROR_MESSAGES.SESSION_ENDED);
+    const code = parsed.success ? parsed.data.code : "SESSION_ENDED";
+    fail(ERROR_MESSAGES[code], code);
   });
   const reconnectFailed = () => fail(ERROR_MESSAGES.CONNECTION_LOST);
   socket.io.on("reconnect_failed", reconnectFailed);
@@ -181,10 +186,15 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         return;
       }
       if (!result.ok) {
-        throw new Error(ERROR_MESSAGES[result.code]);
+        if (result.code === "SESSION_ENDED" || result.code === "KICKED" || result.code === "HOST_OFFLINE") {
+          fail(ERROR_MESSAGES[result.code], result.code);
+          return;
+        }
+        throw new RoomError(ERROR_MESSAGES[result.code]);
       }
       if (result.worldId !== previous.worldId || result.roomId !== previous.roomId || result.playerId !== previous.playerId) {
-        throw new Error(ERROR_MESSAGES.SESSION_ENDED);
+        fail(ERROR_MESSAGES.SESSION_ENDED, "SESSION_ENDED");
+        return;
       }
       membership = result;
       sequence = 0;
@@ -205,7 +215,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       timer = setInterval(refresh, 50);
     })().catch((error: unknown) => {
       if (epoch === inputEpoch) {
-        fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+        fail(roomErrorMessage(error));
       }
     }).finally(() => {
       if (epoch === inputEpoch) {
@@ -216,12 +226,12 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
   function acknowledge(event: string, body: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!socket.connected || disposed) {
-        reject(new Error(ERROR_MESSAGES.CONNECTION_LOST));
+        reject(new RoomError(ERROR_MESSAGES.CONNECTION_LOST));
         return;
       }
       socket.timeout(5000).emit(event, body, (error: Error | null, result: unknown) => {
         if (error !== null) {
-          reject(new Error("서버 응답을 확인하지 못했습니다. 다시 연결해 주세요."));
+          reject(new RoomError("서버 응답을 확인하지 못했어요. 다시 연결해 주세요."));
         } else {
           resolve(result);
         }
@@ -239,7 +249,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         }
         return;
       }
-      throw new Error(ERROR_MESSAGES[result.code]);
+      throw new RoomError(ERROR_MESSAGES[result.code]);
     }
   }
   function sendMovement(): void {
@@ -255,7 +265,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     lastMovement = { ...movement };
     void command("player:input", { visitId, seq: ++sequence, movement }, true).catch((error: unknown) => {
       if (epoch === inputEpoch) {
-        fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+        fail(roomErrorMessage(error));
       }
     }).finally(() => {
       if (epoch === inputEpoch) {
@@ -285,11 +295,11 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         .then((body) => {
           const result = commandAckSchema.parse(body);
           if (!result.ok && !["INVALID_INPUT", "ROOM_UNAVAILABLE", "RATE_LIMITED"].includes(result.code)) {
-            throw new Error(ERROR_MESSAGES[result.code]);
+            throw new RoomError(ERROR_MESSAGES[result.code]);
           }
         }).catch((error: unknown) => {
           if (epoch === inputEpoch) {
-            fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+            fail(roomErrorMessage(error));
           }
         }).finally(() => {
           placementPending = false;
@@ -314,7 +324,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
   }
   function hostControl() {
     if (membership?.role !== "host" || disposed) {
-      throw new Error(ERROR_MESSAGES.UNAUTHORIZED);
+      throw new RoomError(ERROR_MESSAGES.UNAUTHORIZED);
     }
     return { visitId: membership.visitId, commandId: crypto.randomUUID() };
   }
@@ -331,7 +341,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     modePending = true;
     modeQueue = modeQueue.then(() => command("player:mode", { visitId, seq, playing })).catch((error: unknown) => {
       if (epoch === inputEpoch) {
-        fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+        fail(roomErrorMessage(error));
       }
     }).finally(() => {
       if (seq === controlSequence) {
@@ -363,13 +373,13 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     void command("player:action", { visitId: membership.visitId, actionId: crypto.randomUUID(), action }, true)
       .catch((error: unknown) => {
         if (epoch === inputEpoch) {
-          fail(error instanceof Error ? error.message : ERROR_MESSAGES.CONNECTION_LOST);
+          fail(roomErrorMessage(error));
         }
       });
   }
   async function setProfile(profile: PlayerProfile): Promise<void> {
     if (membership === undefined || disposed || recovering) {
-      throw new Error(ERROR_MESSAGES.CONNECTION_LOST);
+      throw new RoomError(ERROR_MESSAGES.CONNECTION_LOST);
     }
     const request = playerProfileSchema.parse({ ...profile, visitId: membership.visitId });
     await command("player:profile", request);
@@ -385,7 +395,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         });
         socket.once("connect_error", () => {
           connectingReject = undefined;
-          reject(new Error("서버에 연결하지 못했습니다. 서버 실행 상태와 주소를 확인해 주세요."));
+          reject(new RoomError("공간에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."));
         });
         socket.connect();
       });
@@ -394,10 +404,10 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       const request = event === "room:host" ? hostSchema.parse(body) : joinSchema.parse(body);
       const result = joinedAckSchema.parse(await acknowledge(event, request));
       if (disposed) {
-        throw new Error(ERROR_MESSAGES.CONNECTION_LOST);
+        throw new RoomError(ERROR_MESSAGES.CONNECTION_LOST);
       }
       if (!result.ok) {
-        throw new Error(ERROR_MESSAGES[result.code]);
+        throw new RoomError(ERROR_MESSAGES[result.code]);
       }
       membership = result;
       profiles.clear();

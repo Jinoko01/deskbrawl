@@ -38,10 +38,12 @@ fn main() -> tauri::Result<()> {
             overlay::focus_set,
             overlay::invite_publish,
             overlay::app_exit,
+            overlay::app_request_exit,
             chat::chat_open,
             chat::chat_update,
             chat::chat_close,
             local_game::local_available,
+            local_game::local_start,
             local_game::local_control,
             local_game::local_overlay_status,
             drag::overlay_drag_regions,
@@ -78,7 +80,9 @@ fn main() -> tauri::Result<()> {
             if window.label() == "main" {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    overlay::request_exit(window.app_handle());
+                    if let Err(error) = window.hide() {
+                        eprintln!("Could not hide DeskBrawl: {error}");
+                    }
                 }
             }
             // An unexpected WebView destruction must not leave an invisible app behind.

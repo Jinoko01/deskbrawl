@@ -15,13 +15,20 @@ export const actionSchema = z.enum(["melee", "stone"]);
 export const errorCodeSchema = z.enum(["INVALID_INPUT", "UNAUTHORIZED", "INVALID_INVITE", "ROOM_FULL", "HOST_OFFLINE", "ROOM_UNAVAILABLE", "KICKED", "SELF_VISIT", "ALREADY_VISITING", "SESSION_ENDED", "RATE_LIMITED", "INCOMPATIBLE_VERSION", "INTERNAL_ERROR", "CONNECTION_LOST"]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export const ERROR_MESSAGES: Record<ErrorCode, string> = {
-  INVALID_INPUT: "입력값을 확인해 주세요.", UNAUTHORIZED: "기기 인증이 만료되었습니다. 다시 연결해 주세요.",
-  INVALID_INVITE: "유효하지 않거나 만료된 방문 링크예요.", ROOM_FULL: "현재 방문 인원이 가득 찼어요.",
-  HOST_OFFLINE: "호스트가 오프라인이에요.", SELF_VISIT: "자신의 공간에는 방문할 수 없어요.",
-  ROOM_UNAVAILABLE: "호스트가 집중 모드여서 지금은 방문할 수 없어요.", KICKED: "호스트가 방문을 종료했어요.",
-  ALREADY_VISITING: "다른 공간을 방문 중이에요. 귀환 후 다시 시도해 주세요.", SESSION_ENDED: "방문 세션이 종료되었습니다.",
-  RATE_LIMITED: "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.", INCOMPATIBLE_VERSION: "앱과 서버 버전이 맞지 않습니다.",
-  INTERNAL_ERROR: "서버에서 요청을 처리하지 못했습니다.", CONNECTION_LOST: "서버 연결이 끊어졌습니다. 다시 연결해 주세요.",
+  INVALID_INPUT: "입력값을 처리하지 못했어요. 닉네임과 방문 링크를 확인해 주세요.",
+  UNAUTHORIZED: "기기를 인증하지 못했어요. 내 공간에 다시 연결해 주세요.",
+  INVALID_INVITE: "사용할 수 없는 방문 링크예요. 친구에게 새 링크를 요청해 주세요.",
+  ROOM_FULL: "방문 인원이 가득 찼어요. 자리가 생기면 다시 방문해 주세요.",
+  HOST_OFFLINE: "친구의 공간이 닫혀 있어요. 친구가 공간을 열면 방문해 주세요.",
+  SELF_VISIT: "내 공간의 링크예요. 방문하려면 친구의 링크를 붙여넣어 주세요.",
+  ROOM_UNAVAILABLE: "친구가 집중 모드예요. 친구가 집중 모드를 끄면 방문해 주세요.",
+  KICKED: "친구가 방문을 종료했어요.",
+  ALREADY_VISITING: "다른 공간을 방문 중이에요. 내 공간으로 돌아온 뒤 다시 방문해 주세요.",
+  SESSION_ENDED: "친구 공간 방문이 끝났어요.",
+  RATE_LIMITED: "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.",
+  INCOMPATIBLE_VERSION: "현재 앱 버전으로 연결할 수 없어요. 앱을 업데이트한 뒤 다시 연결해 주세요.",
+  INTERNAL_ERROR: "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.",
+  CONNECTION_LOST: "연결이 끊겼어요. 인터넷 연결을 확인하고 다시 연결해 주세요.",
 };
 export const errorSchema = z.object({ ok: z.literal(false), code: errorCodeSchema }).strict();
 export const okSchema = z.object({ ok: z.literal(true) }).strict();

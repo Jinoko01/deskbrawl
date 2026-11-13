@@ -175,7 +175,7 @@ it("clears membership and timers on a kick and reports the termination reason on
     kind: "input", seq: 1, movement: { x: 1, y: 0 }, action: "stone",
   });
   await vi.advanceTimersByTimeAsync(150);
-  expect(ended).toHaveBeenCalledExactlyOnceWith(ERROR_MESSAGES.KICKED);
+  expect(ended).toHaveBeenCalledExactlyOnceWith(ERROR_MESSAGES.KICKED, "KICKED");
   expect(transport.sent).toHaveLength(1);
   expect(transport.socket.disconnect).toHaveBeenCalledOnce();
 });
@@ -242,7 +242,7 @@ it("ends once after bounded reconnect failure and rejects a different world on r
   transport.listeners.get("connect")?.(undefined);
   pending("visit:resume").reply(null, { ...next.joined, worldId: randomUUID() });
   await vi.advanceTimersByTimeAsync(0);
-  expect(next.ended).toHaveBeenCalledOnce();
+  expect(next.ended).toHaveBeenCalledExactlyOnceWith(ERROR_MESSAGES.SESSION_ENDED, "SESSION_ENDED");
 });
 
 it("keeps recovery frozen when the reconnecting server announces drag support", async () => {

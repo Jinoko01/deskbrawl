@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { nicknameSchema } from "@deskbrawl/protocol";
 import type { CharacterSkin } from "@deskbrawl/protocol";
 import type { useMultiplayer } from "./hooks/queries/useMultiplayer";
-import { SERVER_ORIGIN } from "./api/rooms";
+import { roomErrorMessage, SERVER_ORIGIN } from "./api/rooms";
 import { AppIcon } from "./AppIcon";
-import { CharacterPicker } from "./CharacterPicker";
+import { CharacterPicker, CharacterPortrait } from "./CharacterPicker";
+import { CHARACTERS } from "./game/characters";
 import { VisitPreview } from "./VisitPreview";
 
 interface MultiplayerPanelProps {
@@ -16,30 +18,42 @@ const CONNECTION_LABELS = {
   guest: "친구 공간 방문 중",
   connecting: "공간에 연결하는 중…",
   reconnecting: "연결이 끊겨 복구하는 중… 조작을 잠시 멈췄어요.",
-  local: "로컬 플레이 · 공간 연결 전",
-  error: "연결하지 못했어요. 아래 안내를 확인하고 다시 시도해 주세요.",
+  local: "연결 전",
+  error: "연결 끊김",
 } as const;
+
+const inviteExpiry = new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" });
 
 export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
   const [nicknameEdit, setNickname] = useState<string>();
-  const nickname = nicknameEdit ?? game.self?.nickname ?? "친구";
+  const [skinDraft, setSkinDraft] = useState<CharacterSkin>();
+  const nickname = nicknameEdit ?? (skinDraft === undefined ? game.nickname : game.savedNickname ?? CHARACTERS[skinDraft].name);
   const [link, setLink] = useState("");
   const [copy, setCopy] = useState<string>();
   const [profileSaved, setProfileSaved] = useState(false);
-  const [skinDraft, setSkinDraft] = useState<CharacterSkin>();
-  const connectionBusy = !game.focusLoaded || ["connecting", "reconnecting"].includes(game.view.phase) || game.connect.isPending || game.join.isPending || game.returning.isPending;
-  const controlBusy = connectionBusy || game.focus.isPending || game.kick.isPending || game.clearVisitors.isPending;
-  const busy = playing || controlBusy || game.profile.isPending;
+  const disconnectDialog = useRef<HTMLDialogElement>(null);
+  const clearDialog = useRef<HTMLDialogElement>(null);
+  const connectionBusy = game.connectionBusy;
+  const controlBusy = playing || connectionBusy || game.focus.isPending || game.kick.isPending || game.clearVisitors.isPending;
+  const busy = controlBusy || game.profile.isPending;
   const hosting = game.view.phase === "host";
   const guest = game.view.phase === "guest";
   const connected = hosting || guest;
-  const error = game.invite.error ?? game.revoke.error ?? game.returning.error;
-  const visitError = game.join.error?.message;
+  const error = game.disconnecting.error ?? (hosting
+    ? game.kick.error ?? game.clearVisitors.error ?? game.invite.error ?? game.revoke.error
+    : null);
+  const visitError = game.join.isError ? roomErrorMessage(game.join.error) : undefined;
   const invitation = game.invite.data;
   const inviteBusy = busy || game.invite.isPending || game.revoke.isPending;
   const visitors = game.view.members.filter((member) => member.role === "guest");
-  const nicknameValid = nickname.trim().length > 0;
+  const nicknameValid = nicknameSchema.safeParse(nickname).success;
   const canSaveNickname = nicknameValid && nickname.trim() !== game.self?.nickname;
+  const nicknameHelp = nicknameValid ? "1~24자로 입력해 주세요." : "닉네임은 앞뒤 공백을 빼고 1~24자여야 해요.";
+  const lobbyHelp = playing ? "플레이 중에는 캐릭터와 연결을 바꿀 수 없어요. Esc를 눌러 작업 모드로 돌아와 주세요." : undefined;
+  const canCancel = !game.disconnecting.isPending && (
+    game.connect.isPending || game.join.isPending || game.returning.isPending
+    || game.view.phase === "connecting" || game.view.phase === "reconnecting"
+  );
   const mutateProfile = game.profile.mutate;
   useEffect(() => {
     if (skinDraft === undefined || busy) {
@@ -52,20 +66,20 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
     }, 400);
     return () => window.clearTimeout(timer);
   }, [skinDraft, busy, mutateProfile]);
-  let roomTitle = "친구가 찾아올 나의 공간";
-  if (guest) {
-    roomTitle = "함께하는 친구의 공간";
-  } else if (hosting) {
-    roomTitle = "친구를 초대해 보세요";
-  }
+  useEffect(() => {
+    if (copy !== undefined) {
+      const timer = window.setTimeout(() => setCopy(undefined), 4000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [copy]);
 
   function copyInviteLink(): void {
     if (invitation === undefined) {
       return;
     }
     void navigator.clipboard.writeText(invitation.link).then(
-      () => setCopy("링크를 복사했습니다."),
-      () => setCopy("복사하지 못했습니다. 방문 링크를 직접 선택해 복사해 주세요."),
+      () => setCopy("링크를 복사했어요."),
+      () => setCopy("링크를 복사하지 못했어요. 방문 링크를 선택해 직접 복사해 주세요."),
     );
   }
 
@@ -79,16 +93,16 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
         },
       });
     } else {
-      game.connect.mutate(nickname, { onSuccess: () => setNickname(undefined) });
+      game.connect.mutate({ nickname: nickname.trim(), edited: nicknameEdit !== undefined });
     }
   }
 
   return (
-    <section aria-label="링크 방문" className="lobby-grid">
+    <section aria-label="캐릭터와 공간 연결" className="lobby-grid">
+      {lobbyHelp && <p className="notice lobby-notice" role="status">{lobbyHelp}</p>}
       <section className="panel profile-panel" aria-labelledby="profile-title">
         <div className="panel-heading">
           <h2 id="profile-title">나의 캐릭터</h2>
-          <span className="eyebrow">함께할 작은 친구</span>
         </div>
         <CharacterPicker
           skin={skinDraft ?? game.skin}
@@ -99,7 +113,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
           id="profile-form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!busy && nicknameValid) {
+            if (!busy && nicknameValid && (!connected || canSaveNickname)) {
               saveProfile();
             }
           }}
@@ -109,9 +123,10 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
             <input
               className="field"
               value={nickname}
-              maxLength={24}
               required
               disabled={busy}
+              aria-invalid={!nicknameValid || undefined}
+              aria-describedby="nickname-help"
               autoComplete="nickname"
               onChange={(event) => {
                 setNickname(event.target.value);
@@ -119,6 +134,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
               }}
             />
           </label>
+          <p id="nickname-help" className={nicknameValid ? "field-help" : "field-help text-danger"}>{nicknameHelp}</p>
           {connected && (
             <button
               className="button button-secondary mt-3 w-full"
@@ -129,59 +145,56 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
             </button>
           )}
         </form>
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          캐릭터는 선택하면 바로 적용돼요.
-          <br />
-          연결 후에도 닉네임을 바꿀 수 있어요.
-        </p>
-        {game.profile.isPending && <p className="mt-2 text-xs text-accent" role="status">프로필 저장 중…</p>}
-        {profileSaved && nicknameEdit === undefined && <p className="mt-2 text-xs text-accent" role="status">닉네임을 저장했습니다.</p>}
-        {game.profile.error && <p className="notice notice-error" role="alert">{game.profile.error.message}</p>}
+        {profileSaved && nicknameEdit === undefined && <p className="mt-2 text-xs text-accent" role="status">닉네임을 저장했어요.</p>}
+        {game.profile.error && <p className="notice notice-error" role="alert">{roomErrorMessage(game.profile.error)}</p>}
       </section>
       <div className="room-column">
         <section className="panel room-panel" aria-labelledby="room-title">
           <div className="panel-heading">
             <h2 id="room-title">{guest ? "방문 중인 공간" : "내 공간"}</h2>
-            <span className="room-capacity">
-              <AppIcon name="people" />
-              {`${game.view.members.length} / 6`}
-            </span>
+            {connected && (
+              <span className="room-capacity" aria-label={`최대 6명 중 ${game.view.members.length}명 참여 중`}>
+                <AppIcon name="people" />
+                {`${game.view.members.length} / 6`}
+              </span>
+            )}
           </div>
           <div className="room-status" data-connected={connected}>
             <span className="status-dot" />
-            <p role="status">{CONNECTION_LABELS[game.view.phase]}</p>
+            <p role="status">{game.disconnecting.isPending ? "연결을 정리하는 중…" : CONNECTION_LABELS[game.view.phase]}</p>
           </div>
           {!connected && (
             <div className="room-empty">
-              <div className="room-illustration" aria-hidden="true">
-                <AppIcon name="home" className="h-8 w-8" />
-                <span className="room-orbit" />
-                <span className="room-orbit room-orbit-small" />
-              </div>
-              <h3>{roomTitle}</h3>
-              <p>
-                캐릭터와 닉네임을 고른 뒤 연결하세요.
-                <br />
-                내 데스크톱에서 최대 6명이 함께할 수 있어요.
-              </p>
+              <p>내 공간을 열고 방문 링크로 친구를 초대해요. 최대 6명이 함께할 수 있어요.</p>
               <button
-                className="button button-primary w-full"
+                className="button button-secondary w-full"
                 type="submit"
                 form="profile-form"
                 disabled={busy || !nicknameValid}
+                aria-describedby={!nicknameValid ? "nickname-help" : undefined}
               >
-                {connectionBusy ? "연결하는 중…" : "내 공간 연결"}
+                {game.connect.isPending ? "연결하는 중…" : "내 공간 연결"}
                 <AppIcon name="arrow" />
               </button>
             </div>
           )}
+          {canCancel && (
+            <button
+              type="button"
+              className="button button-secondary mt-3 w-full"
+              onClick={() => game.disconnecting.mutate()}
+            >
+              연결 취소
+            </button>
+          )}
           {connected && (
             <>
-              <h3 className="mt-4 text-base font-semibold">{roomTitle}</h3>
               <ul aria-label="공간 참여자" className="member-list">
                 {game.view.members.map((member) => (
                   <li key={member.playerId}>
-                    <span className="member-avatar" aria-hidden="true">{member.nickname.slice(0, 1)}</span>
+                    <span className="member-avatar" aria-hidden="true">
+                      {member.skin === undefined ? member.nickname.slice(0, 1) : <CharacterPortrait skin={member.skin} />}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <p className="break-all text-sm font-medium">
                         {member.nickname}
@@ -209,7 +222,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
             <div className="invite-section">
               <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
                 링크를 가진 누구나 승인 없이 방문할 수 있어요.
-                {game.focused && " 집중 모드를 끄면 방문할 수 있어요."}
+                {game.focused && " 집중 모드를 끄면 친구가 방문할 수 있어요."}
               </p>
               {!invitation && (
                 <button
@@ -247,7 +260,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
                   {copy && <p role="status" className="mt-2 text-xs text-accent">{copy}</p>}
                   <details className="link-management">
                     <summary>링크 관리</summary>
-                    <p className="mt-2 text-xs text-muted-foreground">{`만료: ${new Date(invitation.expiresAt).toLocaleString()}`}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{`${inviteExpiry.format(invitation.expiresAt)}에 만료돼요.`}</p>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">재발급하거나 폐기하면 기존 링크로는 새로 방문할 수 없어요.</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
@@ -276,17 +289,30 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
                   </details>
                 </>
               )}
-              {visitors.length === 0 && <p className="mt-3 text-xs text-muted-foreground">아직 방문자가 없어요. 링크를 보내 친구를 초대하세요.</p>}
               {visitors.length > 0 && (
                 <button
                   type="button"
                   className="button button-danger mt-3"
                   disabled={controlBusy}
-                  onClick={() => game.clearVisitors.mutate()}
+                  onClick={() => clearDialog.current?.showModal()}
                 >
                   {game.clearVisitors.isPending ? "내보내는 중…" : "모두 내보내기"}
                 </button>
               )}
+              <button
+                type="button"
+                className="button button-quiet mt-3"
+                disabled={inviteBusy}
+                onClick={() => {
+                  if (visitors.length > 0) {
+                    disconnectDialog.current?.showModal();
+                  } else {
+                    game.disconnecting.mutate();
+                  }
+                }}
+              >
+                공간 연결 끊기
+              </button>
             </div>
           )}
           {guest && (
@@ -298,14 +324,15 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
                 disabled={busy}
                 onClick={() => game.returning.mutate()}
               >
-                {game.returning.isPending ? "돌아가는 중…" : "귀환"}
+                {game.returning.isPending ? "돌아가는 중…" : "내 공간으로 돌아가기"}
                 <AppIcon name="arrow" />
               </button>
             </>
           )}
+          {game.view.notice && <p className="notice" role="status">{game.view.notice}</p>}
           {game.view.error && game.view.error !== visitError && <p className="notice notice-error" role="alert">{game.view.error}</p>}
-          {error && error.message !== game.view.error && <p className="notice notice-error" role="alert">{error.message}</p>}
-          {game.room.error && <p className="notice notice-error" role="alert">{`내 공간 조회 실패: ${game.room.error.message}`}</p>}
+          {error && <p className="notice notice-error" role="alert">{roomErrorMessage(error)}</p>}
+          {game.room.error && connected && <p className="notice notice-error" role="alert">{roomErrorMessage(game.room.error)}</p>}
         </section>
         {!guest && (
           <section className="panel visit-panel" aria-labelledby="visit-title">
@@ -315,11 +342,10 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
                 친구에게 놀러 가기
               </h2>
             </div>
-            <p className="mb-4 text-xs leading-relaxed text-muted-foreground">초대받은 링크가 있다면 바로 방문할 수 있어요.</p>
             <form onSubmit={(event) => {
               event.preventDefault();
               if (!busy && !game.focused && link.trim().length > 0 && nicknameValid) {
-                game.join.mutate({ link: link.trim(), nickname });
+                game.join.mutate({ link: link.trim(), nickname: nickname.trim(), edited: nicknameEdit !== undefined });
               }
             }}
             >
@@ -340,18 +366,20 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
                       game.join.reset();
                     }
                   }}
-                  placeholder="초대 링크를 붙여넣으세요"
+                  placeholder="방문 링크를 붙여넣어 주세요"
                 />
               </label>
               <button
                 type="submit"
                 className="button button-secondary mt-3 w-full"
                 disabled={busy || game.focused || !link.trim() || !nicknameValid}
+                aria-describedby={!nicknameValid ? "nickname-help" : undefined}
               >
                 {game.join.isPending ? "방문하는 중…" : "방문하기"}
                 <AppIcon name="arrow" />
               </button>
               {game.focused && <p className="mt-2 text-xs text-muted-foreground">집중 모드를 끄면 친구 공간에 방문할 수 있어요.</p>}
+              {!game.focused && !busy && link.trim() === "" && <p className="field-help text-muted-foreground">친구에게 받은 방문 링크를 붙여넣어 주세요.</p>}
               {visitError && (
                 <p
                   id="visit-error"
@@ -369,6 +397,36 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
           <p className="mt-2 break-all text-xs text-muted-foreground">{`서버: ${SERVER_ORIGIN}`}</p>
         </details>
       </div>
+      <dialog
+        ref={disconnectDialog}
+        className="confirm-dialog"
+        aria-labelledby="disconnect-title"
+        aria-describedby="disconnect-detail"
+      >
+        <h2 id="disconnect-title" className="font-semibold">공간 연결을 끊을까요?</h2>
+        <p id="disconnect-detail" className="mt-2 text-sm text-muted-foreground">내 공간에 있는 방문자의 연결도 끊겨요.</p>
+        <form method="dialog" className="mt-5 flex justify-end gap-2">
+          <button className="button button-secondary" autoFocus>취소</button>
+          <button className="button button-danger" onClick={() => game.disconnecting.mutate()}>연결 끊기</button>
+        </form>
+      </dialog>
+      <dialog
+        ref={clearDialog}
+        className="confirm-dialog"
+        aria-labelledby="clear-title"
+        aria-describedby="clear-detail"
+      >
+        <h2 id="clear-title" className="font-semibold">방문자를 모두 내보낼까요?</h2>
+        <p id="clear-detail" className="mt-2 text-sm text-muted-foreground">
+          내 공간에 있는 방문자
+          {visitors.length}
+          명의 연결이 끊겨요.
+        </p>
+        <form method="dialog" className="mt-5 flex justify-end gap-2">
+          <button className="button button-secondary" autoFocus>취소</button>
+          <button className="button button-danger" onClick={() => game.clearVisitors.mutate()}>모두 내보내기</button>
+        </form>
+      </dialog>
     </section>
   );
 }

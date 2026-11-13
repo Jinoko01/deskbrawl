@@ -9,12 +9,34 @@ interface CharacterPickerProps {
   readonly onChange: (skin: CharacterSkin) => void;
 }
 
+interface PortraitProps {
+  readonly skin: CharacterSkin;
+  readonly label?: string;
+}
+
+export function CharacterPortrait({ skin, label }: PortraitProps) {
+  const { image, frame, size } = characterPortrait(skin);
+  return (
+    <svg
+      role={label === undefined ? undefined : "img"}
+      aria-label={label}
+      aria-hidden={label === undefined || undefined}
+      viewBox={`${frame.x} ${frame.y} ${frame.w} ${frame.h}`}
+      className="h-full w-full [image-rendering:pixelated]"
+    >
+      <image
+        href={image}
+        width={size.w}
+        height={size.h}
+      />
+    </svg>
+  );
+}
+
 export function CharacterPicker({ skin, disabled, onChange }: CharacterPickerProps) {
   const labelId = useId();
   const index = characterSkinSchema.options.indexOf(skin);
-  const {
-    image, name, frame, size,
-  } = characterPortrait(skin);
+  const { name } = characterPortrait(skin);
   function step(direction: -1 | 1): void {
     if (!disabled) {
       onChange(adjacentCharacter(skin, direction));
@@ -25,7 +47,7 @@ export function CharacterPicker({ skin, disabled, onChange }: CharacterPickerPro
     <div
       className="character-picker"
       role="group"
-      aria-labelledby={labelId}
+      aria-label="캐릭터 선택"
       onKeyDown={(event) => {
         if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
           event.preventDefault();
@@ -37,21 +59,10 @@ export function CharacterPicker({ skin, disabled, onChange }: CharacterPickerPro
         <div className="character-ground" aria-hidden="true" />
         <div className="character-art">
           <div key={skin} className="character-portrait">
-            <svg
-              role="img"
-              aria-label={`${name} 캐릭터 미리보기`}
-              viewBox={`${frame.x} ${frame.y} ${frame.w} ${frame.h}`}
-              className="h-full w-full [image-rendering:pixelated]"
-            >
-              <image
-                href={image}
-                width={size.w}
-                height={size.h}
-              />
-            </svg>
+            <CharacterPortrait skin={skin} label={`${name} 캐릭터 미리보기`} />
           </div>
         </div>
-        <span className="character-number" aria-hidden="true">{`${String(index + 1).padStart(2, "0")} / 08`}</span>
+        <span className="character-number" aria-hidden="true">{`${index + 1} / ${characterSkinSchema.options.length}`}</span>
         <button
           type="button"
           className="character-arrow character-arrow-previous"
@@ -101,9 +112,25 @@ export function CharacterPicker({ skin, disabled, onChange }: CharacterPickerPro
           aria-atomic="true"
         >
           {name}
+          <span className="sr-only">{`, ${characterSkinSchema.options.length}종 중 ${index + 1}번째`}</span>
         </p>
       </div>
-      <div className="character-pagination" aria-hidden="true">{characterSkinSchema.options.map((id) => <span key={id} data-selected={id === skin} />)}</div>
+      <div className="character-options">
+        {characterSkinSchema.options.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className="character-option"
+            aria-label={characterPortrait(id).name}
+            aria-pressed={id === skin}
+            title={characterPortrait(id).name}
+            disabled={disabled}
+            onClick={() => onChange(id)}
+          >
+            <CharacterPortrait skin={id} />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

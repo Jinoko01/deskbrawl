@@ -30,7 +30,7 @@ export function VisitPreview({ subscribe }: VisitPreviewProps) {
         className="h-52 w-full"
         aria-label="방문 공간 미리보기"
       />
-      {status !== "ready" && <p role="status" className="text-sm">{status === "loading" ? "미리보기를 불러오는 중…" : "미리보기를 표시하지 못했습니다. 귀환 후 다시 방문해 주세요."}</p>}
+      {status !== "ready" && <p role="status" className="text-sm">{status === "loading" ? "미리보기를 불러오는 중…" : "미리보기를 표시하지 못했어요. 내 공간으로 돌아간 뒤 다시 방문해 주세요."}</p>}
     </div>
   );
 }

@@ -17,6 +17,12 @@ export async function testDesktopDesign(main, output, until) {
     await main.evaluate("scrollTo(0, 0)");
     await main.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     assert.equal(await main.evaluate("document.documentElement.scrollWidth <= innerWidth"), true, `${name}: horizontal overflow`);
+    if (name === "desktop-home") {
+      assert.equal(await main.evaluate(`[...document.querySelectorAll('button')]
+        .filter(button => /^(플레이 시작|내 공간 연결)/.test(button.textContent.trim()))
+        .map(button => button.getBoundingClientRect())
+        .filter(rect => rect.top >= 0 && rect.bottom <= innerHeight).length`), 2, "Play and connect must be above the fold");
+    }
     assert.equal(await main.evaluate(`(() => {
       const portrait = document.querySelector('svg[role=img]').getBoundingClientRect();
       const previous = document.querySelector('[aria-label="이전 캐릭터"]').getBoundingClientRect();
@@ -42,6 +48,9 @@ export async function testDesktopDesign(main, output, until) {
   }
   assert.equal(seen.size, 8);
   assert.equal(await main.evaluate("document.querySelector('svg[role=img]').getAttribute('aria-label')"), original, "Carousel must wrap");
+  assert.deepEqual(await main.evaluate("[...document.querySelectorAll('.character-option')].map(button => button.getAttribute('aria-label'))"), names);
+  await main.evaluate("document.querySelector('.character-option[aria-label=베리]').click()");
+  await until(() => main.evaluate("document.querySelector('.character-option[aria-label=베리][aria-pressed=true]') !== null"), "Direct selection did not select Berry");
 
   await main.evaluate(`(() => {
     const input = [...document.querySelectorAll('label')].find(label => label.textContent.trim() === '친구 방문 링크').querySelector('input');
@@ -71,13 +80,13 @@ export async function testDesktopDesign(main, output, until) {
   await click("내 공간");
   assert.equal(await main.evaluate("[...document.querySelectorAll('label')].find(l => l.textContent.trim() === '친구 방문 링크').querySelector('input').value"), "invalid-link", "Navigation must preserve form drafts");
 
-  await until(() => main.evaluate("![...document.querySelectorAll('button')].find(b => b.textContent.trim() === '집중 모드 켜기').disabled"), "Focus control did not become ready");
-  await click("집중 모드 켜기");
-  await until(() => main.evaluate("document.querySelector('.mode-badge').textContent.trim() === 'FOCUS'"), "Focus must update the mode badge");
+  await until(() => main.evaluate("!document.querySelector('[role=switch]').disabled"), "Focus control did not become ready");
+  await click("집중 모드");
+  await until(() => main.evaluate("document.querySelector('[role=switch]').getAttribute('aria-checked') === 'true' && document.querySelector('#play-mode').textContent === '집중 모드'"), "Focus must update the switch and mode");
   assert.equal(await main.evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '방문하기').disabled"), true, "Focus must disable visits");
-  await until(() => main.evaluate("![...document.querySelectorAll('button')].find(b => b.textContent.trim() === '집중 모드 끄기').disabled"), "Focus enable did not finish");
-  await click("집중 모드 끄기");
-  await until(() => main.evaluate("document.querySelector('.mode-badge').textContent.trim() === 'WORK'"), "Unfocus must restore WORK");
+  await until(() => main.evaluate("!document.querySelector('[role=switch]').disabled"), "Focus enable did not finish");
+  await click("집중 모드");
+  await until(() => main.evaluate("document.querySelector('[role=switch]').getAttribute('aria-checked') === 'false' && document.querySelector('#play-mode').textContent === '작업 모드'"), "Unfocus must restore work mode");
   await main.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   assert.equal(await main.evaluate("getComputedStyle(document.querySelector('.character-portrait')).animationName"), "none", "Decorative motion must respect reduced motion");
   await main.rpc("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });

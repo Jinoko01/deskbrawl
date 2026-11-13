@@ -7,6 +7,7 @@
   ],
   "permissions": [
     "allow-local-available",
+    "allow-local-start",
     "allow-local-control",
     "allow-local-controls",
     "allow-local-set-controls",
@@ -23,6 +24,7 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "allow-app-exit",
+    "allow-app-request-exit",
     "allow-chat-open"
   ]
 }

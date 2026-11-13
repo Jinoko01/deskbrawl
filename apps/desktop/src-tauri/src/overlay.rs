@@ -136,7 +136,11 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
                     eprintln!("Tray play failed: {error}");
                 }
             }
-            EXIT => request_exit(app),
+            EXIT => {
+                if let Err(error) = prompt_exit(app) {
+                    eprintln!("Could not request DeskBrawl exit: {error}");
+                }
+            }
             _ => {}
         })
         .build(app)?;
@@ -586,7 +590,36 @@ pub fn exit_app(app: &AppHandle) {
     app.exit(0);
 }
 
-// Give main one short opportunity to notify the room, even for X or tray exit.
+fn prompt_exit(app: &AppHandle) -> tauri::Result<()> {
+    if crate::network::has_visitors(app) {
+        if let Some(main) = app.get_webview_window("main") {
+            main.unminimize()?;
+            main.show()?;
+            main.set_focus()?;
+            if crate::local_game::playing(app) || crate::local_game::capturing(app) {
+                crate::local_game::end_play(app);
+            }
+            return app.emit_to("main", "app-confirm-exit", ());
+        }
+    }
+    request_exit(app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn app_request_exit(window: WebviewWindow, confirmed: bool) -> Result<(), &'static str> {
+    if window.label() != "main" {
+        return Err("MAIN_ONLY");
+    }
+    if confirmed {
+        request_exit(window.app_handle());
+        Ok(())
+    } else {
+        prompt_exit(window.app_handle()).map_err(|_| "EXIT_REQUEST_FAILED")
+    }
+}
+
+// Give main one short opportunity to notify the room on explicit exit.
 // A broken WebView must never keep the native app alive indefinitely.
 pub fn request_exit(app: &AppHandle) {
     if app.state::<Control>().closing.swap(true, Ordering::SeqCst) {

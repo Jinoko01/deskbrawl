@@ -313,8 +313,13 @@ foreach ($scenario in @('main', 'overlay', 'tray')) {
         }
         if ($scenario -ne 'tray') {
             [DeskBrawl.WindowTest]::Close($main)
+            Wait-Until { -not [DeskBrawl.WindowTest]::IsWindowVisible($main) } 'Window close must hide main.'
+            Assert (-not $app.HasExited) 'Hiding main must keep DeskBrawl running.'
+            [DeskBrawl.WindowTest]::Command($tray, $commands['홈 열기'])
+            Wait-Until { [DeskBrawl.WindowTest]::IsWindowVisible($main) } 'Tray must reopen the same window.'
+            [DeskBrawl.WindowTest]::Command($tray, $commands['종료'])
         }
-        Assert ($app.WaitForExit(10000)) 'Window close or tray exit must terminate the app.'
+        Assert ($app.WaitForExit(10000)) 'Tray exit must terminate the app.'
         Assert ($app.ExitCode -eq 0) "The app exited with code $($app.ExitCode)."
         Assert (-not [DeskBrawl.WindowTest]::IsWindow($main)) 'Exit must destroy the home window.'
         Assert ([DeskBrawl.WindowTest]::Find($app.Id, 'DeskBrawl Overlay') -eq [IntPtr]::Zero) 'Exit must remove the character overlay.'

@@ -7,6 +7,7 @@ export function OverlayScene() {
   const host = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [playing, setPlaying] = useState(false);
+  const [showMode, setShowMode] = useState(false);
   const [reducedEffects, setReducedEffects] = useState(true);
 
   useEffect(() => {
@@ -16,6 +17,18 @@ export function OverlayScene() {
     const element = host.current;
     const stopEffects = watchReducedEffects(setReducedEffects, (error) => console.error("효과 설정 조회 실패", error));
     let stopGame: (() => void) | undefined;
+    let modeTimer: number | undefined;
+    let lastMode = false;
+    function changeMode(next: boolean): void {
+      if (lastMode === next) {
+        return;
+      }
+      lastMode = next;
+      setPlaying(next);
+      setShowMode(true);
+      window.clearTimeout(modeTimer);
+      modeTimer = window.setTimeout(() => setShowMode(false), 2200);
+    }
     const scene = mountCharacter(element, (next) => {
       setStatus(next);
       if (next === "ready") {
@@ -24,7 +37,7 @@ export function OverlayScene() {
           setStatus("error");
           stopGame?.();
           void reportRendererFailure().catch((failure: unknown) => console.error("렌더 오류 보고 실패", failure));
-        }, setPlaying);
+        }, changeMode);
       }
       if (next === "error") {
         setPlaying(false);
@@ -34,6 +47,7 @@ export function OverlayScene() {
     return () => {
       stopEffects();
       stopGame?.();
+      window.clearTimeout(modeTimer);
       scene.dispose();
     };
   }, []);
@@ -51,16 +65,16 @@ export function OverlayScene() {
         className="mode-badge"
         data-mode={playing ? "play" : "work"}
         role="status"
-        aria-label="현재 모드"
+        hidden={!showMode || status !== "ready"}
       >
         <span aria-hidden="true" />
-        {playing ? "PLAY" : "WORK · 드래그로 이동"}
+        {playing ? "플레이 모드" : "작업 모드 · 드래그로 이동"}
       </p>
       {status !== "ready" && (
         <p className="overlay-status" role="status">
           {status === "loading"
             ? "캐릭터를 불러오는 중…"
-            : "캐릭터를 표시하지 못했습니다. 앱을 다시 실행해 주세요."}
+            : "캐릭터를 표시하지 못했어요. 트레이에서 캐릭터를 다시 표시해 주세요."}
         </p>
       )}
     </>

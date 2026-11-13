@@ -18,11 +18,11 @@ test("기본 조작키는 유효하고 사람이 읽는 이름으로 표시된�
 
 test("같은 키를 두 동작에 쓰거나 Esc·허용되지 않은 키를 고르면 저장 전에 안내한다", () => {
   expect(controlsProblem({ ...DEFAULT_CONTROLS, keys: { ...DEFAULT_CONTROLS.keys, stone: "KeyZ" } }))
-    .toBe("근접 공격과 돌 던지기에 같은 키(Z)를 쓸 수 없습니다.");
+    .toBe("근접 공격과 돌 던지기에 같은 키(Z)를 쓸 수 없어요.");
   expect(controlsProblem({ ...DEFAULT_CONTROLS, keys: { ...DEFAULT_CONTROLS.keys, left: "ArrowUp" } }))
-    .toBe("위로 이동과 왼쪽 이동에 같은 키(↑)를 쓸 수 없습니다.");
+    .toBe("위로 이동과 왼쪽 이동에 같은 키(↑)를 쓸 수 없어요.");
   expect(controlsProblem({ ...DEFAULT_CONTROLS, keys: { ...DEFAULT_CONTROLS.keys, up: "Escape" } })).toContain("Esc는 플레이 종료 키");
-  expect(controlsProblem({ ...DEFAULT_CONTROLS, keys: { ...DEFAULT_CONTROLS.keys, melee: "Enter" } })).toContain("Enter 키는 쓸 수 없습니다");
+  expect(controlsProblem({ ...DEFAULT_CONTROLS, keys: { ...DEFAULT_CONTROLS.keys, melee: "Enter" } })).toContain("Enter 키는 쓸 수 없어요");
   expect(controlsProblem({
     keys: {
       up: "KeyW",
@@ -50,13 +50,13 @@ test("전환 단축키는 Ctrl 또는 Alt를 포함한 수정키 두 개 이상�
     altKey: false,
     shiftKey: true,
   })).toBe("Ctrl+Shift+KeyG");
-  expect(controlsProblem({ ...DEFAULT_CONTROLS, toggle: "Ctrl+KeyC" })).toContain("Ctrl+C는 쓸 수 없습니다");
+  expect(controlsProblem({ ...DEFAULT_CONTROLS, toggle: "Ctrl+KeyC" })).toContain("Ctrl+C는 쓸 수 없어요");
 });
 
 test("Rust 오류 코드를 복구 방법이 있는 문장으로 바꾼다", () => {
   expect(controlsErrorMessage("SHORTCUT_IN_USE")).toContain("다른 앱");
   expect(controlsErrorMessage("PLAYING")).toContain("Esc");
-  expect(controlsErrorMessage("UNKNOWN")).toBe("조작키 저장 실패: UNKNOWN");
+  expect(controlsErrorMessage("UNKNOWN")).toBe("조작키를 저장하지 못했어요. 잠시 후 다시 저장해 주세요.");
 });
 
 test("IPC 조작키 응답은 7개의 키와 등록 상태만 받는다", () => {

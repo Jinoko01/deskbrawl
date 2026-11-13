@@ -15,6 +15,10 @@ export function localGameSupported(): boolean {
   return isTauri();
 }
 
+export async function startNativePlay(): Promise<void> {
+  await invoke("local_start");
+}
+
 export function parseLocalCommand(value: unknown): LocalCommand | "stop" {
   if (value === "stop") {
     return value;

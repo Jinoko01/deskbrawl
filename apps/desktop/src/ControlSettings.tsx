@@ -107,18 +107,17 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
     <section aria-labelledby="control-settings-title" className="panel settings-panel">
       <div className="panel-heading">
         <h2 id="control-settings-title">조작키 설정</h2>
-        <span className="eyebrow">내 손에 맞게</span>
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        {disabled ? "플레이 중에는 바꿀 수 없습니다. Esc로 작업 모드에 돌아오세요." : "버튼을 누른 뒤 사용할 키를 누르세요. Esc는 플레이 종료 키라서 쓸 수 없습니다."}
+        {disabled ? "Esc를 눌러 작업 모드로 돌아오면 조작키를 바꿀 수 있어요." : "바꿀 조작의 버튼을 누른 뒤 새 키를 눌러 주세요. Esc는 플레이 종료에 사용해요."}
       </p>
       <ul className="mt-5">
         {GAME_ACTIONS.map((action) => renderControlRow(action, ACTION_LABELS[action], keyLabel(draft.keys[action])))}
         {renderControlRow("toggle", "플레이 전환 단축키", shortcutLabel(draft.toggle))}
       </ul>
-      {problem !== undefined && <p className="mt-3 text-sm text-foreground" aria-live="polite">{problem}</p>}
-      {failure !== undefined && <p className="mt-3 text-sm text-foreground" role="alert">{failure}</p>}
-      {saved && !changed && <p className="mt-3 text-sm text-muted-foreground" role="status">저장했습니다. 다음 실행에도 유지됩니다.</p>}
+      {problem !== undefined && <p className="notice notice-error" aria-live="polite">{problem}</p>}
+      {failure !== undefined && <p className="notice notice-error" role="alert">{failure}</p>}
+      {saved && !changed && <p className="mt-3 text-sm text-muted-foreground" role="status">저장했어요. 다음 실행에도 유지돼요.</p>}
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <button
           type="button"
