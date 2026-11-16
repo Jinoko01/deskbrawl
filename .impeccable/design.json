@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-16T04:30:00Z",
+  "title": "Design System: DeskBrawl",
+  "extensions": {
+    "colorMeta": {
+      "accent": { "role": "primary", "displayName": "딥 민트", "canonical": "#167563", "tonalRamp": ["#06231d", "#0b3a30", "#105e50", "#167563", "#3f9a86", "#81cbb9", "#b9e3d8", "#e5f1ec"] },
+      "stage": { "role": "neutral", "displayName": "무대 민트", "canonical": "#dcefe6", "tonalRamp": ["#111c1a", "#192824", "#233e33", "#3b554b", "#b8cec6", "#dcefe6", "#eaf4ef", "#f2f8f6"] },
+      "foreground": { "role": "neutral", "displayName": "딥 그린", "canonical": "#183b33", "tonalRamp": ["#0c1f1b", "#183b33", "#2c5248", "#526e65", "#7f978f", "#a7bfb5", "#d3e0db", "#edf8f3"] },
+      "code-warm": { "role": "tertiary", "displayName": "코드 갈색", "canonical": "#8a5318", "tonalRamp": ["#2b1a07", "#4d2e0d", "#6c4113", "#8a5318", "#b07a3a", "#d3a56a", "#e6c58f", "#f3e3c3"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "문서 창의 h1 하나." },
+      "body": { "displayName": "Body", "purpose": "본문." },
+      "label": { "displayName": "Label", "purpose": "제목 표시줄, 작업 표시줄, 각주." },
+      "code": { "displayName": "Code", "purpose": "코드 창 안에서만." }
+    },
+    "shadows": [
+      { "name": "key-depth", "value": "0 2px 0 var(--key-shadow)", "purpose": "키캡의 눌림 깊이." },
+      { "name": "play-glow", "value": "inset 0 0 16px rgb(22 117 99 / 55%), inset 0 0 96px rgb(22 117 99 / 22%)", "purpose": "PLAY 상태를 알리는 화면 가장자리 빛." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "상태 전환과 체크 표시." },
+      { "name": "glow-breathe", "value": "5s ease-in-out infinite", "purpose": "PLAY 테두리 빛의 숨쉬기. 동작 줄이기에서 멈춘다." }
+    ],
+    "breakpoints": [
+      { "name": "stack", "value": "1079px" },
+      { "name": "compact", "value": "560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "화면의 주 행동 하나.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">지금 놀아 보기 <kbd class=\"ds-kbd-on\">Space</kbd></button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; gap:8px; min-height:48px; padding:0 18px; border:2px solid var(--accent); border-radius:10px; font:700 1rem Pretendard, sans-serif; cursor:pointer; transition:background-color .15s, transform .1s; } .ds-btn:active { transform:translateY(1px); } .ds-btn:focus-visible { outline:3px solid var(--accent); outline-offset:2px; } .ds-btn-primary { background:var(--accent); color:var(--accent-foreground); } .ds-btn-primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); } .ds-kbd-on { padding:2px 6px; border:1px solid color-mix(in srgb, var(--accent-foreground) 55%, transparent); border-radius:6px; font:700 .78em Pretendard, sans-serif; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "보조 행동과 바깥 링크.",
+      "html": "<button class=\"ds-btn ds-btn-outline\">GitHub에서 보기</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; gap:8px; min-height:48px; padding:0 18px; border:2px solid var(--accent); border-radius:10px; font:700 1rem Pretendard, sans-serif; cursor:pointer; transition:background-color .15s; } .ds-btn-outline { background:var(--card); color:var(--accent); } .ds-btn-outline:hover { background:var(--surface); } .ds-btn:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }"
+    },
+    {
+      "name": "Window",
+      "kind": "card",
+      "refersTo": "window",
+      "description": "내용을 담는 작업 창. 그림자 없이 2px 테두리로만 구분한다.",
+      "html": "<section class=\"ds-window\"><header class=\"ds-titlebar\"><span class=\"ds-dots\"><i></i><i></i><i></i></span>DeskBrawl 소개.md</header><div class=\"ds-window-body\">일하다 잠깐, 친구가 놀러 와요.</div></section>",
+      "css": ".ds-window { overflow:hidden; border:2px solid var(--accent); border-radius:10px; background:var(--card); color:var(--foreground); font-family:Pretendard, sans-serif; } .ds-titlebar { display:flex; align-items:center; gap:10px; height:38px; padding:0 12px; border-bottom:2px solid var(--accent); background:var(--surface); font-size:.8125rem; font-weight:600; } .ds-dots { display:flex; gap:5px; } .ds-dots i { width:9px; height:9px; border-radius:2px; background:var(--accent); } .ds-window-body { padding:24px; font-weight:800; font-size:1.5rem; }"
+    },
+    {
+      "name": "Keycap",
+      "kind": "chip",
+      "refersTo": "keycap",
+      "description": "단축키 표기.",
+      "html": "<kbd class=\"ds-kbd\">Z</kbd>",
+      "css": ".ds-kbd { display:inline-grid; place-items:center; min-width:1.75em; height:1.75em; padding:0 .45em; border:1px solid var(--border); border-radius:6px; box-shadow:0 2px 0 var(--key-shadow); background:var(--card); color:var(--foreground); font:700 .78em/1 Pretendard, sans-serif; }"
+    },
+    {
+      "name": "Mode Switch",
+      "kind": "nav",
+      "description": "작업 표시줄의 WORK / PLAY 전환.",
+      "html": "<div class=\"ds-mode\"><button aria-pressed=\"true\">WORK</button><button aria-pressed=\"false\">PLAY</button></div>",
+      "css": ".ds-mode { display:inline-flex; padding:3px; border:2px solid var(--border); border-radius:10px; background:var(--card); } .ds-mode button { min-width:68px; height:34px; border:0; border-radius:6px; background:transparent; color:var(--muted-foreground); font:800 .8125rem Pretendard, sans-serif; letter-spacing:.04em; cursor:pointer; } .ds-mode button[aria-pressed=\"true\"] { background:var(--foreground); color:var(--background); } .ds-mode button:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }"
+    },
+    {
+      "name": "Speech Bubble",
+      "kind": "custom",
+      "description": "캐릭터를 따라다니는 안내와 친구의 말.",
+      "html": "<p class=\"ds-bubble\"><kbd class=\"ds-kbd\">Space</kbd>를 눌러 보세요</p>",
+      "css": ".ds-bubble { position:relative; display:inline-flex; align-items:center; gap:6px; margin:0 0 8px; padding:8px 12px; border:2px solid var(--accent); border-radius:10px; background:var(--card); color:var(--foreground); font:700 .875rem/1.3 Pretendard, sans-serif; } .ds-bubble::after { content:\"\"; position:absolute; bottom:-7px; left:calc(50% - 5px); width:10px; height:10px; border:inherit; border-width:0 2px 2px 0; background:inherit; rotate:45deg; } .ds-kbd { padding:2px 6px; border:1px solid var(--border); border-radius:6px; box-shadow:0 2px 0 var(--key-shadow); font:700 .78em Pretendard, sans-serif; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "일하는 중인 바탕화면",
+    "overview": "DeskBrawl의 화면은 누군가 일하고 있는 PC 바탕화면이다. 내용은 작업 창 안에 담기고, 캐릭터는 그 위의 투명한 층에 산다. 색은 민트 한 가지가 화면 전체를 차지하고, 장난스러움은 픽셀 캐릭터와 키캡 같은 작은 물건에만 싣는다.",
+    "keyCharacteristics": [
+      "민트 바탕(stage)에 점 격자. 화면 전체가 한 색이다.",
+      "2px 테두리와 점 세 개 제목 표시줄을 가진 창.",
+      "굵은 검은 외곽선의 픽셀 스프라이트는 캔버스에 nearest로 그린다.",
+      "헤드라인은 Pretendard 800, 로고만 픽셀 워드마크.",
+      "상태 변화는 색이 아니라 화면 가장자리의 빛과 스위치 위치로 알린다."
+    ],
+    "rules": [
+      { "name": "The One Hue Rule", "body": "인터페이스 색은 민트 계열뿐이다. 다른 색은 캐릭터 스프라이트와 코드 창의 따뜻한 갈색(code-warm)에서만 나온다.", "section": "colors" },
+      { "name": "The Wordmark Rule", "body": "픽셀 글자는 로고 워드마크에만 쓴다. 본문이나 제목에 픽셀 서체를 끌어오지 않는다.", "section": "typography" },
+      { "name": "The Edge Glow Rule", "body": "안쪽 그림자 빛은 PLAY 상태를 뜻하는 신호로만 쓴다. 앱 오버레이와 같은 값이며, 장식으로 다른 요소에 붙이지 않는다.", "section": "elevation" }
+    ],
+    "dos": [
+      "색·서체는 apps/desktop/src/brand-theme.css의 토큰을 가져다 쓴다.",
+      "스프라이트는 image-rendering: pixelated 또는 캔버스 nearest로 그린다.",
+      "아이콘은 20px 격자, 2px 선의 인라인 SVG로 그린다.",
+      "움직임은 OS의 동작 줄이기 설정에서 멈춘다.",
+      "말투는 짧은 해요체로 쓴다."
+    ],
+    "donts": [
+      "그라데이션, 네온, 유리 효과, 입체 그림자를 쓰지 않는다.",
+      "인터페이스에 민트 밖의 강조색을 들이지 않는다.",
+      "이모지를 아이콘으로 쓰지 않는다.",
+      "고정폭 서체를 코드가 아닌 곳에 쓰지 않는다.",
+      "없는 다운로드 수, 후기, 지원 OS를 적지 않는다."
+    ]
+  }
+}
