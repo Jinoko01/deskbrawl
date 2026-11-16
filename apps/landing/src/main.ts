@@ -41,7 +41,7 @@ async function start(): Promise<void> {
   const playCta = need<HTMLButtonElement>("#play-cta");
   const playCtaLabel = need<HTMLElement>("#play-cta-label");
   const playCtaKey = need<HTMLElement>("#play-cta-key");
-  const githubCta = need<HTMLElement>("#github-cta");
+  const downloadCta = need<HTMLAnchorElement>("#download-cta");
   const todo = need<HTMLElement>("#todo");
   const doneLine = need<HTMLElement>("#done");
   const chatLog = need<HTMLElement>("#chat-log");
@@ -141,8 +141,7 @@ async function start(): Promise<void> {
       item.append(mark);
     }
     if (step === "hit") {
-      // 놀아 본 뒤에는 다음 행동인 GitHub를 주 버튼으로 올린다.
-      githubCta.classList.add("btn--primary");
+      downloadCta.classList.add("btn--primary");
       playCta.classList.remove("btn--primary");
     }
     doneLine.hidden = done.size < STEP_COUNT;
