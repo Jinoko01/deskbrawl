@@ -1,13 +1,21 @@
-/* 색·서체 토큰은 데스크톱 앱과 같은 파일을 쓴다. */
-@import "../../desktop/src/brand-theme.css";
+/* 색 토큰은 데스크톱 앱과 공유한다. */
+@import "../../desktop/src/brand-colors.css";
+
+@font-face {
+  font-family: "DeskBrawl UI";
+  src: url("./fonts/deskbrawl-ui.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
 
 :root {
-  --taskbar: 56px;
+  --taskbar: 64px;
   --line: 2px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --glow-near: rgb(22 117 99 / 55%);
   --glow-far: rgb(22 117 99 / 22%);
-  font-family: "Pretendard", "Malgun Gothic", system-ui, sans-serif;
+  font-family: "DeskBrawl UI", "Malgun Gothic", system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.6;
   scrollbar-color: var(--border) var(--stage);
@@ -83,7 +91,7 @@ kbd {
   box-shadow: 0 2px 0 var(--key-shadow);
   background: var(--card);
   color: var(--foreground);
-  font: 700 0.78em/1 "Pretendard", sans-serif;
+  font: 700 0.78em/1 "DeskBrawl UI", "Malgun Gothic", system-ui, sans-serif;
 }
 
 .sr-only {
@@ -530,28 +538,35 @@ h2 {
 
 .legend {
   display: flex;
-  gap: 18px;
+  gap: 16px;
   margin: 0;
   padding: 0;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  font-weight: 600;
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  font-weight: 700;
   list-style: none;
 }
 
 .legend li {
   display: flex;
   align-items: center;
-  gap: 3px;
-  transition: opacity 0.3s;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.legend kbd {
+  min-width: 28px;
+  height: 28px;
+  padding-inline: 5px;
+  font-size: 0.875rem;
 }
 
 .legend kbd:last-of-type {
-  margin-right: 4px;
+  margin-inline-end: 4px;
 }
 
-[data-mode="work"] .legend__play {
-  opacity: 0.45;
+[data-mode="play"] .legend__play kbd {
+  border-color: var(--accent);
 }
 
 .tray {
@@ -826,10 +841,6 @@ h2 {
 }
 
 @media (max-width: 1079px) {
-  .legend {
-    display: none;
-  }
-
   .taskbar {
     justify-content: space-between;
     gap: 12px;
@@ -838,9 +849,41 @@ h2 {
   .tray {
     margin-left: 0;
   }
+
+  :root[data-input="keys"] {
+    --taskbar: 102px;
+  }
+
+  [data-input="keys"] .taskbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0 12px;
+    padding-block: 6px;
+  }
+
+  [data-input="keys"] .mode {
+    justify-self: center;
+  }
+
+  .legend {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 560px) {
+  :root[data-input="keys"] {
+    --taskbar: 132px;
+  }
+
+  .legend {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    gap: 6px 12px;
+    font-size: 0.875rem;
+  }
+
   .wordmark--small,
   .tray__clock {
     display: none;

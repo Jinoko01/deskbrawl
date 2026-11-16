@@ -121,11 +121,11 @@
         <button type="button" id="mode-work" aria-pressed="true">WORK</button>
         <button type="button" id="mode-play" aria-pressed="false">PLAY</button>
       </div>
-      <ul class="legend" aria-label="조작키">
-        <li><kbd>Space</kbd>전환</li>
-        <li class="legend__play"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>이동</li>
-        <li class="legend__play"><kbd>Z</kbd><span aria-hidden="true">👊</span><span class="sr-only">주먹질</span></li>
-        <li class="legend__play"><kbd>X</kbd><span aria-hidden="true">🪨</span><span class="sr-only">돌 던지기</span></li>
+      <ul class="legend only-keys" aria-label="조작키">
+        <li><kbd>Space</kbd> 모드 전환</li>
+        <li class="legend__play"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> 이동</li>
+        <li class="legend__play"><kbd>Z</kbd> 공격</li>
+        <li class="legend__play"><kbd>X</kbd> 돌 던지기</li>
       </ul>
       <div class="tray">
         <button type="button" class="tray__focus" id="focus" aria-pressed="false">
@@ -160,8 +160,8 @@
         </button>
       </div>
       <div class="pad__act">
-        <button type="button" data-action="stone">돌</button>
-        <button type="button" data-action="melee">톡</button>
+        <button type="button" data-action="stone">🪨</button>
+        <button type="button" data-action="melee">👊</button>
       </div>
     </div>
 

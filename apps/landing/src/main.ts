@@ -41,7 +41,7 @@ async function start(): Promise<void> {
   const playCta = need<HTMLButtonElement>("#play-cta");
   const playCtaLabel = need<HTMLElement>("#play-cta-label");
   const playCtaKey = need<HTMLElement>("#play-cta-key");
-  const downloadCta = need<HTMLAnchorElement>("#download-cta");
+  const downloadCta = document.querySelector<HTMLAnchorElement>("#download-cta[href]");
   const todo = need<HTMLElement>("#todo");
   const doneLine = need<HTMLElement>("#done");
   const chatLog = need<HTMLElement>("#chat-log");
@@ -140,7 +140,7 @@ async function start(): Promise<void> {
       mark.textContent = " (완료)";
       item.append(mark);
     }
-    if (step === "hit") {
+    if (step === "hit" && downloadCta !== null) {
       downloadCta.classList.add("btn--primary");
       playCta.classList.remove("btn--primary");
     }
