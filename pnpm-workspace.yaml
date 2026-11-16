@@ -1,5 +1,6 @@
 packages:
   - apps/desktop
+  - apps/landing
   - apps/server
   - packages/game-core
   - packages/protocol
