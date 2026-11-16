@@ -103,16 +103,16 @@ async function start(): Promise<void> {
       return touch ? "PLAY를 눌러 보세요" : "<kbd>Space</kbd>를 눌러 보세요";
     }
     if (mode === "play" && !done.has("move")) {
-      return touch ? "패드로 움직여요" : "방향키로 움직여요";
+      return touch ? "아래 패드로 움직여요" : "방향키로 움직여요";
     }
     if (!done.has("invite")) {
-      return "메신저에서 친구를 불러요";
+      return "메신저에서 지호를 불러요";
     }
     if (game.hasFriend && !done.has("hit")) {
       if (mode === "play") {
-        return touch ? "톡이나 돌로 맞혀 봐요" : "<kbd>Z</kbd>로 톡 <kbd>X</kbd>로 돌";
+        return touch ? "톡 치거나 돌을 던져요" : "<kbd>Z</kbd> 톡 치기 · <kbd>X</kbd> 돌 던지기";
       }
-      return touch ? "PLAY 누르고 반격!" : "<kbd>Space</kbd> 누르고 반격!";
+      return touch ? "PLAY를 눌러 다시 놀아요" : "<kbd>Space</kbd>를 눌러 다시 놀아요";
     }
     return "";
   }
@@ -160,7 +160,7 @@ async function start(): Promise<void> {
       return;
     }
     if (next === "play" && focus) {
-      notice("집중 모드에서는 놀이를 시작하지 않아요. 먼저 집중 모드를 꺼 주세요.");
+      notice("집중 모드를 끄면 PLAY를 시작할 수 있어요.");
       return;
     }
     mode = next;
@@ -169,13 +169,13 @@ async function start(): Promise<void> {
     game.setPlaying(next === "play");
     workButton.setAttribute("aria-pressed", String(next === "work"));
     playButton.setAttribute("aria-pressed", String(next === "play"));
-    playCtaLabel.textContent = next === "play" ? "작업으로 돌아가기" : "지금 놀아 보기";
+    playCtaLabel.textContent = next === "play" ? "작업으로 돌아가기" : "체험 시작";
     playCtaKey.textContent = next === "play" ? "Esc" : "Space";
     if (next === "play") {
       complete("play");
-      notice(touch ? "PLAY — 아래 패드로 모찌를 움직여요." : "PLAY — 이제 키보드는 모찌 거예요. Esc로 돌아가요.", "play");
+      notice(touch ? "아래 패드로 캐릭터를 움직여 보세요." : "방향키로 움직이고 Esc를 누르면 작업으로 돌아가요.", "play");
     } else {
-      notice("WORK — 키보드와 클릭은 다시 작업 창으로 가요.", "work");
+      notice("작업 모드로 돌아왔어요.", "work");
     }
     updateHint();
   }
@@ -222,9 +222,9 @@ async function start(): Promise<void> {
         sendHome("집중 모드를 켜서 지호가 돌아갔어요.");
       }
       complete("focus");
-      notice("지금은 집중할 시간이에요. 캐릭터와 방문을 닫아 뒀어요.");
+      notice("집중 모드를 켰어요. 캐릭터가 숨고 초대도 잠시 멈춰요.");
     } else {
-      notice("집중 모드를 껐어요. 모찌가 돌아왔어요.");
+      notice("집중 모드를 껐어요. 캐릭터가 돌아왔어요.");
     }
     syncInvite();
     updateHint();

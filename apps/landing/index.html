@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DeskBrawl — 작업과 놀이 사이</title>
-    <meta name="description" content="작업하던 데스크톱을 친구와 잠깐 어울리는 놀이터로 바꾸는 앱, DeskBrawl. 이 페이지에서 바로 움직여 보세요." />
+    <meta name="description" content="DeskBrawl은 작업 창 위에 작은 캐릭터를 띄워 두고 친구와 잠깐 놀 수 있는 앱이에요. 이 페이지에서 바로 체험해 보세요." />
     <meta name="theme-color" content="#dcefe6" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#233e33" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/png" href="/face.png" />
@@ -12,85 +12,60 @@
   </head>
   <body>
     <main class="desktop">
-      <div class="column column--left">
-        <div class="brand">
-          <span class="wordmark" role="img" aria-label="DeskBrawl"></span>
-          <p class="brand__slogan">작업과 놀이 사이</p>
-        </div>
-
-        <!-- 꾸밈용 작업 창. 읽을 내용은 문서 창에 있다. -->
-        <section class="window window--editor" aria-hidden="true">
-          <header class="titlebar">
-            <span class="dots"><i></i><i></i><i></i></span>
-            <span class="titlebar__name">deadline.ts</span>
-          </header>
-          <pre class="code"><code><span class="c">// 오늘 안에 끝내야 하는 그 파일</span>
-<span class="k">import</span> { focus } <span class="k">from</span> <span class="s">"./me"</span>;
-
-<span class="k">export async function</span> <span class="f">ship</span>(feature: Feature) {
-  <span class="k">await</span> <span class="f">focus</span>(<span class="n">25</span> * MINUTES);
-  <span class="k">const</span> bug = <span class="k">await</span> <span class="f">test</span>(feature);
-  <span class="k">if</span> (bug) {
-    <span class="k">return</span> <span class="f">fix</span>(bug);
-  }
-  <span class="k">return</span> <span class="f">deploy</span>(feature);
-}
-
-<span class="c">// TODO: 지호한테 답장하기</span><span class="caret"></span></code></pre>
-        </section>
+      <div class="brand">
+        <span class="wordmark" role="img" aria-label="DeskBrawl"></span>
+        <p class="brand__slogan">작업과 놀이 사이</p>
       </div>
 
-      <div class="column column--mid">
-        <section class="window window--doc" id="doc" aria-labelledby="doc-title">
-          <header class="titlebar">
-            <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="titlebar__name">DeskBrawl 소개.md</span>
-          </header>
-          <div class="doc">
-            <h1 id="doc-title">일하다 잠깐,<br />친구가 놀러 와요.</h1>
-            <p class="lede">DeskBrawl은 작업 창 위에 사는 작은 캐릭터예요. 평소엔 얌전히 있다가, 키 하나로 친구와 톡톡 치고 도망가는 놀이터가 돼요.</p>
-            <div class="actions">
-              <button type="button" class="btn btn--primary" id="play-cta">
-                <svg class="icon icon--fill" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4.5 16 10l-9 5.5z" /></svg>
-                <span id="play-cta-label">지금 놀아 보기</span>
-                <kbd class="only-keys" id="play-cta-key">Space</kbd>
-              </button>
-              <a class="btn" id="download-cta" href="%BASE_URL%downloads/DeskBrawl_1.0.0_x64-setup.exe" download>
-                Windows 11 (x64) 다운로드
-                <svg class="icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v9m-3.5-3.5 3.5 3.5 3.5-3.5M4.5 13v3.5h11V13" /></svg>
-              </a>
-            </div>
-
-            <h2>이 페이지가 체험판이에요</h2>
-            <ul class="todo" id="todo">
-              <li data-step="play">
-                <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
-                <span><span class="only-keys"><kbd>Space</kbd>로 PLAY 켜기</span><span class="only-touch">PLAY 버튼 누르기</span></span>
-              </li>
-              <li data-step="move">
-                <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
-                <span><span class="only-keys">방향키로</span><span class="only-touch">패드로</span> 모찌 움직이기</span>
-              </li>
-              <li data-step="invite">
-                <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
-                <span>메신저에서 친구 부르기</span>
-              </li>
-              <li data-step="hit">
-                <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
-                <span><span class="only-keys"><kbd>Z</kbd>로 톡, <kbd>X</kbd>로 돌 던져서 맞히기</span><span class="only-touch">톡이나 돌로 친구 맞히기</span></span>
-              </li>
-              <li data-step="focus">
-                <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
-                <span>집중 모드로 문 닫기</span>
-              </li>
-            </ul>
-            <p class="doc__done" id="done" hidden>다 해 봤네요. 진짜 친구랑 하면 더 재밌어요.</p>
-            <p class="fine">Windows 11에서 확인했어요. 호스트를 포함해 6명까지 함께 놀 수 있고, 승패는 없어요. 앱에서는 Ctrl+Shift+G로 전환해요.</p>
+      <section class="window window--doc" id="doc" aria-labelledby="doc-title">
+        <header class="titlebar">
+          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="titlebar__name">DeskBrawl 소개.md</span>
+        </header>
+        <div class="doc">
+          <h1 id="doc-title">일하다가 친구랑 잠깐 놀아요</h1>
+          <p class="lede">DeskBrawl은 작업 창 위에 작은 캐릭터를 띄워 두는 앱이에요. 잠깐 쉬고 싶을 땐 단축키를 눌러 친구랑 서로 톡 치고 도망가 보세요.</p>
+          <div class="actions">
+            <button type="button" class="btn btn--primary" id="play-cta">
+              <svg class="icon icon--fill" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4.5 16 10l-9 5.5z" /></svg>
+              <span id="play-cta-label">체험 시작</span>
+              <kbd class="only-keys" id="play-cta-key">Space</kbd>
+            </button>
+            <a class="btn" id="download-cta" href="%BASE_URL%downloads/DeskBrawl_1.0.0_x64-setup.exe" download>
+              Windows 11 (x64) 다운로드
+              <svg class="icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v9m-3.5-3.5 3.5 3.5 3.5-3.5M4.5 13v3.5h11V13" /></svg>
+            </a>
           </div>
-        </section>
-      </div>
 
-      <div class="column column--right">
+          <h2>여기서 바로 해 볼 수 있어요</h2>
+          <ul class="todo" id="todo">
+            <li data-step="play">
+              <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
+              <span><span class="only-keys"><kbd>Space</kbd>로 PLAY 시작하기</span><span class="only-touch">PLAY 버튼으로 체험 시작하기</span></span>
+            </li>
+            <li data-step="move">
+              <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
+              <span><span class="only-keys">방향키로</span><span class="only-touch">패드로</span> 캐릭터 움직이기</span>
+            </li>
+            <li data-step="invite">
+              <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
+              <span>메신저에서 지호 초대하기</span>
+            </li>
+            <li data-step="hit">
+              <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
+              <span><span class="only-keys"><kbd>Z</kbd>로 톡 치거나 <kbd>X</kbd>로 돌 던져 맞히기</span><span class="only-touch">지호를 톡 치거나 돌 던져 맞히기</span></span>
+            </li>
+            <li data-step="focus">
+              <span class="todo__box" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg></span>
+              <span>집중 모드 켜기</span>
+            </li>
+          </ul>
+          <p class="doc__done" id="done" hidden>체험을 마쳤어요. 앱에서 친구를 초대해 같이 놀아 보세요.</p>
+          <p class="fine">Windows 11에서 확인했어요. 방을 만든 사람까지 최대 6명이 승패 없이 어울려요. 앱에서는 <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd>로 WORK와 PLAY를 오가요.</p>
+        </div>
+      </section>
+
+      <div class="sidebar">
         <section class="window window--chat" aria-labelledby="chat-title">
           <header class="titlebar">
             <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -101,13 +76,13 @@
             <ol class="chat__log" id="chat-log" aria-live="polite">
               <li class="msg">뭐 해?</li>
               <li class="msg msg--me">일하는 중…</li>
-              <li class="msg">5분만 놀자. 링크 줘!</li>
+              <li class="msg">5분만 놀자! 초대 링크 보내 줘.</li>
             </ol>
             <button type="button" class="btn btn--primary" id="invite">
               <svg class="icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 11.5a3 3 0 0 0 4.2 0L15 9.2A3 3 0 0 0 10.8 5l-.8.8M11.5 8.5a3 3 0 0 0-4.2 0L5 10.8A3 3 0 0 0 9.2 15l.8-.8" /></svg>
               <span id="invite-label">초대 링크 보내기</span>
             </button>
-            <p class="fine">지호는 봇이에요. 앱에서는 친구가 직접 조종해요.</p>
+            <p class="fine">이 페이지에선 봇 지호와 놀아요. 앱에서는 친구가 자기 캐릭터를 직접 움직여요.</p>
           </div>
         </section>
 
@@ -127,7 +102,7 @@
             <button type="button" class="icon-btn" id="skin-next" aria-label="다음 캐릭터">
               <svg class="icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5l5 5-5 5" /></svg>
             </button>
-            <p class="fine">8종 모두 능력치가 같아요.</p>
+            <p class="fine">캐릭터 8종은 모두 능력치가 같아요.</p>
           </div>
         </section>
       </div>
@@ -145,17 +120,14 @@
       <ul class="legend" aria-label="조작키">
         <li><kbd>Space</kbd>전환</li>
         <li class="legend__play"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>이동</li>
-        <li class="legend__play"><kbd>Z</kbd>톡</li>
-        <li class="legend__play"><kbd>X</kbd>돌</li>
+        <li class="legend__play"><kbd>Z</kbd><span aria-hidden="true">👊</span><span class="sr-only">주먹질</span></li>
+        <li class="legend__play"><kbd>X</kbd><span aria-hidden="true">🪨</span><span class="sr-only">돌 던지기</span></li>
       </ul>
       <div class="tray">
         <button type="button" class="tray__focus" id="focus" aria-pressed="false">
           <svg class="icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M6.5 10h7" /></svg>
           <span>집중 모드</span>
         </button>
-        <a class="tray__link" href="%BASE_URL%downloads/DeskBrawl_1.0.0_x64-setup.exe" download aria-label="Windows 11 (x64) 다운로드">
-          <svg class="icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v9m-3.5-3.5 3.5 3.5 3.5-3.5M4.5 13v3.5h11V13" /></svg>
-        </a>
         <time class="tray__clock" id="clock"></time>
       </div>
     </footer>
