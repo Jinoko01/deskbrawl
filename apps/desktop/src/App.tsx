@@ -3,6 +3,7 @@ import {
 } from "react";
 import { ControlSettings } from "./ControlSettings";
 import { DEFAULT_CONTROLS, keyLabel, shortcutLabel } from "./game/keyMap";
+import { readPracticeTargetEnabled, savePracticeTargetEnabled } from "./game/characterPreference";
 import { useLocalControls } from "./game/useLocalControls";
 import { useMultiplayer } from "./hooks/queries/useMultiplayer";
 import { MultiplayerPanel } from "./MultiplayerPanel";
@@ -18,6 +19,8 @@ export function App() {
   const [exitError, setExitError] = useState<string>();
   const [playError, setPlayError] = useState<string>();
   const [starting, setStarting] = useState(false);
+  const [practiceTargetEnabled, setPracticeTargetEnabled] = useState(readPracticeTargetEnabled);
+  const [practiceTargetError, setPracticeTargetError] = useState(false);
   const exitDialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const moveFocus = useRef(false);
@@ -44,6 +47,17 @@ export function App() {
       setPlayError("플레이를 시작하지 못했어요. 캐릭터가 보이는지 확인하고 다시 시도해 주세요.");
     } finally {
       setStarting(false);
+    }
+  }
+
+  function togglePracticeTarget(): void {
+    const enabled = !practiceTargetEnabled;
+    try {
+      savePracticeTargetEnabled(enabled);
+      setPracticeTargetEnabled(enabled);
+      setPracticeTargetError(false);
+    } catch {
+      setPracticeTargetError(true);
     }
   }
 
@@ -101,6 +115,7 @@ export function App() {
   const keys = shown?.keys;
   const shortcut = shown && shortcutLabel(shown.toggle);
   const connectionBusy = multiplayer.connectionBusy;
+  const showPracticeTargetSwitch = page === "home" && (multiplayer.view.phase === "local" || multiplayer.view.phase === "error");
   const changingFocus = multiplayer.focus.isPending;
   const playPending = busy || starting;
   let mode = "작업 모드";
@@ -199,7 +214,7 @@ export function App() {
             {page === "home" ? "내 공간" : "조작 설정"}
           </h1>
           {exitError && <p className="notice notice-error" role="alert">{exitError}</p>}
-          <section className="mode-panel" aria-label="플레이와 집중 모드">
+          <section className="mode-panel" aria-label="플레이 설정">
             <div className="min-w-0 flex-1">
               <p
                 id="play-mode"
@@ -234,8 +249,24 @@ export function App() {
                 <span className="switch-track" aria-hidden="true"><span /></span>
                 집중 모드
               </button>
+              {showPracticeTargetSwitch && (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={practiceTargetEnabled}
+                  className="button button-secondary"
+                  disabled={connectionBusy}
+                  onClick={togglePracticeTarget}
+                >
+                  <span className="switch-track" aria-hidden="true"><span /></span>
+                  연습용 샌드백
+                </button>
+              )}
             </div>
           </section>
+          {practiceTargetError && showPracticeTargetSwitch && (
+            <p className="notice notice-error" role="alert">샌드백 설정을 저장하지 못했어요. 다시 시도해 주세요.</p>
+          )}
           {loaded?.shortcut === "unavailable" && (
             <p className="notice" role="status">{`${shortcut} 단축키를 등록하지 못했어요. 플레이 버튼을 쓰거나 조작 설정에서 단축키를 바꿔 주세요.`}</p>
           )}

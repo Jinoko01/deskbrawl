@@ -10,6 +10,7 @@ import { startLocalGame } from "./startLocalGame";
 import type { CharacterSceneSnapshot } from "./characterScene";
 import type { CharacterDrag } from "../native/drag";
 import type { MountedCharacterScene } from "./mountCharacter";
+import { savePracticeTargetEnabled } from "./characterPreference";
 
 const bridge = vi.hoisted(() => ({
   receive: undefined as ((state: Bridge) => void) | undefined,
@@ -31,7 +32,8 @@ vi.mock("../native/drag", () => ({
     return Promise.resolve(bridge.stopDrag);
   }),
 }));
-vi.mock("./characterPreference", () => ({
+vi.mock(import("./characterPreference"), async (importOriginal) => ({
+  ...await importOriginal(),
   watchCharacterSkin: vi.fn((receive: (skin: "mochi" | "mint") => void) => {
     bridge.skin = receive;
     receive("mochi");
@@ -57,6 +59,11 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: false }));
   vi.stubGlobal("window", new EventTarget());
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+  });
   vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   bridge.receive = undefined;
@@ -163,6 +170,33 @@ function snapshot(): Snapshot {
     lastProcessedSeq: { [host]: 0, [guest]: 0 },
   });
 }
+
+it("applies the saved practice target in local mode and keeps remote characters intact", async () => {
+  savePracticeTargetEnabled(false);
+  const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();
+  stop = startLocalGame({ clientWidth: 1280, clientHeight: 720 } as HTMLElement, { update, setPlaying: vi.fn(), dispose: vi.fn() }, vi.fn());
+  await vi.waitFor(() => expect(bridge.receive).toBeTypeOf("function"));
+  const playerIds = () => update.mock.lastCall?.[0].characters.map((character) => character.id);
+  expect(playerIds()).toEqual(["host"]);
+
+  function changeTarget(enabled: boolean): void {
+    savePracticeTargetEnabled(enabled);
+    window.dispatchEvent(Object.assign(new Event("storage"), { key: "deskbrawl.practiceTarget", storageArea: localStorage }));
+  }
+
+  changeTarget(true);
+  expect(playerIds()).toEqual(["host", "guest"]);
+  changeTarget(false);
+  expect(playerIds()).toEqual(["host"]);
+  await vi.waitFor(() => expect(bridge.regions).toHaveBeenLastCalledWith([["host", 520, 312, 616, 408]]));
+
+  const remote = snapshot();
+  bridge.receive?.({ mode: "host", snapshot: remote });
+  changeTarget(true);
+  expect(playerIds()).toEqual(remote.world.players.map((player) => player.id));
+  bridge.receive?.({ mode: "local", snapshot: null });
+  expect(playerIds()).toEqual(["host", "guest"]);
+});
 
 it("renders the shared host and guest world on the desktop overlay and restores it after returning", async () => {
   const update = vi.fn<(scene: CharacterSceneSnapshot) => void>();

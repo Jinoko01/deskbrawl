@@ -153,6 +153,20 @@ async function testLocalGame(main) {
     throw new Error(`${error.message}; ${JSON.stringify(details)}`);
   }
   await until(() => main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), "Local overlay subscriptions did not become ready");
+  const targetSwitch = `[...document.querySelectorAll('[role="switch"]')].find(button => button.textContent.trim() === '연습용 샌드백')`;
+  await until(() => main.evaluate(`(${targetSwitch})?.disabled === false`), "Practice target switch did not become ready");
+  assert.equal(await main.evaluate(`(${targetSwitch}).getAttribute('aria-checked')`), "true");
+  await main.evaluate(`(${targetSwitch}).click()`);
+  await until(() => overlay.evaluate("window.__testDragRegions?.length === 1"), "Practice target did not disappear");
+  const documentStart = await overlay.evaluate("performance.timeOrigin");
+  await overlay.rpc("Page.reload");
+  await until(() => overlay.evaluate(`performance.timeOrigin !== ${documentStart} && window.__testDragRegions?.length === 1`),
+    "Practice target preference did not survive reload");
+  assert.equal(await main.evaluate(`(${targetSwitch}).getAttribute('aria-checked')`), "false");
+  await main.evaluate(`(${targetSwitch}).click()`);
+  await until(() => overlay.evaluate("window.__testDragRegions?.length === 2"), "Practice target did not reappear");
+  await until(() => main.evaluate("window.__TAURI_INTERNALS__.invoke('local_available')"), "Local overlay did not become ready after reload");
+  console.log("PASS: practice target toggles across WebViews and stays disabled after reload");
   const region = await overlay.evaluate("window.__testDragRegions[1]");
   const dpi = await overlay.evaluate("devicePixelRatio");
   const x = (region[1] + region[3]) / 2;
@@ -186,7 +200,8 @@ async function testLocalGame(main) {
   const pickerImage = await main.rpc("Page.captureScreenshot", { format: "png" });
   writeFileSync(join(profileRoot, "character-picker.png"), Buffer.from(pickerImage.data, "base64"));
   await main.evaluate("window.scrollTo(0,0)");
-  assert.equal(await main.evaluate("document.body.textContent.includes('로컬 플레이')"), true, "Character arrows must not submit the connection form");
+  assert.equal(await main.evaluate("document.querySelector('.room-status [role=status]')?.textContent"), "연결 전",
+    "Character arrows must not submit the connection form");
   console.log("PASS: eight character portraits, names, arrow selection, keyboard wrap and desktop rendering");
   const [bindings, shortcutStatus] = await main.evaluate("window.__TAURI_INTERNALS__.invoke('local_controls')");
   assert.equal(shortcutStatus, "registered", "Native shortcut regression requires the test app to own its saved shortcut");

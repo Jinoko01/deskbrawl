@@ -31,8 +31,10 @@ test("PLAY의 최신 입력만 고정 tick에 적용하고 WORK에서 이동을 
 
 test("긴 시계 공백과 일시 정지는 눌린 키와 예약 공격을 버린다", () => {
   let gaps = 0;
-  const game = createLocalGame(800, 600, vi.fn(), () => {
-    gaps++;
+  const game = createLocalGame(800, 600, vi.fn(), {
+    onClockGap: () => {
+      gaps++;
+    },
   });
   game.advanceTime(0);
   game.command(command("play", 1, 0));

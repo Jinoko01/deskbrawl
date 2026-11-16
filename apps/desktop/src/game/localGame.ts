@@ -28,11 +28,16 @@ function motion(world: WorldState, player: WorldState["players"][number], moving
   return { kind: moving ? "walk" : "idle" };
 }
 
+interface LocalGameOptions {
+  readonly onClockGap?: () => void;
+  readonly practiceTargetEnabled?: boolean;
+}
+
 export function createLocalGame(width: number, height: number, render: (snapshot: CharacterSceneSnapshot) => void,
-  onClockGap?: () => void) {
+  { onClockGap, practiceTargetEnabled = true }: LocalGameOptions = {}) {
   // 초기 WebView가 지나치게 작아도 유효한 논리 영역을 유지한다.
   const initial = initialCharacterScene(Math.max(320, width), Math.max(200, height));
-  let world = createWorld({
+  const initialWorld = createWorld({
     bounds: initial.bounds,
     rules: {
       tickMs: 50,
@@ -42,7 +47,10 @@ export function createLocalGame(width: number, height: number, render: (snapshot
     },
     players: initial.characters,
   });
-  world = { ...world, players: world.players.map((player) => player.id === "guest" ? { ...player, facing: { x: -1, y: 0 } } : player) };
+  const hosts = initialWorld.players.filter((player) => player.id === "host");
+  const targets = initialWorld.players.filter((player) => player.id === "guest")
+    .map((player) => ({ ...player, facing: { x: -1, y: 0 } }));
+  let world: WorldState = { ...initialWorld, players: practiceTargetEnabled ? [...hosts, ...targets] : hosts };
   let playing = false;
   let lastSequence = 0;
   let movement: PlayerInput["movement"] = { x: 0, y: 0 };
@@ -109,6 +117,15 @@ export function createLocalGame(width: number, height: number, render: (snapshot
     },
     setSkin(next: CharacterSkin): void {
       skin = next;
+      publish(world);
+    },
+    setPracticeTargetEnabled(enabled: boolean): void {
+      if (enabled === world.players.some((player) => player.id === "guest")) {
+        return;
+      }
+      const players = enabled ? [...world.players, ...targets] : world.players.filter((player) => player.id !== "guest");
+      world = { ...world, players };
+      previousPlayers = players;
       publish(world);
     },
     command(command: LocalCommand | "stop"): void {

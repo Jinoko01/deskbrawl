@@ -3,7 +3,7 @@ import { createLocalGame } from "./localGame";
 import type { MountedCharacterScene } from "./mountCharacter";
 import { watchNetwork } from "../native/network";
 import { createSnapshotView } from "./networkScene";
-import { watchCharacterSkin } from "./characterPreference";
+import { readPracticeTargetEnabled, watchCharacterSkin, watchPracticeTarget } from "./characterPreference";
 import type { CharacterSkin } from "./characterScene";
 import type { CharacterSceneSnapshot } from "./characterScene";
 import type { Vector2 } from "@deskbrawl/game-core";
@@ -22,20 +22,28 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
   let regionQueue = Promise.resolve();
   const render = (snapshot: CharacterSceneSnapshot) => {
     currentScene = snapshot;
+    const draggedId = activeDrag?.id;
+    if (draggedId !== undefined && !snapshot.characters.some((frame) => frame.id === draggedId)) {
+      activeDrag = undefined;
+    }
     scene.update(snapshot);
     if (!playing) {
       updateRegions();
     }
   };
-  const game = createLocalGame(host.clientWidth, host.clientHeight, render, () => {
-    setPlaying(false);
-    void reportLocalReady(true).catch(onError);
+  const game = createLocalGame(host.clientWidth, host.clientHeight, render, {
+    practiceTargetEnabled: readPracticeTargetEnabled(),
+    onClockGap: () => {
+      setPlaying(false);
+      void reportLocalReady(true).catch(onError);
+    },
   });
   const network = createSnapshotView(render);
   let stopNetwork: (() => void) | undefined;
   let unlisten: (() => void) | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
   let stopSkin: (() => void) | undefined;
+  let stopPracticeTarget: (() => void) | undefined;
   let stopDrag: (() => void) | undefined;
   let skin: CharacterSkin = "mochi";
   function updateRegions(): void {
@@ -149,6 +157,11 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
           game.setSkin(next);
         }
       });
+      stopPracticeTarget = watchPracticeTarget((enabled) => {
+        if (mode === "local") {
+          game.setPracticeTargetEnabled(enabled);
+        }
+      });
       const stopState = await watchNetwork((state) => {
         const previous = mode;
         mode = state.mode === "offline" ? "local" : state.mode;
@@ -159,6 +172,7 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
         if (mode === "local") {
           if (previous !== "local") {
             network.dispose();
+            game.setPracticeTargetEnabled(readPracticeTargetEnabled());
             game.setSkin(skin);
             game.resume();
           }
@@ -203,6 +217,7 @@ export function startLocalGame(host: HTMLElement, scene: MountedCharacterScene, 
     unlisten?.();
     stopNetwork?.();
     stopSkin?.();
+    stopPracticeTarget?.();
     stopDrag?.();
     void publishDragRegions([]).catch((error: unknown) => console.error("드래그 영역 정리 실패", error));
     network.dispose();
