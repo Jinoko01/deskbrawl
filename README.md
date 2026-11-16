@@ -1,126 +1,91 @@
 # DeskBrawl
 
-Tauri 2 + React + TypeScript + Vite 기반 데스크톱 게임 프로젝트입니다.
-M0의 창·입력 안전장치, M1 로컬 전투, M2 링크 방문, M3 집중·강퇴에 이어 M4의 **호스트 포함 6인·짧은 단절 복구·`/` 실시간 두 줄 채팅**을 구현했습니다. 사용법과 서버·앱 갱신은 [M4 안내](docs/m4-development.md), 확인한 범위와 남은 항목은 [M4 검증 기록](docs/m4-validation.md)을 참고합니다. 실제 6대 PC 인수·서명·운영 배포·베타 튜닝은 남아 있습니다.
-`main`은 기존 React 화면을 표시하고, `overlay`는 별도 `overlay.html`을 사용하는 투명 최상위 창입니다. 숨김 상태로 생성한 뒤 Rust에서 클릭 통과·포커스 비활성 설정이 성공해야 표시합니다.
-홈 창의 **X**, 화면 상단의 **종료**, 트레이의 **종료**는 모두 앱 전체를 종료합니다. PLAY 입력·키보드 훅을 중단하고 캐릭터 오버레이·트레이·서버 연결을 함께 정리합니다. 계속 실행하려면 창을 최소화하고 트레이 **홈 열기**로 복원합니다. 오버레이만 닫으면 `main`은 유지됩니다.
-트레이에서 홈 열기·링크 복사·집중 모드·상태 확인·플레이 시작·오버레이 표시·숨김·종료가 가능합니다. 표시할 때마다 안전 설정을 다시 적용하며, 예상하지 않은 포커스 획득이나 설정 실패 시 숨깁니다. 숨김 실패 시 창 제거를 시도하고, 그것도 실패하면 앱을 종료합니다. 트레이의 표시 메뉴로 중지되거나 닫힌 오버레이를 복구할 수 있습니다. 집중 모드에서는 표시·PLAY를 거부하며 서버가 기존 방문자를 종료하고 새 입장을 차단합니다.
-Windows에서는 네이티브 클릭 통과·비활성 스타일을 확인하고, 비활성 표시와 숨김을 Win32로 보완합니다. WORK/PLAY 단축키는 홈 창의 표시·포커스를 바꾸지 않습니다. PLAY 중에만 네이티브 키보드 훅으로 설정된 게임 키를 받고, WORK·Esc·오버레이 숨김·세션 전환 시 해제합니다. Ctrl·Alt·Win 조합은 작업 프로그램과 OS로 전달합니다.
-주 모니터 전체의 물리 경계를 측정하고, 중앙에 기존 `mochi-v2`와 `mint-v2` atlas의 대기 애니메이션을 PixiJS 8로 표시합니다. 논리 프레임 크기는 기본 96 CSS px이며 작은 영역에서는 비율을 유지해 줄입니다. PNG의 투명 영역과 발 기준 anchor를 유지하며 HTML·캔버스 배경 알파는 0입니다.
-`mountCharacter`가 반환하는 `update(snapshot)`으로 위치·방향·대기·걷기·근접 공격·투척·피격·기절·돌·충돌 효과를 갱신합니다. 단발 모션은 같은 `actionId`로 중복 재생하지 않으며, 기절은 마지막 피격 자세와 별 이펙트로 표시합니다. 애니메이션 종료가 게임 판정을 변경하지는 않습니다.
-대기 애니메이션은 220ms 간격의 4개 프레임과 최대 30fps의 장면 전용 ticker를 사용합니다. 트레이의 **효과 감소** 또는 OS의 동작 줄이기 설정에서는 각 상태의 정적인 자세를 표시하고 반복 렌더링을 중단합니다. 위치·방향·기절 상태 갱신은 계속 반영합니다. 문서 숨김 상태에서도 반복 애니메이션을 멈춥니다. 효과 감소 값은 앱 설정 디렉터리의 `reduced-effects` 파일에 저장됩니다.
-초기화 중 종료·React Strict Mode/HMR 재실행 시 canvas·renderer·texture·구독을 정리합니다. 로딩·렌더링 실패와 WebGL context 손실은 Rust에 전달해 오버레이를 숨깁니다. DPI·해상도·작업 영역 변경, Explorer 재시작 및 절전 관련 통지에서도 안전하게 숨깁니다. 이후 트레이의 **오버레이 표시**를 선택하면 새 웹뷰와 최신 모니터 경계로 복구합니다. 자동 포커스·최상위 회수 루프는 없습니다.
-어느 창에서든 **Ctrl+Shift+G**(기본값)를 누르면 현재 작업 창을 유지한 채 PLAY가 시작되고, 방향키로 모찌를 이동하고 Z로 근접 공격, X로 돌을 던집니다. 다시 단축키 또는 Esc를 누르면 포커스 이동 없이 WORK로 돌아갑니다. 홈 창이 최소화돼 있어도 전환할 수 있습니다. 홈 창 닫기·오버레이 숨김·세션 전환은 입력을 중단하며, 투명 오버레이 자체는 포커스를 받지 않습니다. 방문 중에는 양쪽 PC의 전체 화면 오버레이에 같은 서버 월드를 표시하고 방문자는 민트를 조작합니다. 호스트 종료·연결 실패 시 로컬 캐릭터를 복원하고 WORK로 돌아갑니다. 로컬 민트는 공격 판정을 확인할 수 있는 상대 캐릭터입니다.
+**English** · [한국어](README.ko.md)
 
-메인 창의 **조작키 설정**에서 이동·공격·투척 키와 전환 단축키를 바꿀 수 있습니다. 중복 키, Esc, 수정키가 부족한 단축키는 저장 전에 안내하고, 다른 앱이 쓰는 단축키는 거부한 뒤 이전 단축키를 유지합니다. 설정은 앱 설정 디렉터리의 `controls` 파일에 저장되어 재실행 후에도 유지됩니다. 시작 시 단축키를 등록하지 못하면 메인 창에서 안내하며 트레이의 **플레이 시작**으로 대신할 수 있습니다. 효과 감소에서는 먼지 이펙트를 숨기고 게임은 그대로 진행합니다.
-순수 게임 코어는 `packages/game-core`에 있습니다. 고정 tick 이동·경계, 근접 공격·돌의 연속 충돌 판정, 넉백·기절·면역·효과 수명을 결정합니다. M2 서버도 같은 코어를 사용하고 최종 판정은 서버에서 실행합니다. API와 검증 범위는 [게임 코어 안내](packages/game-core/README.md)를 참고합니다.
-이 PC(Windows 11)에서 개발 앱 실행·한국어 표시·최대화/복원, 배포용 `deskbrawl.exe` 실행·종료, NSIS 설치 파일 생성과 설치·실행·제거까지 확인했습니다.
-Windows 11 실기기 결과와 예외는 [M0 검증 기록](docs/m0-windows11-validation.md)에 정리합니다. Windows 10 검증은 사용자 요청으로 이번 범위에서 제외했으며, 지원을 확정하지 않습니다.
+DeskBrawl is a multiplayer desktop pet for Windows. Pixel characters roam on a transparent overlay above your apps. Switch to PLAY for a quick brawl, or send an invite link so friends can join you on their own desktops.
 
-PLAY에서는 주 모니터 테두리에 은은한 초록빛을 표시합니다. WORK에서는 캐릭터를 마우스로 잡아 끌어 위치를 옮길 수 있습니다. 로컬 모드는 두 캐릭터, 멀티플레이는 본인 캐릭터만 이동할 수 있으며 PLAY·기절·연결 복구 중에는 드래그를 중단합니다. 드래그 외의 클릭은 기존처럼 아래 작업 창으로 통과하고, 오버레이는 포커스를 가져오지 않습니다. 효과 감소·OS 동작 줄이기에서는 초록빛을 정적으로 유지합니다. 멀티플레이 드래그를 사용하려면 앱과 서버를 함께 갱신해야 합니다.
+![DeskBrawl banner with pixel characters](apps/desktop/public/brand/deskbrawl-banner.png)
 
-## 로컬 환경
+## Download for Windows
 
-- Node.js 22.13 이상, 23 미만. 구성 시 확인한 버전: 22.20.0.
-- pnpm 10.34.7. 설치된 Corepack과 호환되는 버전으로, `package.json`의 `packageManager`를 따릅니다.
-- Windows 네이티브 빌드: Rust MSVC 툴체인(구성 시 설치한 버전: 1.99.1), Visual Studio Build Tools의 **Desktop development with C++** 및 Windows SDK.
-- Microsoft Edge WebView2 Runtime.
+Open [GitHub Releases](https://github.com/Jinoko01/deskbrawl/releases) and download the `DeskBrawl_*_x64-setup.exe` installer under **Assets**. Run the installer, then open **DeskBrawl** from the Start menu. If the Releases page has no installer yet, you can [run from source](#run-from-source).
 
-설치 방법은 [Tauri Windows 준비 사항](https://v2.tauri.app/start/prerequisites/#windows)을 따릅니다.
-Rust와 Visual C++ 도구는 JS 의존성 설치만으로 설치되지 않습니다.
-이 PC에는 Rust 1.99.1, Visual Studio Build Tools 2022 17.14.42와 Windows SDK 10.0.26100을 설치했습니다.
-설치 전에 열어 둔 터미널에서 `cargo`를 찾지 못하면 터미널을 새로 열어 PATH를 갱신합니다.
+DeskBrawl has been tested on the primary monitor in Windows 11. Windows 10, other operating systems, and multi-monitor setups are outside the verified range. The app interface is in Korean.
+
+## What you can do
+
+- Choose from eight pixel characters and drag them around in WORK mode. Clicks outside the characters pass through to the app underneath.
+- Move, swing, and throw rocks in PLAY mode. Hits can knock characters back or briefly stun them.
+- Share an invite link and play with up to six people, including the host. Everyone sees the same game state on their own desktop. The connection carries game state and chat, while desktop contents stay on each computer.
+- Use Focus Mode to hide the overlay and pause visits. You can also remap the game controls and reduce animation effects.
+
+## Play your first game
+
+1. Open DeskBrawl. Your character and a practice opponent appear on the primary monitor. Local play works without a multiplayer server.
+2. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd> to enter PLAY. Use the arrow keys to move, <kbd>Z</kbd> to swing, and <kbd>X</kbd> to throw a rock. Move close to the practice opponent and land a hit to see the knockback.
+3. Press <kbd>Esc</kbd> to return to WORK. Minimize the home window to keep the overlay running. Closing the home window exits DeskBrawl.
+
+To play together, connect both apps to the same server. The host selects **내 공간 연결** (Connect my space), then **방문 링크 생성** (Create invite link). The guest pastes the link into **친구에게 놀러 가기** (Visit a friend) and selects **방문하기** (Join). Once connected, switch to PLAY and press <kbd>/</kbd> to open chat.
+
+## Run from source
+
+### Run the desktop app
+
+On Windows, install Git, Node.js `>=22.13.0 <23`, and pnpm `10.34.7`. Install the Rust MSVC toolchain (Rust 1.95 or later), Visual Studio Build Tools with **Desktop development with C++** and a Windows SDK, and Microsoft Edge WebView2 Runtime. [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows)
+
+In PowerShell, clone the repository and start the app. The DeskBrawl window and overlay should open.
 
 ```powershell
-pnpm install
-pnpm --filter @deskbrawl/server db:generate
+git clone https://github.com/Jinoko01/deskbrawl.git
+cd deskbrawl
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-`pnpm dev`는 Vite 서버와 Tauri 기본 창을 함께 실행합니다. 종료는 터미널에서 `Ctrl+C`를 사용합니다.
-개발 서버는 `127.0.0.1:1420`에만 열리며, 해당 포트가 사용 중이면 다른 포트로 이동하지 않고 오류로 종료합니다.
-기본 Node가 프로젝트 범위와 다르면 `pnpm --config.use-node-version=22.20.0 dev`로 지정 버전을 사용할 수 있습니다. 최초 실행 시 pnpm이 해당 런타임을 내려받습니다.
+### Start a multiplayer server
 
-Rust 도구 없이 웹 화면만 확인할 때:
+For local server development, start Docker Desktop with Docker Compose. In a second PowerShell terminal at the repository root, copy the server environment template and start PostgreSQL.
 
 ```powershell
-pnpm dev:web
+Copy-Item apps/server/.env.example apps/server/.env
+docker compose up -d --wait postgres
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-## 검증과 빌드
+Put the generated value in `JWT_SECRET` in `apps/server/.env`. The other template values point to the local PostgreSQL instance on port `54329` and the local server on port `3000`. In the same terminal, apply the migrations and start the server.
 
 ```powershell
+$env:DATABASE_URL = node --env-file=apps/server/.env -p "process.env.DATABASE_URL"
+pnpm --filter @deskbrawl/server db:migrate
+pnpm dev:server
+```
+
+Check that `http://127.0.0.1:3000/health` returns `{"ok":true}`. The desktop app defaults to that server in a fresh checkout. For clients on other machines, use a server URL they can all reach and configure each app for it. [Installer and server configuration](docs/windows-release.md)
+
+## Repository layout
+
+| Path | Role |
+| --- | --- |
+| [apps/desktop](apps/desktop) | Windows app and overlay built with Tauri, React, and PixiJS |
+| [apps/server](apps/server) | NestJS and Socket.IO server that runs multiplayer sessions and resolves hits, with PostgreSQL and Prisma |
+| [packages/game-core](packages/game-core) | Game rules shared by the desktop app and the server |
+| [packages/protocol](packages/protocol) | Shared REST and Socket.IO message schemas |
+| [packages/game-assets](packages/game-assets) | Character sprites and visual effects |
+
+## Contributing
+
+Use [GitHub Issues](https://github.com/Jinoko01/deskbrawl/issues) to report bugs or suggest improvements. For a bug report, include your Windows version, DeskBrawl version, and steps to reproduce it. Send code changes as pull requests.
+
+From the repository root, generate Prisma Client, then run the checks and unit tests.
+
+```powershell
+pnpm --filter @deskbrawl/server db:generate
 pnpm check
 pnpm test
-pnpm tauri:info
-cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --all -- --check
-cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
-cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
-pnpm build
 ```
 
-- `pnpm check`: desktop·server·game-core·protocol의 ESLint·strict TypeScript 검사와 웹 프로덕션 빌드. 서버 타입 검사 전 Prisma Client 생성이 필요합니다.
-- `pnpm test`: game-core·protocol·desktop의 Vitest와 서버의 Jest 단위 테스트를 한 번 실행합니다. 실제 PostgreSQL/Socket.IO 통합 검증은 [M2 안내](docs/m2-development.md)의 별도 명령을 사용합니다.
-- Vitest는 Node 환경에서 실행하며 `test`, `expect` 등을 `vitest`에서 명시적으로 import합니다. React DOM 테스트 환경과 도구는 아직 추가하지 않았습니다.
-- `pnpm build`: 웹 빌드, Rust 컴파일, 로컬 Windows NSIS 설치 파일 생성. 서명·게시 작업은 하지 않습니다.
-- 설치 파일 위치: `apps/desktop/src-tauri/target/release/bundle/nsis/`.
-- JS 의존성은 `pnpm-lock.yaml`, Rust 의존성은 `apps/desktop/src-tauri/Cargo.lock`으로 고정합니다. 두 파일 모두 패키지 관리 도구로 생성합니다.
-- 웹 검증은 실제 Tauri 창·WebView·Windows 패키징 검증을 대신하지 않습니다.
-- 네이티브 도구가 준비되면 `pnpm dev`로 화면 표시, 창 크기 변경, 닫기와 재실행을 확인하고 `pnpm build`로 설치 파일 생성을 검증합니다. 현재 검증 범위는 Windows 11 주 모니터이며, 추가 OS·다중 모니터 호환성은 TBD입니다.
+For native Windows and server integration checks, see the [testing guide](docs/testing-guide.md) (Korean).
 
-TypeScript는 현재 ESLint TypeScript 도구의 지원 범위에 맞춰 6.0.3을 사용합니다.
-창·트레이 제어는 Rust에서 담당합니다. 공식 `@tauri-apps/api`를 통해 창별 capability를 적용하고 Rust에서도 호출 창 라벨을 검사합니다. `main`의 조작·장치 인증·집중·초대 링크 명령과 `overlay`의 렌더링·상태 조회 명령을 분리합니다. 파일 경로나 임의 창 제어를 IPC로 받지 않습니다.
-개발용 CSP만 Vite의 React 갱신 스크립트·스타일 주입과 로컬 WebSocket을 허용하며, 배포용 CSP에는 해당 예외가 없습니다.
-PixiJS는 `pixi.js/unsafe-eval` 모듈의 eval 없는 렌더링 경로를 사용하므로 CSP에 `unsafe-eval`을 추가하지 않습니다. PixiJS 8.22.0의 bitmap font 타입 선언과 `exactOptionalPropertyTypes`의 충돌은 `patches/pixi.js@8.22.0.patch`로 보정했습니다. 런타임에서 항상 초기화하는 `distanceField`를 `NonNullable`로 선언하며, TypeScript 검사 설정은 유지합니다. `pnpm install` 시 패치도 함께 적용됩니다.
-UI는 Tailwind 의미 기반 토큰을 사용하며, shadcn/ui 컴포넌트는 실제 컨트롤이 필요한 단계에서 추가합니다.
+## License
 
-Windows에서 `pnpm build` 후 창 생성·숨김·네이티브 스타일·종료 순서를 검증하려면:
-
-```powershell
-pwsh -File apps/desktop/scripts/test-window-lifecycle.ps1
-```
-
-이 검증은 실제 Windows 창을 세 번 실행합니다. 주 모니터 경계, 입력 통과·비활성·작업 표시줄/Alt+Tab 제외 스타일, 트레이 표시/숨김과 포그라운드 유지, 포커스 이상 시 자동 숨김, 오버레이 재생성과 전체 종료를 확인합니다. 포커스 이상·디스플레이·셸 변경 경로는 Windows 메시지를 주입해 재현하며 실제 설정 변경 검증과 구분합니다.
-
-실제 배포 WebView2에서 IPC 경계·효과 감소·설정 저장·GPU 오류 복구를 검증하려면:
-
-```powershell
-pnpm --config.use-node-version=22.20.0 --filter @deskbrawl/desktop exec node scripts/test-overlay-webview.mjs
-```
-
-이 검사는 자신이 실행한 앱에만 로컬 진단 포트를 열고 별도 WebView2 프로필을 사용합니다. 원래 효과 감소 값을 복구하고 테스트 앱과 임시 프로필을 정리합니다. 배포 앱 기본 설정에는 진단 포트를 추가하지 않습니다.
-
-오버레이 아래 임시 창에 실제 클릭·드래그·우클릭·휠·키보드 입력을 보내 검증하려면:
-
-```powershell
-pwsh -STA -File apps/desktop/scripts/test-overlay-input.ps1
-```
-
-입력 검사는 수신 창이 실제 입력 대상인지 확인한 뒤 활성화하며, 키보드 입력은 해당 창에 포커스가 있을 때만 전송합니다. 조건을 만족하지 못하면 입력을 보내지 않고 중단합니다. 반복 표시/숨김의 포커스 유지, 닫힌 오버레이 재생성, 트레이 종료도 확인한 뒤 창과 입력 상태를 정리합니다.
-
-위 자동 입력 스크립트는 이 환경에서 수신 창의 입력 대상 확보 단계에서 중단됐습니다. 별도 네이티브 수신기 `scripts/fixtures/M0InputProbe.cs`를 컴파일해 실제 입력 통과를 확인했으며 결과는 M0 검증 기록에 남깁니다. 메시지 기반 테스트와 구분합니다.
-
-PixiJS 렌더러 검증은 `pnpm dev:web` 실행 후 `http://127.0.0.1:1420/overlay.html`의 브라우저 개발자 콘솔에서 실행합니다.
-
-```js
-await (await import('/scripts/test-overlay-rendering.mjs')).testOverlayRendering()
-```
-
-실제 WebGL 픽셀에서 캐릭터 존재·투명 배경을 검사하고, 대기 프레임 진행·동작 줄이기, resize/DPR, 반복 생성·해제, 비동기 초기화 취소, 이미지 로딩 실패, context 손실 시 정리를 확인합니다. 웹 검증 결과는 Windows 투명 합성·입력 전달 검증과 구분합니다.
-
-창·입력 비방해 검증은 [M0 검증 기록](docs/m0-windows11-validation.md), 두 캐릭터·모션·WebView 회귀 검증은 [M1 렌더링 검증 기록](docs/m1-rendering-validation.md), 로컬 게임 검증은 [M1 4~8단계 검증 기록](docs/m1-local-game-validation.md)을 참고합니다.
-
-## 구조
-
-```text
-apps/desktop/
-  src/               React 화면, PixiJS 장면(game/), 스타일
-  src-tauri/         Rust 진입점, 창 설정, 최소 capability
-packages/game-assets/ 기존 캐릭터·무기·돌·효과 에셋
-packages/game-core/   런타임 의존성 없는 순수 TypeScript 게임 상태·고정 tick 로직
-packages/protocol/    공유 Zod 스키마·REST/Socket.IO 계약
-apps/server/          NestJS·Prisma·서버 권위 시뮬레이션·통합 테스트
-docs/                기획·구현 계획·개발 가이드
-```
-
-앱 로고는 기본 캐릭터의 얼굴·민트 헤드셋을 사용합니다. 원본은 `apps/desktop/public/brand/face.png`이며 사이드바·웹 파비콘·Windows 앱/트레이 아이콘에 적용합니다. UI는 OS의 라이트·다크 설정에 맞춰 민트 테마를 전환합니다. 브랜드 성격·색상·말투는 [브랜딩 안내](docs/branding.md)를 참고합니다.
+The repository currently has no project license. Ask the maintainers for permission before reusing or redistributing the project.
