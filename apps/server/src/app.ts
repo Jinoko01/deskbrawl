@@ -16,6 +16,9 @@ export async function createApp(
     { logger: ['error', 'warn'], bodyParser: false },
   );
   app.useBodyParser('json', { limit: '8kb' });
+  if (config.TRUST_PROXY_HOPS > 0) {
+    app.set('trust proxy', config.TRUST_PROXY_HOPS);
+  }
   app.enableCors({ origin: config.origins });
   app.useGlobalFilters(new HttpErrors());
   app.enableShutdownHooks();

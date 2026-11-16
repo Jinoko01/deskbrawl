@@ -151,8 +151,23 @@ export class VisitsGateway
     }
   }
 
+  // 프록시 뒤에서는 handshake.address가 프록시 IP이므로 신뢰한 홉 수만큼 X-Forwarded-For에서 읽는다.
+  private clientAddress(socket: Socket): string {
+    const hops = this.config.TRUST_PROXY_HOPS;
+    const forwarded = socket.handshake.headers['x-forwarded-for'];
+    if (hops > 0 && typeof forwarded === 'string') {
+      const chain = forwarded.split(',').map((part) => part.trim());
+      const client = chain[chain.length - hops];
+      if (client !== undefined && client !== '') {
+        return client;
+      }
+    }
+
+    return socket.handshake.address;
+  }
+
   private async validateHandshake(socket: Socket): Promise<void> {
-    this.limits.take(`connect:${socket.handshake.address}`, 20, 60000);
+    this.limits.take(`connect:${this.clientAddress(socket)}`, 20, 60000);
     const origin = socket.handshake.headers.origin;
     if (origin !== undefined && !this.config.origins.includes(origin)) {
       throw new DomainError('UNAUTHORIZED');

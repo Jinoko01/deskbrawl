@@ -9,6 +9,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535),
   PUBLIC_ORIGIN: z.url(),
   CLIENT_ORIGINS: z.string().min(1),
+  // 앞단 리버스 프록시 수. 0이면 X-Forwarded-For를 신뢰하지 않는다.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(86400),
   INVITE_TTL_SECONDS: z.coerce.number().int().min(60).max(2592000),
 });
