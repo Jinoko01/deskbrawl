@@ -1,0 +1,68 @@
+# 운영(Lightsail 단일 인스턴스) 전용. 로컬 개발은 compose.yaml을 사용한다.
+# 실행: docker compose --env-file .env.prod -f compose.prod.yaml up -d --build
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deskbrawl
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}
+      POSTGRES_DB: deskbrawl
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deskbrawl -d deskbrawl"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "3000"
+      DATABASE_URL: postgresql://deskbrawl:${POSTGRES_PASSWORD}@postgres:5432/deskbrawl
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 필요}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN 필요}
+      CLIENT_ORIGINS: ${CLIENT_ORIGINS:?CLIENT_ORIGINS 필요}
+      ACCESS_TTL_SECONDS: ${ACCESS_TTL_SECONDS:-3600}
+      INVITE_TTL_SECONDS: ${INVITE_TTL_SECONDS:-86400}
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # 마이그레이션 일회성 작업. 런타임 이미지에는 prisma CLI가 없어 빌드 스테이지를 쓴다.
+  # 실행: docker compose --env-file .env.prod -f compose.prod.yaml run --rm migrate
+  migrate:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+      target: build
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://deskbrawl:${POSTGRES_PASSWORD}@postgres:5432/deskbrawl
+    command: ["pnpm", "--filter", "@deskbrawl/server", "db:migrate"]
+
+volumes:
+  postgres:
+  caddy_data:
+  caddy_config:

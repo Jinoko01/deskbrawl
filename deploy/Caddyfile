@@ -1,0 +1,4 @@
+api.deskbrawl.xyz {
+	# HTTPS 인증서는 자동 발급·갱신된다. WebSocket(Socket.IO)도 그대로 전달된다.
+	reverse_proxy server:3000
+}
