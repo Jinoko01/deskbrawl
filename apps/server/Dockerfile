@@ -11,7 +11,8 @@ COPY packages/protocol ./packages/protocol
 
 RUN pnpm install --frozen-lockfile --filter @deskbrawl/server...
 RUN pnpm --filter @deskbrawl/server build
-RUN pnpm --filter @deskbrawl/server deploy --prod --legacy /release
+# pixi.js 패치는 데스크톱 전용이라 서버 deploy에는 대상이 없다. 이 단계에서만 미사용 패치를 허용한다.
+RUN pnpm --filter @deskbrawl/server deploy --prod --legacy /release --config.allow-unused-patches=true
 
 FROM node:22.20.0-bookworm-slim AS runtime
 
