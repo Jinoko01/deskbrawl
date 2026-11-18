@@ -8,7 +8,7 @@ DeskBrawl(데스크브롤)은 Windows용 멀티플레이 데스크톱 펫이에�
 
 ## Windows용 다운로드
 
-[GitHub Releases](https://github.com/Jinoko01/deskbrawl/releases)의 **Assets**에서 `DeskBrawl_*_x64-setup.exe` 설치 파일을 받아 실행하세요. 설치가 끝나면 시작 메뉴에서 **DeskBrawl**을 열어요. Releases에 설치 파일이 아직 없다면 [소스에서 실행](#소스에서-실행)할 수 있어요.
+[GitHub Releases](https://github.com/Jinoko01/deskbrawl/releases)의 **Assets**에서 `DeskBrawl_x64-setup.exe`를 받아 실행하세요. 설치가 끝나면 시작 메뉴에서 **DeskBrawl**을 열어요. Releases에 설치 파일이 아직 없다면 [소스에서 실행](#소스에서-실행)할 수 있어요.
 
 Windows 11의 주 모니터에서 동작을 확인했어요. Windows 10, 다른 운영체제, 다중 모니터 환경은 검증 범위 밖이에요. 앱 화면은 한국어로 표시돼요.
 

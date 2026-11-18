@@ -1,0 +1,125 @@
+name: Prepare Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        type: choice
+        options: [stable, alpha, beta, rc]
+        default: stable
+      retry_tag:
+        description: Existing release tag to rebuild if draft creation failed
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Calculate the version and release notes
+        id: release
+        shell: pwsh
+        env:
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RETRY_TAG: ${{ inputs.retry_tag }}
+        run: |
+          $notes = Join-Path $env:RUNNER_TEMP 'deskbrawl-release-notes.md'
+          $result = node apps/desktop/scripts/release-version.mjs $env:RELEASE_CHANNEL $notes $env:RETRY_TAG
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $release = $result | ConvertFrom-Json
+          if (-not $release.version) {
+            'No release-worthy changes since the previous stable release.' >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          "version=$($release.version)" >> $env:GITHUB_OUTPUT
+          "DESKTOP_VERSION=$($release.version)" >> $env:GITHUB_ENV
+          "RELEASE_TAG=$($release.tag)" >> $env:GITHUB_ENV
+          "RELEASE_NOTES=$notes" >> $env:GITHUB_ENV
+          "PRERELEASE=$($release.prerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
+
+      - name: Install dependencies and test the desktop app
+        if: steps.release.outputs.version != ''
+        shell: pwsh
+        env:
+          RETRY_TAG: ${{ inputs.retry_tag }}
+        run: |
+          rustup default stable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test apps/desktop/scripts/test-release-version.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not $env:RETRY_TAG) {
+            cargo update --manifest-path apps/desktop/src-tauri/Cargo.toml -p deskbrawl
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          pnpm --filter '@deskbrawl/desktop...' install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --filter @deskbrawl/desktop test
+
+      - name: Build the x64 installer
+        if: steps.release.outputs.version != ''
+        shell: pwsh
+        run: |
+          pnpm --filter @deskbrawl/desktop network:config https://api.deskbrawl.xyz
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --filter @deskbrawl/desktop tauri build --ci --config src-tauri/tauri.network.conf.json -- --locked
+
+      - name: Prepare download assets
+        if: steps.release.outputs.version != ''
+        shell: pwsh
+        run: |
+          $bundle = 'apps/desktop/src-tauri/target/release/bundle/nsis'
+          $installer = Join-Path $bundle "DeskBrawl_$($env:DESKTOP_VERSION)_x64-setup.exe"
+          Copy-Item -LiteralPath $installer -Destination DeskBrawl_x64-setup.exe -ErrorAction Stop
+          if ($env:PRERELEASE -eq 'false' -and (Test-Path -LiteralPath "$installer.sig")) {
+            node apps/desktop/scripts/prepare-update.mjs $env:RELEASE_TAG $installer
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Copy-Item -LiteralPath (Join-Path $bundle 'latest.json') -Destination latest.json -ErrorAction Stop
+          }
+
+      - name: Record the release and create a draft
+        if: steps.release.outputs.version != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RETRY_TAG: ${{ inputs.retry_tag }}
+        run: |
+          if (-not $env:RETRY_TAG) {
+            gh auth setup-git --hostname github.com
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -- CHANGELOG.md apps/desktop/package.json apps/desktop/src-tauri/tauri.conf.json apps/desktop/src-tauri/Cargo.toml apps/desktop/src-tauri/Cargo.lock
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git commit -m "chore(release): $($env:RELEASE_TAG)"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git tag -a $env:RELEASE_TAG -F $env:RELEASE_NOTES
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git push --atomic origin 'HEAD:refs/heads/main' "refs/tags/$($env:RELEASE_TAG)"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $assets = @('DeskBrawl_x64-setup.exe')
+          if (Test-Path -LiteralPath latest.json) { $assets += 'latest.json' }
+          $options = @('--verify-tag', '--draft', '--notes-file', $env:RELEASE_NOTES, '--title', "DeskBrawl $($env:DESKTOP_VERSION)")
+          if ($env:PRERELEASE -eq 'true') { $options += @('--prerelease', '--latest=false') }
+          gh release create $env:RELEASE_TAG @assets @options

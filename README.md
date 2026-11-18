@@ -8,7 +8,7 @@ DeskBrawl is a multiplayer desktop pet for Windows. Pixel characters roam on a t
 
 ## Download for Windows
 
-Open [GitHub Releases](https://github.com/Jinoko01/deskbrawl/releases) and download the `DeskBrawl_*_x64-setup.exe` installer under **Assets**. Run the installer, then open **DeskBrawl** from the Start menu. If the Releases page has no installer yet, you can [run from source](#run-from-source).
+Open [GitHub Releases](https://github.com/Jinoko01/deskbrawl/releases) and download `DeskBrawl_x64-setup.exe` under **Assets**. Run the installer, then open **DeskBrawl** from the Start menu. If the Releases page has no installer yet, you can [run from source](#run-from-source).
 
 DeskBrawl has been tested on the primary monitor in Windows 11. Windows 10, other operating systems, and multi-monitor setups are outside the verified range. The app interface is in Korean.
 
