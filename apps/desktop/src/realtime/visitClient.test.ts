@@ -3,8 +3,10 @@ import {
   afterEach, beforeEach, expect, it, vi,
 } from "vitest";
 import { createWorld, DEFAULT_COMBAT } from "@deskbrawl/game-core";
-import { ERROR_MESSAGES, joinedSchema } from "@deskbrawl/protocol";
-import type { Snapshot } from "@deskbrawl/protocol";
+import {
+  ERROR_MESSAGES, joinedSchema, SESSION_REFRESH_EVENT, SESSION_REFRESH_READY_EVENT,
+} from "@deskbrawl/protocol";
+import type { Session, Snapshot } from "@deskbrawl/protocol";
 import { createVisitClient } from "./visitClient";
 import type { VisitClient } from "./visitClient";
 
@@ -89,7 +91,7 @@ it("coalesces WORK dragging, waits for mode acceptance and discards placement wh
   expect(pending("player:action").body).toMatchObject({ visitId: joined.visitId, action: "melee" });
   expect(transport.sent.filter((entry) => entry.event === "player:position")).toHaveLength(1);
 });
-async function host(focused = false) {
+async function host(focused = false, renewal?: Parameters<typeof createVisitClient>[4], ttl = 3600000) {
   const playerId = randomUUID();
   const guestId = randomUUID();
   const world = createWorld({
@@ -121,7 +123,7 @@ async function host(focused = false) {
   const receive = vi.fn<(snapshot: Snapshot) => void>();
   const ended = vi.fn();
   const recovery = vi.fn();
-  const client = createVisitClient({ deviceId: playerId, accessToken: "test", expiresAt: Date.now() + 3600000 }, receive, ended, recovery);
+  const client = createVisitClient({ deviceId: playerId, accessToken: "test", expiresAt: Date.now() + ttl }, receive, ended, recovery, renewal);
   clients.push(client);
   const entering = client.enter("room:host", { version: 2, bounds: world.bounds, focused });
   pending("room:host").reply(null, joined);
@@ -130,6 +132,40 @@ async function host(focused = false) {
     client, joined, receive, ended, guestId, recovery,
   };
 }
+
+it("retries an idle session renewal and uses the accepted token for future reconnects", async () => {
+  const issue = vi.fn<(signal: AbortSignal) => Promise<Session>>().mockRejectedValueOnce(new Error("Network unavailable"));
+  const onRenewed = vi.fn();
+  const { client, joined, ended } = await host(true, { issue, onRenewed }, 60000);
+  const next = () => ({ deviceId: joined.playerId, accessToken: "renewed", expiresAt: Date.now() + 60000 });
+  issue.mockImplementation(() => Promise.resolve(next()));
+
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(issue).not.toHaveBeenCalled();
+  transport.listeners.get(SESSION_REFRESH_READY_EVENT)?.(undefined);
+  await vi.advanceTimersByTimeAsync(25000);
+  expect(issue).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(issue).toHaveBeenCalledTimes(2);
+  expect(pending(SESSION_REFRESH_EVENT).body).toEqual({ accessToken: "renewed" });
+  expect(onRenewed).not.toHaveBeenCalled();
+
+  pending(SESSION_REFRESH_EVENT).reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(onRenewed).toHaveBeenCalledWith(next());
+  expect(transport.options[0]).toMatchObject({ auth: { token: "renewed" } });
+  expect(transport.socket.disconnect).not.toHaveBeenCalled();
+  expect(client.playerId()).toBe(joined.playerId);
+  expect(ended).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(issue).toHaveBeenCalledTimes(3);
+  client.dispose();
+  expect(issue.mock.lastCall?.[0].aborted).toBe(true);
+  pending(SESSION_REFRESH_EVENT).reply(null, { ok: true });
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(onRenewed).toHaveBeenCalledOnce();
+  expect(issue).toHaveBeenCalledTimes(3);
+});
 
 it("hosts in focus without refreshing input, then resumes with zero movement", async () => {
   const { client, joined } = await host(true);

@@ -830,6 +830,49 @@ test('an expired access token is disconnected without waiting for reconnect', as
   ).rejects.toThrow('UNAUTHORIZED');
 });
 
+test('renewal keeps the original room and visit past token expiry', async () => {
+  const host = await register('Renewing host');
+  const other = await register('Different device');
+  const soon = signAccessToken(
+    host.deviceId,
+    Math.floor(Date.now() / 1000) + 3,
+  );
+  const shortSession = { accessToken: soon };
+  const hs = await connect(shortSession);
+  const unrenewed = await connect(shortSession);
+  const oldTokenExpired = disconnected(unrenewed, 6000);
+  const hosted = await hostRoom(hs);
+  const socketId = hs.id;
+
+  expect(
+    await ack(hs, 'session:refresh', { accessToken: other.accessToken }),
+  ).toEqual({ ok: false, code: 'UNAUTHORIZED' });
+  const renewed = await api
+    .post('/v1/devices/session')
+    .send({ deviceId: host.deviceId, secret: host.secret })
+    .expect(201);
+  expect(
+    await ack(hs, 'session:refresh', { accessToken: renewed.body.accessToken }),
+  ).toEqual({ ok: true });
+
+  await oldTokenExpired;
+  expect(hs.id).toBe(socketId);
+  const snapshot = until(
+    hs,
+    'world:snapshot',
+    (body) =>
+      body.worldId === hosted.worldId &&
+      body.members[0]?.nickname === 'Still connected',
+  );
+  expect(
+    await ack(hs, 'player:profile', {
+      visitId: hosted.visitId,
+      nickname: 'Still connected',
+    }),
+  ).toEqual({ ok: true });
+  expect(await snapshot).toMatchObject({ roomId: hosted.roomId });
+});
+
 test('existing connections keep working while the batched device check fails', async () => {
   const host = await register('DB outage host');
   const hs = await connect(host);

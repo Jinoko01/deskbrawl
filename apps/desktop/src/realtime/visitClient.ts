@@ -12,6 +12,9 @@ import {
   roomProfilesSchema,
   playerProfileSchema,
   serverFeaturesSchema,
+  SESSION_REFRESH_EVENT,
+  SESSION_REFRESH_READY_EVENT,
+  sessionRefreshSchema,
 } from "@deskbrawl/protocol";
 import type {
   CharacterSkin, ErrorCode, Joined, PlayerProfile, Session, Snapshot,
@@ -20,8 +23,16 @@ import type { LocalCommand } from "../native/localGame";
 import { RoomError, roomErrorMessage, SERVER_ORIGIN } from "../api/rooms";
 import type { PlayerAction, Vector2 } from "@deskbrawl/game-core";
 
+interface SessionRenewal {
+  issue: (signal: AbortSignal) => Promise<Session>;
+  onRenewed: (session: Session) => void;
+}
+
 export function createVisitClient(session: Session, onSnapshot: (snapshot: Snapshot) => void, onEnded: (message: string, closure?: ErrorCode) => void,
-  onRecovery: (state: "reconnecting" | "recovered") => void = () => { /* Optional outside the desktop session. */ }) {
+  onRecovery: (state: "reconnecting" | "recovered") => void = () => { /* Optional outside the desktop session. */ }, renewal?: SessionRenewal) {
+  const auth = {
+    version: PROTOCOL_VERSION, token: session.accessToken, health: true, idleSnapshots: true,
+  };
   const socket = io(SERVER_ORIGIN, {
     autoConnect: false,
     transports: ["websocket"],
@@ -30,9 +41,7 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
     reconnectionDelay: 500,
     reconnectionDelayMax: 1500,
     // idleSnapshots is safe only with createSnapshotView's one-tick interpolation cap.
-    auth: {
-      version: PROTOCOL_VERSION, token: session.accessToken, health: true, idleSnapshots: true,
-    },
+    auth,
     timeout: 5000,
   });
   let membership: Joined | undefined;
@@ -40,6 +49,9 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
   let movement = { x: 0, y: 0 } as LocalCommand["movement"];
   let disposed = false;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let renewalTimer: ReturnType<typeof setTimeout> | undefined;
+  const renewalAbort = new AbortController();
+  let expiresAt = session.expiresAt;
   let connectingReject: ((reason: Error) => void) | undefined;
   let paused = false;
   let inputEpoch = 0;
@@ -80,6 +92,8 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
       return;
     }
     disposed = true;
+    clearTimeout(renewalTimer);
+    renewalAbort.abort();
     draft = undefined;
     membership = undefined;
     connectingReject?.(new RoomError("Connection cancelled"));
@@ -128,6 +142,11 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         setMode(false);
         receive(membership.snapshot);
       }
+    }
+  });
+  socket.once(SESSION_REFRESH_READY_EVENT, () => {
+    if (renewal !== undefined) {
+      scheduleRenewal(renewal);
     }
   });
   socket.on("room:profiles", (body: unknown) => {
@@ -237,6 +256,44 @@ export function createVisitClient(session: Session, onSnapshot: (snapshot: Snaps
         }
       });
     });
+  }
+  function scheduleRenewal(renewal: SessionRenewal, retry = false): void {
+    const remaining = expiresAt - Date.now();
+    const delay = retry ? 5000 : remaining - Math.min(60_000, remaining / 2);
+    if (disposed || remaining <= delay) {
+      return;
+    }
+    renewalTimer = setTimeout(() => {
+      void renewSession(renewal);
+    }, delay);
+  }
+  async function renewSession(renewal: SessionRenewal): Promise<void> {
+    if (!socket.connected) {
+      scheduleRenewal(renewal, true);
+      return;
+    }
+    try {
+      const next = await renewal.issue(renewalAbort.signal);
+      renewalAbort.signal.throwIfAborted();
+      if (next.deviceId !== session.deviceId || next.expiresAt <= expiresAt) {
+        return;
+      }
+      const body = sessionRefreshSchema.parse({ accessToken: next.accessToken });
+      const result = commandAckSchema.parse(await acknowledge(SESSION_REFRESH_EVENT, body));
+      renewalAbort.signal.throwIfAborted();
+      if (!result.ok) {
+        throw new RoomError(ERROR_MESSAGES[result.code], result.code);
+      }
+      auth.token = next.accessToken;
+      expiresAt = next.expiresAt;
+      renewal.onRenewed(next);
+      scheduleRenewal(renewal);
+    } catch (error) {
+      if (error instanceof RoomError && (error.code === "UNAUTHORIZED" || error.code === "INVALID_INPUT")) {
+        return;
+      }
+      scheduleRenewal(renewal, true);
+    }
   }
   async function command(event: string, body: unknown, transient = false): Promise<void> {
     const epoch = inputEpoch;

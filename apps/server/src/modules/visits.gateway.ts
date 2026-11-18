@@ -7,6 +7,9 @@ import type {
 } from '@deskbrawl/protocol';
 import {
   PROTOCOL_VERSION,
+  SESSION_REFRESH_EVENT,
+  SESSION_REFRESH_READY_EVENT,
+  sessionRefreshSchema,
   inputSchema,
   leaveSchema,
   playerActionSchema,
@@ -71,9 +74,10 @@ export class VisitsGateway
   ) {}
 
   afterInit(server: Server): void {
-    server.on('connection', (socket) =>
-      socket.emit('server:features', { workDrag: true }),
-    );
+    server.on('connection', (socket) => {
+      socket.emit('server:features', { workDrag: true });
+      socket.emit(SESSION_REFRESH_READY_EVENT);
+    });
     this.sessions.engine.onSnapshot = (room) => {
       this.sessions.engine.expireChats(room, Date.now());
       this.publishSnapshot(room, true);
@@ -186,8 +190,7 @@ export class VisitsGateway
     this.claims.set(socket, await this.auth.authenticate(token));
   }
 
-  // The handshake token is fixed for the connection, so commands only need
-  // the expiry; revocation is checked in batch by checkDevices().
+  // Commands use the latest verified claims; revocation is checked in batch.
   private authenticated(socket: Socket): string {
     const claims = this.claims.get(socket);
     if (claims === undefined || claims.expiresAt <= Date.now()) {
@@ -212,6 +215,29 @@ export class VisitsGateway
     } catch (error) {
       return failure(error);
     }
+  }
+
+  @SubscribeMessage(SESSION_REFRESH_EVENT)
+  refreshSession(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<z.infer<typeof commandAckSchema>> {
+    return this.command(socket, 2, 'session-refresh', async (deviceId) => {
+      const { accessToken } = sessionRefreshSchema.parse(body);
+      const next = await this.auth.authenticate(accessToken);
+      this.authenticated(socket);
+      if (next.deviceId !== deviceId || next.expiresAt <= Date.now()) {
+        throw new DomainError('UNAUTHORIZED');
+      }
+      if (!socket.connected) {
+        throw new DomainError('CONNECTION_LOST');
+      }
+      const current = this.claims.get(socket);
+      if (current !== undefined && next.expiresAt > current.expiresAt) {
+        this.claims.set(socket, next);
+      }
+      return { ok: true as const };
+    });
   }
 
   private async enter(socket: Socket, joined: Joined): Promise<Joined> {

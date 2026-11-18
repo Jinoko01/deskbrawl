@@ -211,6 +211,20 @@ export function useMultiplayer() {
             }
             void publishNetwork({ mode: "recovering", snapshot: frozen, playerId: auth.deviceId }).catch(report);
           }
+        }, {
+          async issue(signal) {
+            const credential = await readCredential(SERVER_ORIGIN);
+            signal.throwIfAborted();
+            if (credential?.deviceId !== auth.deviceId) {
+              throw new RoomError(ERROR_MESSAGES.UNAUTHORIZED, "UNAUTHORIZED");
+            }
+            return restoreDevice(credential, signal);
+          },
+          onRenewed(next) {
+            if (session.current?.deviceId === next.deviceId && session.current.expiresAt < next.expiresAt) {
+              session.current = next;
+            }
+          },
         });
         client.current = connection;
         if (previous === undefined) {
