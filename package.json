@@ -10,6 +10,7 @@
     "dev:web": "pnpm --filter @deskbrawl/desktop dev",
     "dev:server": "pnpm --filter @deskbrawl/server dev",
     "dev:landing": "pnpm --filter @deskbrawl/landing dev",
+    "desktop:version": "node apps/desktop/scripts/release-version.mjs set",
     "build": "pnpm --filter @deskbrawl/desktop tauri build",
     "build:web": "pnpm --filter @deskbrawl/desktop build",
     "build:landing": "pnpm --filter @deskbrawl/landing build",
