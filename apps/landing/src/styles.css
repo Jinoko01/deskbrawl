@@ -233,6 +233,19 @@ h1 {
   margin-top: 28px;
 }
 
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font-weight: 700;
+  text-underline-offset: 0.2em;
+}
+
+.text-link:hover {
+  color: var(--accent-hover);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

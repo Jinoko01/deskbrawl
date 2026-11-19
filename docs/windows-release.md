@@ -11,6 +11,12 @@ Run **Prepare Windows release** from GitHub Actions to calculate the next versio
 
 For the first rollout, publish a release with the `DeskBrawl_x64-setup.exe` asset before deploying the new website link. After that, each release published as latest updates the [download target](https://github.com/Jinoko01/deskbrawl/releases/latest/download/DeskBrawl_x64-setup.exe) without a website redeploy.
 
+## Publish website update notes
+
+When a change affects players, add a plain-text bullet under `### 공지사항` in the `[Unreleased]` section of [CHANGELOG.md](../CHANGELOG.md). Write each bullet on one line in Korean and describe what players can do now or what problem they will no longer encounter. Keep build, deployment, and server maintenance details in the existing changelog sections.
+
+The release workflow puts this section at the top of the draft. When you publish the stable release, the website reads the section from GitHub and shows it with the version and publication date. Review it in the draft before publishing, then check [the website announcements](https://www.deskbrawl.xyz/updates/). To correct an announcement or add one to an older release, edit the first section of the GitHub release. The website skips versions without public notes and test releases.
+
 ## Set a version locally
 
 To choose a version for a local build, run this command from the repository root.

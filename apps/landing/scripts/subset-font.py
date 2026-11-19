@@ -10,7 +10,7 @@ from fontTools.ttLib import TTFont
 def main() -> None:
     landing = Path(__file__).resolve().parents[1]
     original = landing.parent / "desktop" / "src" / "assets" / "fonts"
-    sources = [landing / "index.html"]
+    sources = [landing / "index.html", landing / "updates" / "index.html"]
     sources.extend(
         path for path in sorted((landing / "src").rglob("*.ts"))
         if not path.name.endswith(".test.ts")
