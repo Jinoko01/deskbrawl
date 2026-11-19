@@ -1,3 +1,6 @@
+/* Hallmark · shape: app screen · genre: playful · theme: DeskBrawl (locked) · redesign: full
+ * nav: two workspace tabs · signature: saved keys paired with in-game attack poses · states: local, connected, visiting, pending, error · v2.0.0 */
+/* Hallmark · pre-emit critique: P5 H4 E4 S4 R5 V4 · weakest: hierarchy; give the actual game keys the only dark field. */
 @import "tailwindcss";
 @import "./brand-theme.css";
 
@@ -19,15 +22,31 @@
   --font-sans: "Pretendard", "Segoe UI", "Malgun Gothic", sans-serif;
 }
 
+:root {
+  --desk-width: 64rem;
+  --desk-gutter: clamp(1rem, 3vw, 2.5rem);
+  --deck: light-dark(#203f35, #253f34);
+  --deck-ink: #eff8ee;
+  --deck-rule: #587467;
+  --cap-paper: #f3f7e8;
+  --cap-ink: #193d32;
+  --cap-edge: #a7bdab;
+  --guide-shade: light-dark(rgb(15 44 35 / 14%), rgb(4 15 10 / 30%));
+  --dialog-shade: rgb(9 21 16 / 50%);
+}
+
 @layer base {
+  html, body { overflow-x: clip; }
   body { @apply m-0 bg-background font-sans text-foreground antialiased; }
   button, input, summary, a { -webkit-tap-highlight-color: transparent; }
   button, summary { @apply cursor-pointer; }
   button { @apply disabled:cursor-not-allowed disabled:opacity-75; }
   :focus-visible { @apply outline-2 outline-offset-4 outline-accent; }
   p, h1, h2, h3, label, button, summary { word-break: keep-all; }
-  h1, h2, h3 { text-wrap: balance; }
-  input { min-width: 0; }
+  h1, h2, h3 { min-width: 0; overflow-wrap: break-word; text-wrap: balance; }
+  input { min-width: 0; caret-color: var(--accent); }
+  button:disabled { cursor: not-allowed; }
+  button:active:enabled { translate: 0 1px; }
   [hidden] { display: none !important; }
   ::selection { @apply bg-accent text-accent-foreground; }
   kbd { @apply rounded-md border border-border bg-surface px-2 py-1 font-sans text-xs font-medium text-foreground; box-shadow: 0 2px 0 var(--key-shadow); }
@@ -37,59 +56,117 @@
 @layer components {
   .app-shell { @apply min-h-dvh; }
   .skip-link { @apply fixed top-2 left-2 z-50 -translate-y-[160%] rounded-lg bg-card px-3 py-2 focus:translate-y-0; }
-  .app-rail { @apply fixed inset-y-0 left-0 z-40 flex w-[76px] flex-col items-center border-r border-border/60 bg-rail py-6; }
-  .brand-mark { @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-surface; }
-  .brand-mark img { @apply block h-full w-full object-contain; }
-  .rail-nav { @apply mt-10 flex w-full flex-col gap-3 px-2; }
-  .rail-button { @apply relative flex min-h-16 w-full flex-col items-center justify-center gap-2 rounded-xl text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground; }
-  .rail-button[aria-current="page"] { @apply bg-surface text-accent; }
-  .rail-button[aria-current="page"]::before { content: ""; @apply absolute -left-2 h-5 w-0.5 rounded-r bg-accent; }
-  .app-workspace { @apply ml-[76px] min-w-0; }
-  .app-header { @apply flex min-h-[52px] items-center justify-between gap-3 border-b border-border/60 px-5; }
-  .wordmark { @apply text-lg font-bold tracking-[-0.035em]; }
-  .status-dot { @apply inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-current; }
-  .app-content { @apply mx-auto max-w-[1180px] px-5 pt-4 pb-5; }
-  .page-title { @apply mb-3 text-xl font-semibold tracking-tight; }
-  .mode-panel { @apply mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-surface/60 px-4 py-3; }
+  .app-rail {
+    @apply mx-auto flex min-h-14 items-center gap-3 border-b border-border;
+    max-width: var(--desk-width);
+    padding-inline: var(--desk-gutter);
+  }
+  .brand-mark { @apply mr-3 inline-flex h-11 shrink-0 items-center gap-1.5 text-foreground hover:text-accent; }
+  .brand-mark img { @apply size-9 object-contain; image-rendering: pixelated; }
+  .wordmark { width: 6.5rem; aspect-ratio: 1160 / 230; background: currentColor; mask: url("/brand/wordmark.png") center / contain no-repeat; }
+  .rail-nav { @apply flex self-stretch gap-3; }
+  .rail-button { @apply flex min-h-11 items-center justify-center gap-1.5 px-1.5 text-sm font-medium text-muted-foreground hover:text-foreground; }
+  .rail-button svg { @apply size-4; }
+  .rail-nav .rail-button { @apply border-y-2 border-transparent; }
+  .rail-button[aria-current="page"] { @apply border-b-accent font-bold text-foreground; }
+  .help-button { @apply ml-auto; anchor-name: --help-button; }
+  .help-topics {
+    @apply fixed inset-auto m-0 w-52 rounded-xl border border-border bg-card p-1.5 text-foreground;
+    position-anchor: --help-button;
+    top: calc(anchor(bottom, 3rem) + 0.25rem);
+    right: max(0.5rem, anchor(right));
+  }
+  .help-topic { @apply flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-sm font-semibold hover:bg-surface focus-visible:-outline-offset-2; }
+  .help-topic svg { @apply shrink-0 text-accent; }
+  .app-header:empty { display: none; }
+  .app-header .button { @apply border-l border-border pl-4; border-radius: 0; }
+  .app-content { @apply mx-auto min-w-0 pb-8; max-width: var(--desk-width); padding: 1.25rem var(--desk-gutter) 2rem; }
+  .page-title { @apply mb-3 text-[1.75rem] font-extrabold leading-tight tracking-tight; }
+  .play-panel { @apply min-w-0; }
+  .play-keys { padding: 0.875rem 0.5rem; border-radius: 10px; color: var(--deck-ink); background: var(--deck); }
+  .play-key-layout { @apply grid items-stretch; grid-template-columns: minmax(8.5rem, 1.3fr) repeat(2, minmax(0, 1.15fr)) repeat(2, minmax(0, .8fr)); }
+  .play-key-group { @apply flex min-w-0 flex-col-reverse items-center justify-end gap-2 px-1 py-1 text-center; }
+  .play-key-group + .play-key-group { border-inline-start: 1px solid var(--deck-rule); }
+  .play-key-group dt { @apply text-[0.8125rem] font-semibold leading-tight; }
+  .play-key-group dd { @apply flex min-h-16 w-full items-center justify-center gap-1.5; }
+  .guide-key { @apply inline-grid min-h-7 min-w-8 place-items-center rounded-md px-1.5 py-0 text-base font-bold leading-none whitespace-nowrap; color: var(--cap-ink); background: var(--cap-paper); border: 1px solid var(--cap-edge); box-shadow: 0 3px 0 var(--cap-edge); }
+  .guide-key-loading { opacity: .45; }
+  .arrow-keys { @apply grid gap-1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .arrow-keys > :first-child { @apply col-start-2 row-start-1; }
+  .arrow-keys > :not(:first-child) { @apply row-start-2; }
+  .play-key-group:not(.play-key-movement) .guide-key { @apply min-h-10 min-w-10 text-lg; }
+  .guide-key[data-long] { font-size: 0.75rem !important; padding-inline: 2px; }
+  .play-keys > p { color: var(--deck-ink); }
+  .key-pose { @apply block size-11 shrink-0; }
+  .mode-panel { @apply flex items-center justify-between gap-4 border-b border-border py-3; }
+  .mode-start { @apply shrink-0 flex-wrap; }
+  .mode-options { @apply mb-4 flex flex-wrap justify-end gap-x-4; }
+  .mode-options .button { @apply min-h-9 gap-1.5 border-0 bg-transparent px-0 py-1 text-muted-foreground hover:text-foreground; }
+  [data-coach-target] {
+    @apply relative z-[45] scroll-my-3 outline-2 outline-accent;
+    anchor-name: --mode-coach-target;
+    box-shadow: 0 0 0 150vmax var(--guide-shade);
+  }
+  .play-key-group[data-coach-target], .play-key-layout[data-coach-target] { background: var(--deck); color: var(--deck-ink); }
+  .visit-link-controls[data-coach-target] { @apply bg-background; }
+  .mode-coachmark {
+    @apply fixed inset-auto m-0 overflow-auto rounded-xl p-4;
+    width: min(21rem, calc(100% - 2rem));
+    max-height: calc(100dvh - 2rem);
+    color: var(--card);
+    background: var(--foreground);
+    position-anchor: --mode-coach-target;
+    top: 1rem;
+    right: 1rem;
+    top: calc(anchor(bottom) + 0.75rem);
+    right: clamp(1rem, anchor(right), calc(100% - 22rem));
+    position-try-fallbacks: flip-block;
+  }
+  .coachmark-close { @apply shrink-0 rounded-md border border-current/35 px-2.5 py-1.5 text-xs font-semibold hover:bg-current/10 active:scale-[0.98] focus-visible:outline-current; }
+  .coachmark-modes { @apply mt-3 grid gap-3; }
+  .coachmark-modes > div + div { @apply border-t border-current/25 pt-3; }
+  .coachmark-modes dt { @apply flex items-center gap-2 text-sm font-bold; }
+  .coachmark-modes dd { @apply mt-1 text-sm leading-snug; }
+  .coachmark-modes kbd { @apply border-current/35 bg-transparent px-1.5 py-0.5 text-current shadow-none; }
   .switch-track { @apply relative h-[18px] w-8 shrink-0 rounded-full border border-control bg-background; }
   .switch-track > span { @apply absolute top-[3px] left-[3px] h-2.5 w-2.5 rounded-full bg-muted-foreground transition-transform duration-200; }
   [role="switch"][aria-checked="true"] .switch-track { @apply border-accent bg-accent; }
   [role="switch"][aria-checked="true"] .switch-track > span { @apply translate-x-3.5 bg-accent-foreground; }
   .focus-button { @apply shrink-0 hover:bg-background/40; }
-  .button { @apply inline-flex min-h-10 max-w-full items-center justify-center gap-2 rounded-[10px] px-3.5 py-2 text-xs font-semibold leading-relaxed transition-[background-color,color,border-color,transform] duration-200 active:scale-[0.98]; }
+  .button { @apply inline-flex min-h-10 max-w-full items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-semibold leading-relaxed transition-[background-color,color,border-color,transform] duration-200 active:scale-[0.98]; }
   .button-primary { @apply min-h-11 border border-accent bg-accent text-accent-foreground hover:border-accent-hover hover:bg-accent-hover; }
-  .button-secondary { @apply border border-control bg-surface text-foreground hover:border-muted-foreground/70 hover:bg-surface-hover; }
+  .button-secondary { @apply border border-control bg-card text-foreground hover:border-muted-foreground/70 hover:bg-surface-hover; }
   .button-quiet { @apply text-muted-foreground hover:bg-surface hover:text-foreground; }
   .button-danger { @apply border border-danger text-danger hover:bg-danger/10; }
-  .panel { @apply min-w-0 rounded-2xl border border-border bg-card; }
-  .panel-heading { @apply mb-3 flex flex-wrap items-center justify-between gap-2; }
-  .panel-heading h2 { @apply flex items-center gap-2 text-sm font-semibold tracking-tight; }
-  .lobby-grid { @apply grid min-w-0 grid-cols-[minmax(210px,0.85fr)_minmax(0,1.3fr)] items-start gap-4; }
-  .profile-panel { @apply p-4; }
-  .profile-panel .panel-heading { @apply mb-3; }
-  .character-picker { @apply mb-4; }
-  .character-stage { @apply relative flex h-40 items-center justify-center overflow-hidden rounded-2xl border border-border/40 bg-stage; background-image: radial-gradient(var(--stage-dot) 0.7px, transparent 0.7px); background-size: 12px 12px; }
-  .character-art { @apply absolute top-3 left-1/2 h-24 w-24 -translate-x-1/2; max-width: calc(100% - 96px); }
-  .character-portrait { @apply h-full w-full; animation: character-float 5s ease-in-out infinite; }
-  .character-name { @apply absolute inset-x-0 bottom-3 text-center text-base font-semibold tracking-tight; }
-  .character-ground { @apply absolute bottom-11 h-4 w-[78px] rounded-[50%] border border-accent/20 bg-background/30; }
-  .character-number { @apply absolute top-3 right-3 text-xs tracking-[0.1em] text-accent tabular-nums; }
-  .character-arrow { @apply absolute top-[43%] flex h-9 w-8 -translate-y-1/2 items-center justify-center rounded-lg border border-control bg-card text-accent transition-[background-color,transform] duration-200 hover:bg-card active:scale-95; }
-  .character-arrow-previous { @apply left-2; }
-  .character-arrow-next { @apply right-2; }
-  .character-arrow svg { @apply h-[18px] w-[18px]; }
-  .character-options { @apply mt-2 grid grid-cols-8 gap-1; }
-  .character-option { @apply aspect-square min-h-7 min-w-0 rounded-md border border-control bg-background p-0.5 hover:bg-surface; }
-  .character-option[aria-pressed="true"] { @apply border-accent bg-surface ring-1 ring-accent; }
+  .panel { @apply min-w-0; }
+  .panel-heading { @apply mb-3 flex flex-wrap items-baseline justify-between gap-2; }
+  .panel-heading h2 { @apply flex items-center gap-2 text-lg font-bold leading-tight tracking-tight; }
+  .lobby-grid { @apply grid min-w-0 items-start gap-x-7 gap-y-4; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); }
+  .profile-panel, .room-panel, .visit-panel, .settings-panel { @apply border-t-2 border-foreground pt-3; }
+  .character-picker { @apply mb-3; }
+  .character-stage { @apply relative flex h-32 items-center justify-center rounded-t-[10px] bg-stage; background-image: radial-gradient(var(--stage-dot) 1px, transparent 1px); background-size: 10px 10px; }
+  .character-art { @apply h-20 w-20; max-width: calc(100% - 100px); }
+  .character-portrait { @apply h-full w-full; }
+  .character-name { @apply absolute bottom-2 left-3 text-base font-bold; }
+  .character-number { @apply absolute right-3 bottom-2 text-xs text-muted-foreground tabular-nums; }
+  .character-arrow { @apply absolute top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-md text-foreground hover:bg-card/60; }
+  .character-arrow-previous { @apply left-1; }
+  .character-arrow-next { @apply right-1; }
+  .character-arrow svg { @apply size-5; }
+  .character-options { @apply grid grid-cols-8 gap-px border-b border-border bg-surface; }
+  .character-option { @apply flex h-9 min-w-0 items-center justify-center border-b-2 border-transparent p-1 hover:bg-stage; }
+  .character-option[aria-pressed="true"] { @apply border-accent bg-card; }
   .field-label { @apply flex min-w-0 flex-col gap-2 text-xs font-medium text-muted-foreground; }
-  .field-help { @apply mt-1 text-xs; }
-  .field { @apply min-h-10 w-full rounded-[10px] border border-control bg-background px-3 py-2.5 text-sm font-normal text-foreground transition-colors placeholder:text-muted-foreground focus:border-accent disabled:cursor-not-allowed disabled:bg-surface; }
-  .room-column { @apply grid min-w-0 gap-4; }
-  .room-panel, .visit-panel { @apply p-4; }
+  .field-help { @apply mt-1 text-xs; min-height: 1lh; }
+  .field { @apply min-h-10 w-full rounded-md border border-control bg-card px-3 py-2.5 text-sm font-normal text-foreground transition-colors placeholder:text-muted-foreground focus:border-accent disabled:cursor-not-allowed disabled:bg-surface; }
+  .room-column { @apply grid min-w-0 gap-5; }
+  .visit-link-controls { @apply flex items-end gap-2; }
+  .visit-link-controls label { @apply flex-1; }
+  .visit-link-controls .button { @apply shrink-0; }
   .room-capacity { @apply flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums; }
   .room-status { @apply flex items-center gap-2 text-xs leading-relaxed text-muted-foreground; }
   .room-status[data-connected="true"] { @apply text-accent; }
-  .room-empty { @apply pt-2; }
+  .room-empty { @apply pt-0; }
   .room-empty p { @apply mb-3 text-sm leading-relaxed text-muted-foreground; }
   .member-list { @apply mt-3; }
   .member-list > li { @apply flex min-w-0 items-center gap-2.5 border-b border-border/60 py-3 last:border-0; }
@@ -98,54 +175,58 @@
   .link-management { @apply mt-3 text-xs; }
   .link-management summary, .connection-details summary { @apply w-fit rounded py-1 text-xs text-muted-foreground hover:text-foreground; }
   .connection-details { @apply px-1; }
-  .quick-guide { @apply mt-4 grid gap-2 border-t border-border px-1 py-3 text-xs leading-relaxed text-muted-foreground; }
-  .notice { @apply my-3 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-muted-foreground; }
+  .notice { @apply my-3 border-l-2 border-border bg-surface px-3 py-2 text-xs leading-relaxed text-muted-foreground; }
   .notice-error { @apply border-danger/25 bg-danger/5 text-danger; overflow-wrap: anywhere; }
   .lobby-notice { @apply col-span-full my-0; }
   .confirm-dialog { @apply m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-control bg-card p-5 text-foreground; }
-  .confirm-dialog::backdrop { @apply bg-black/50; }
-  .settings-panel { @apply max-w-[760px] p-6; animation: arrive 350ms ease-out both; }
-  .control-row { @apply flex flex-wrap items-center justify-between gap-3 border-b border-border/60 py-3; }
-  .control-row:last-child { @apply mt-3 border-0 pt-4; }
-  .key-binding { @apply font-mono text-xs; box-shadow: 0 2px 0 var(--key-shadow); }
-  .key-binding.recording { @apply border-accent bg-accent text-accent-foreground; }
+  .confirm-dialog::backdrop { background: var(--dialog-shade); }
+  .settings-panel { @apply mb-4; }
+  .binding-list { @apply mt-3 grid gap-x-8; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-row { @apply flex min-w-0 items-center justify-between gap-2 border-b border-border py-2; }
+  .control-row:last-child { @apply col-span-full; }
+  .control-row .key-binding { @apply min-h-9 min-w-16 border-border bg-card px-3 py-1 font-sans font-bold hover:border-accent; box-shadow: 0 2px 0 var(--key-shadow); }
+  .control-row .key-binding.recording { @apply border-accent bg-accent text-accent-foreground; }
+  .settings-actions { @apply mt-4 flex flex-wrap justify-end gap-2; }
+  .settings-actions > :first-child { @apply mr-auto; }
   .visit-preview { @apply mt-4 overflow-hidden rounded-xl border border-border bg-background p-2; }
+  .chat-editor { @apply grid min-h-dvh content-start gap-0.5 border border-border bg-card px-3 py-1.5; }
+  .chat-editor #previous:empty { display: none; }
+  .chat-editor input { min-height: 2rem; }
+  .chat-keys { @apply mb-0.5 flex items-center gap-3 text-xs text-muted-foreground; }
+  .chat-keys span:last-child { @apply ml-auto; }
+  .chat-keys kbd { @apply px-1 py-0 shadow-none; }
 }
 
-@keyframes arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes character-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-
-@media (min-width: 1100px) {
-  .app-content { @apply px-12 pt-10; }
-  .app-header { @apply px-12; }
-  .character-stage { @apply h-[240px]; }
-  .character-art { @apply top-9 h-[130px] w-[130px]; }
-  .character-ground { @apply bottom-14; }
-  .character-name { @apply bottom-4 text-lg; }
-  .profile-panel { @apply p-6; }
-  .room-panel, .visit-panel { @apply p-6; }
+@media (min-width: 960px) {
+  .app-content { padding-top: 1.75rem; }
+  .play-keys { padding-block: 1.25rem; }
+  .key-pose { @apply size-14; }
+  .character-stage { @apply h-44; }
+  .character-art { @apply size-28; }
 }
 
-@media (width < 700px) {
-  .app-rail { @apply inset-x-0 bottom-auto h-16 w-full flex-row justify-between border-r-0 border-b px-4 py-2; }
-  .brand-mark { @apply h-11 w-11; }
-  .rail-nav { @apply mt-0 w-auto flex-row gap-2 p-0; }
-  .rail-button { @apply min-h-10 w-auto flex-row gap-2 px-3; }
-  .rail-button[aria-current="page"]::before { @apply hidden; }
-  .rail-button svg { @apply h-4 w-4; }
-  .app-workspace { @apply mt-16 ml-0; }
-  .app-header { @apply min-h-[52px] px-4; }
-  .app-content { @apply px-4 pt-4; }
-  .lobby-grid { @apply grid-cols-1; }
-  .profile-panel { @apply p-4; }
-  .character-stage { @apply h-[180px]; }
-  .character-arrow-previous { @apply left-5; }
-  .character-arrow-next { @apply right-5; }
-  .mode-panel > div:first-child { @apply basis-full; }
+@media (max-width: 699px) {
+  .app-rail { @apply gap-2; }
+  .brand-mark { @apply mr-1; }
+  .rail-nav { @apply gap-1; }
+  .rail-nav svg { display: none; }
+  .key-pose { display: none; }
+  .lobby-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-@media (width < 340px) {
-  .character-options { @apply grid-cols-4; }
+@media (max-width: 479px) {
+  .wordmark { display: none; }
+  .app-header .button { @apply px-2; }
+  .app-header .button svg { display: none; }
+  .app-content { padding-top: 0.75rem; }
+  .page-title { @apply mb-2 text-2xl; }
+  .play-key-layout { grid-template-columns: minmax(7.75rem, 1.25fr) repeat(2, minmax(0, 1fr)); row-gap: 0.5rem; }
+  .play-key-movement { @apply row-span-2 justify-center; }
+  .play-key-group { @apply gap-1; }
+  .play-key-group:not(.play-key-movement) dd { @apply min-h-8; }
+  .play-key-group:not(.play-key-movement) .guide-key { @apply min-h-7 min-w-8 text-base; }
+  .mode-panel { @apply flex-wrap gap-2; }
+  .binding-list { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,6 +2,7 @@ import { useId } from "react";
 import type { CharacterSkin } from "@deskbrawl/protocol";
 import { characterSkinSchema } from "@deskbrawl/protocol";
 import { adjacentCharacter, characterPortrait } from "./game/characters";
+import type { PortraitPose } from "./game/characters";
 
 interface CharacterPickerProps {
   readonly skin: CharacterSkin;
@@ -12,23 +13,32 @@ interface CharacterPickerProps {
 interface PortraitProps {
   readonly skin: CharacterSkin;
   readonly label?: string;
+  readonly pose?: PortraitPose;
 }
 
-export function CharacterPortrait({ skin, label }: PortraitProps) {
-  const { image, frame, size } = characterPortrait(skin);
+export function CharacterPortrait({ skin, label, pose }: PortraitProps) {
+  const { image, frame, size } = characterPortrait(skin, pose);
   return (
     <svg
       role={label === undefined ? undefined : "img"}
       aria-label={label}
       aria-hidden={label === undefined || undefined}
-      viewBox={`${frame.x} ${frame.y} ${frame.w} ${frame.h}`}
+      viewBox={`0 0 ${frame.w} ${frame.h}`}
       className="h-full w-full [image-rendering:pixelated]"
     >
-      <image
-        href={image}
-        width={size.w}
-        height={size.h}
-      />
+      <svg
+        width={frame.w}
+        height={frame.h}
+        overflow="hidden"
+      >
+        <image
+          href={image}
+          x={-frame.x}
+          y={-frame.y}
+          width={size.w}
+          height={size.h}
+        />
+      </svg>
     </svg>
   );
 }
@@ -56,7 +66,6 @@ export function CharacterPicker({ skin, disabled, onChange }: CharacterPickerPro
       }}
     >
       <div className="character-stage">
-        <div className="character-ground" aria-hidden="true" />
         <div className="character-art">
           <div key={skin} className="character-portrait">
             <CharacterPortrait skin={skin} label={`${name} 캐릭터 미리보기`} />
@@ -76,7 +85,7 @@ export function CharacterPicker({ skin, disabled, onChange }: CharacterPickerPro
             aria-hidden="true"
           >
             <path
-              d="M16 3 5 12l11 9Z"
+              d="m15 5-7 7 7 7"
               fill="none"
               stroke="currentColor"
               strokeWidth="1.5"
@@ -97,7 +106,7 @@ export function CharacterPicker({ skin, disabled, onChange }: CharacterPickerPro
             aria-hidden="true"
           >
             <path
-              d="m8 3 11 9-11 9Z"
+              d="m9 5 7 7-7 7"
               fill="none"
               stroke="currentColor"
               strokeWidth="1.5"

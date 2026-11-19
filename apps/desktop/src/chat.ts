@@ -56,6 +56,11 @@ input.addEventListener("keydown", (event) => {
 });
 document.querySelector("form")?.addEventListener("submit", (event) => event.preventDefault());
 window.addEventListener("blur", () => editor.close());
-await watchChatOpened(opened);
-// The first open can precede this WebView's script load.
-opened();
+try {
+  await watchChatOpened(opened);
+  // The first open can precede this WebView's script load.
+  opened();
+} catch {
+  input.disabled = true;
+  status.textContent = "채팅을 열지 못했어요. 데스크톱 앱에서 다시 열어 주세요.";
+}

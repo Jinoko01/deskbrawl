@@ -40,10 +40,13 @@ export function adjacentCharacter(skin: CharacterSkin, direction: -1 | 1): Chara
   return skins[(skins.indexOf(skin) + direction + skins.length) % skins.length] ?? "mochi";
 }
 
-export function characterPortrait(skin: CharacterSkin) {
+export type PortraitPose = "idle" | "melee" | "throw";
+
+export function characterPortrait(skin: CharacterSkin, pose: PortraitPose = "idle") {
   const { atlas, image, name } = CHARACTERS[skin];
-  const idle = atlas.animations?.idle?.[0];
-  const frame = idle === undefined ? undefined : atlas.frames[idle]?.frame;
+  const sequence = atlas.animations?.[pose];
+  const frameName = sequence?.[pose === "idle" ? 0 : Math.floor(sequence.length / 2)];
+  const frame = frameName === undefined ? undefined : atlas.frames[frameName]?.frame;
   const size = atlas.meta.size;
   if (frame === undefined || size === undefined) {
     throw new Error(`캐릭터 미리보기 에셋이 올바르지 않습니다: ${skin}`);

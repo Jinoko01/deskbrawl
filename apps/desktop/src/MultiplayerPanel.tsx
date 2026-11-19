@@ -11,6 +11,7 @@ import { VisitPreview } from "./VisitPreview";
 interface MultiplayerPanelProps {
   readonly game: ReturnType<typeof useMultiplayer>;
   readonly playing: boolean;
+  readonly highlight: "space" | "visit" | null;
 }
 
 const CONNECTION_LABELS = {
@@ -24,7 +25,7 @@ const CONNECTION_LABELS = {
 
 const inviteExpiry = new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" });
 
-export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
+export function MultiplayerPanel({ game, playing, highlight }: MultiplayerPanelProps) {
   const [nicknameEdit, setNickname] = useState<string>();
   const [skinDraft, setSkinDraft] = useState<CharacterSkin>();
   const nickname = nicknameEdit ?? (skinDraft === undefined ? game.nickname : game.savedNickname ?? CHARACTERS[skinDraft].name);
@@ -159,16 +160,16 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
                 {`${game.view.members.length} / 6`}
               </span>
             )}
-          </div>
-          <div className="room-status" data-connected={connected}>
-            <span className="status-dot" />
-            <p role="status">{game.disconnecting.isPending ? "연결을 정리하는 중…" : CONNECTION_LABELS[game.view.phase]}</p>
+            <div className="room-status" data-connected={connected}>
+              <p role="status">{game.disconnecting.isPending ? "연결을 정리하는 중…" : CONNECTION_LABELS[game.view.phase]}</p>
+            </div>
           </div>
           {!connected && (
             <div className="room-empty">
               <p>내 공간을 열고 방문 링크로 친구를 초대해요. 최대 6명이 함께할 수 있어요.</p>
               <button
-                className="button button-secondary w-full"
+                className="button button-secondary"
+                data-coach-target={highlight === "space" || undefined}
                 type="submit"
                 form="profile-form"
                 disabled={busy || !nicknameValid}
@@ -229,6 +230,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
                 <button
                   type="button"
                   className="button button-primary w-full"
+                  data-coach-target={highlight === "space" || undefined}
                   disabled={inviteBusy}
                   onClick={() => {
                     setCopy(undefined);
@@ -253,6 +255,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
                   <button
                     type="button"
                     className="button button-primary mt-3 w-full"
+                    data-coach-target={highlight === "space" || undefined}
                     onClick={copyInviteLink}
                   >
                     <AppIcon name="link" />
@@ -322,6 +325,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
               <button
                 type="button"
                 className="button button-primary mt-4 w-full"
+                data-coach-target={highlight !== null || undefined}
                 disabled={busy}
                 onClick={() => game.returning.mutate()}
               >
@@ -339,7 +343,6 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
           <section className="panel visit-panel" aria-labelledby="visit-title">
             <div className="panel-heading">
               <h2 id="visit-title">
-                <AppIcon name="link" />
                 친구에게 놀러 가기
               </h2>
             </div>
@@ -350,37 +353,38 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
               }
             }}
             >
-              <label className="field-label">
-                친구 방문 링크
-                <input
-                  className="field text-xs"
-                  type="text"
-                  maxLength={2048}
-                  value={link}
-                  required
-                  disabled={busy || game.focused}
-                  aria-invalid={game.join.isError || undefined}
-                  aria-describedby={visitError === undefined ? undefined : "visit-error"}
-                  onChange={(event) => {
-                    setLink(event.target.value);
-                    if (game.join.isError) {
-                      game.join.reset();
-                    }
-                  }}
-                  placeholder="방문 링크를 붙여넣어 주세요"
-                />
-              </label>
-              <button
-                type="submit"
-                className="button button-secondary mt-3 w-full"
-                disabled={busy || game.focused || !link.trim() || !nicknameValid}
-                aria-describedby={!nicknameValid ? "nickname-help" : undefined}
-              >
-                {game.join.isPending ? "방문하는 중…" : "방문하기"}
-                <AppIcon name="arrow" />
-              </button>
+              <div className="visit-link-controls" data-coach-target={highlight === "visit" || undefined}>
+                <label className="field-label">
+                  친구 방문 링크
+                  <input
+                    className="field text-xs"
+                    type="text"
+                    maxLength={2048}
+                    value={link}
+                    required
+                    disabled={busy || game.focused}
+                    aria-invalid={game.join.isError || undefined}
+                    aria-describedby={visitError === undefined ? undefined : "visit-error"}
+                    onChange={(event) => {
+                      setLink(event.target.value);
+                      if (game.join.isError) {
+                        game.join.reset();
+                      }
+                    }}
+                    placeholder="방문 링크를 붙여넣어 주세요"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="button button-secondary"
+                  disabled={busy || game.focused || !link.trim() || !nicknameValid}
+                  aria-describedby={!nicknameValid ? "nickname-help" : undefined}
+                >
+                  {game.join.isPending ? "방문하는 중…" : "방문하기"}
+                  <AppIcon name="arrow" />
+                </button>
+              </div>
               {game.focused && <p className="mt-2 text-xs text-muted-foreground">집중 모드를 끄면 친구 공간에 방문할 수 있어요.</p>}
-              {!game.focused && !busy && link.trim() === "" && <p className="field-help text-muted-foreground">친구에게 받은 방문 링크를 붙여넣어 주세요.</p>}
               {visitError && (
                 <p
                   id="visit-error"

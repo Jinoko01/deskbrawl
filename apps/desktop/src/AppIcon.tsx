@@ -1,5 +1,5 @@
 interface AppIconProps {
-  readonly name: "home" | "controls" | "moon" | "link" | "arrow" | "exit" | "people";
+  readonly name: "home" | "controls" | "moon" | "link" | "arrow" | "exit" | "people" | "help";
   readonly className?: string;
 }
 
@@ -11,6 +11,7 @@ const paths = {
   arrow: "M5 12h14m-6-6 6 6-6 6",
   exit: "M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4m6-13 5 5-5 5m-6-5h11",
   people: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M15 3.13a4 4 0 0 1 0 7.75M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z",
+  help: "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4m.1 3h.01",
 } as const;
 
 export function AppIcon({ name, className = "h-4 w-4" }: AppIconProps) {

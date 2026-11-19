@@ -2,7 +2,7 @@ import {
   useEffect, useEffectEvent, useRef, useState,
 } from "react";
 import { ControlSettings } from "./ControlSettings";
-import { DEFAULT_CONTROLS, keyLabel, shortcutLabel } from "./game/keyMap";
+import { DEFAULT_CONTROLS, shortcutLabel } from "./game/keyMap";
 import { readPracticeTargetEnabled, savePracticeTargetEnabled } from "./game/characterPreference";
 import { useLocalControls } from "./game/useLocalControls";
 import { useMultiplayer } from "./hooks/queries/useMultiplayer";
@@ -12,9 +12,22 @@ import {
 } from "./native/lifecycle";
 import { startNativePlay } from "./native/localGame";
 import { AppIcon } from "./AppIcon";
+import { DesktopCoachmark, HelpTopics, PlayKeys } from "./PlayGuide";
+import type { GuideTopic } from "./PlayGuide";
+
+const modeGuideKey = "deskbrawl.mode-guide.v1";
+
+function initialModeGuide(): GuideTopic | null {
+  try {
+    return localStorage.getItem(modeGuideKey) === "seen" ? null : "mode";
+  } catch {
+    return "mode";
+  }
+}
 
 export function App() {
   const [page, setPage] = useState<"home" | "settings">("home");
+  const [guideTopic, setGuideTopic] = useState(initialModeGuide);
   const [exiting, setExiting] = useState(false);
   const [exitError, setExitError] = useState<string>();
   const [playError, setPlayError] = useState<string>();
@@ -24,6 +37,7 @@ export function App() {
   const exitDialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const moveFocus = useRef(false);
+  const helpButton = useRef<HTMLButtonElement>(null);
   const multiplayer = useMultiplayer();
   const {
     ready, playing, busy, error, supported, controls, controlsError, save,
@@ -66,8 +80,28 @@ export function App() {
       heading.current?.focus();
       return;
     }
+    if (guideTopic && next === "settings") {
+      closeGuide(false);
+    }
     moveFocus.current = true;
     setPage(next);
+  }
+
+  function openGuide(topic: GuideTopic): void {
+    setPage("home");
+    setGuideTopic(topic);
+  }
+
+  function closeGuide(restoreFocus: boolean): void {
+    setGuideTopic(null);
+    if (restoreFocus) {
+      helpButton.current?.focus({ preventScroll: true });
+    }
+    try {
+      localStorage.setItem(modeGuideKey, "seen");
+    } catch (cause) {
+      console.warn("도움말 확인 상태를 저장하지 못했어요.", cause);
+    }
   }
 
   const leaving = useEffectEvent(() => {
@@ -115,11 +149,12 @@ export function App() {
   const keys = shown?.keys;
   const shortcut = shown && shortcutLabel(shown.toggle);
   const connectionBusy = multiplayer.connectionBusy;
+  const activeGuide = page === "home" ? guideTopic : null;
   const showPracticeTargetSwitch = page === "home" && (multiplayer.view.phase === "local" || multiplayer.view.phase === "error");
   const changingFocus = multiplayer.focus.isPending;
   const playPending = busy || starting;
   let mode = "작업 모드";
-  let modeHelp = "캐릭터를 드래그해 옮길 수 있어요.";
+  let modeHelp = "작업 창을 평소처럼 쓰고, 캐릭터는 드래그로 옮길 수 있어요.";
   if (playing) {
     mode = "플레이 모드";
     modeHelp = "Esc를 누르면 작업 모드로 돌아가요.";
@@ -147,7 +182,7 @@ export function App() {
   return (
     <div className="app-shell">
       <a href="#main-content" className="skip-link">본문으로 이동</a>
-      <aside className="app-rail">
+      <header className="app-rail">
         <button
           type="button"
           className="brand-mark"
@@ -161,6 +196,7 @@ export function App() {
             height="128"
             draggable={false}
           />
+          <span className="wordmark" aria-hidden="true" />
         </button>
         <nav aria-label="주 메뉴" className="rail-nav">
           <button
@@ -182,13 +218,17 @@ export function App() {
             <span>조작 설정</span>
           </button>
         </nav>
-      </aside>
-      <div className="app-workspace">
-        <header className="app-header">
-          <span className="wordmark">
-            DeskBrawl
-            <span className="text-accent">.</span>
-          </span>
+        <button
+          ref={helpButton}
+          type="button"
+          className="rail-button help-button"
+          popoverTarget="help-topics"
+        >
+          <AppIcon name="help" className="h-5 w-5" />
+          <span>도움말</span>
+        </button>
+        <HelpTopics onSelect={openGuide} />
+        <div className="app-header">
           {supported && (
             <button
               type="button"
@@ -200,92 +240,23 @@ export function App() {
               {exiting ? "종료 중…" : "종료"}
             </button>
           )}
-        </header>
+        </div>
+      </header>
+      <div className="app-workspace">
         <main
           id="main-content"
           className="app-content"
           tabIndex={-1}
         >
           <h1
+            id="page-title"
             ref={heading}
             className="page-title"
             tabIndex={-1}
           >
-            {page === "home" ? "내 공간" : "조작 설정"}
+            {page === "home" ? "플레이 조작키" : "조작 설정"}
           </h1>
           {exitError && <p className="notice notice-error" role="alert">{exitError}</p>}
-          <section className="mode-panel" aria-label="플레이 설정">
-            <div className="min-w-0 flex-1">
-              <p
-                id="play-mode"
-                className="text-sm font-semibold"
-                role="status"
-              >
-                {mode}
-              </p>
-              <p id="play-help" className="mt-1 text-xs text-muted-foreground">{modeHelp}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="button button-primary"
-                disabled={playDisabled}
-                aria-describedby="play-help"
-                onClick={() => void startPlay()}
-              >
-                <AppIcon name="controls" />
-                {playLabel}
-                {loaded?.shortcut === "registered" && !playing && <kbd>{shortcut}</kbd>}
-              </button>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={multiplayer.focused}
-                aria-describedby="play-help"
-                className="button button-secondary focus-button"
-                disabled={connectionBusy || changingFocus}
-                onClick={() => multiplayer.focus.mutate(!multiplayer.focused)}
-              >
-                <span className="switch-track" aria-hidden="true"><span /></span>
-                집중 모드
-              </button>
-              {showPracticeTargetSwitch && (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={practiceTargetEnabled}
-                  className="button button-secondary"
-                  disabled={connectionBusy}
-                  onClick={togglePracticeTarget}
-                >
-                  <span className="switch-track" aria-hidden="true"><span /></span>
-                  연습용 샌드백
-                </button>
-              )}
-            </div>
-          </section>
-          {practiceTargetError && showPracticeTargetSwitch && (
-            <p className="notice notice-error" role="alert">샌드백 설정을 저장하지 못했어요. 다시 시도해 주세요.</p>
-          )}
-          {loaded?.shortcut === "unavailable" && (
-            <p className="notice" role="status">{`${shortcut} 단축키를 등록하지 못했어요. 플레이 버튼을 쓰거나 조작 설정에서 단축키를 바꿔 주세요.`}</p>
-          )}
-          {controlsError && <p className="notice notice-error" role="alert">{controlsError}</p>}
-          {(error ?? (!playing && playError)) && <p className="notice notice-error" role="alert">{error ?? playError}</p>}
-          <div hidden={page !== "home"}>
-            <MultiplayerPanel game={multiplayer} playing={playing || playPending} />
-            <section className="quick-guide" aria-label="플레이 조작 안내">
-              <h2 className="text-sm font-semibold text-foreground">플레이 조작법</h2>
-              <p>{keys ? `${[keys.up, keys.left, keys.down, keys.right].map(keyLabel).join(" · ")} 이동 · ${keyLabel(keys.melee)} 근접 공격 · ${keyLabel(keys.stone)} 돌 던지기` : "조작키를 불러오는 중이에요."}</p>
-              <p>
-                공간에 연결하면
-                <kbd>/</kbd>
-                로 채팅할 수 있어요.
-                <kbd>Esc</kbd>
-                를 누르면 작업 모드로 돌아가요.
-              </p>
-            </section>
-          </div>
           <div hidden={page !== "settings"}>
             {loaded && (
               <ControlSettings
@@ -295,6 +266,92 @@ export function App() {
               />
             )}
             {!supported && <p className="notice">데스크톱 앱에서 조작키를 설정할 수 있어요.</p>}
+          </div>
+          <div className="panel play-panel">
+            {page === "home" && (
+              <PlayKeys
+                keys={keys}
+                skin={multiplayer.skin}
+                loading={!keys && !controlsError}
+                highlightKeys={activeGuide === "keys"}
+                highlightWork={activeGuide === "mode" && playing}
+              />
+            )}
+            <section className="mode-panel" aria-label="현재 모드와 플레이 시작">
+              <div className="min-w-0">
+                <p
+                  id="play-mode"
+                  className="flex items-center gap-2 text-sm font-bold"
+                  role="status"
+                >
+                  {mode}
+                </p>
+                <p id="play-help" className="mt-1 text-xs leading-relaxed text-muted-foreground">{modeHelp}</p>
+              </div>
+              <button
+                type="button"
+                className="button button-primary mode-start"
+                data-coach-target={(activeGuide === "mode" && !playing) || undefined}
+                disabled={playDisabled}
+                aria-describedby="play-help"
+                onClick={() => void startPlay()}
+              >
+                <AppIcon name="controls" />
+                {playLabel}
+                {loaded?.shortcut === "registered" && !playing && <kbd>{shortcut}</kbd>}
+              </button>
+            </section>
+            {activeGuide && (
+              <DesktopCoachmark
+                key={activeGuide}
+                topic={activeGuide}
+                playing={playing}
+                phase={multiplayer.view.phase}
+                onClose={closeGuide}
+              />
+            )}
+          </div>
+          <div className="mode-options">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={multiplayer.focused}
+              aria-describedby="play-help"
+              className="button button-secondary focus-button"
+              disabled={connectionBusy || changingFocus}
+              onClick={() => multiplayer.focus.mutate(!multiplayer.focused)}
+            >
+              <span className="switch-track" aria-hidden="true"><span /></span>
+              집중 모드
+            </button>
+            {showPracticeTargetSwitch && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={practiceTargetEnabled}
+                className="button button-secondary"
+                disabled={connectionBusy}
+                onClick={togglePracticeTarget}
+              >
+                <span className="switch-track" aria-hidden="true"><span /></span>
+                연습용 샌드백
+              </button>
+            )}
+          </div>
+          {practiceTargetError && showPracticeTargetSwitch && (
+            <p className="notice notice-error" role="alert">샌드백 설정을 저장하지 못했어요. 다시 시도해 주세요.</p>
+          )}
+          {loaded?.shortcut === "unavailable" && (
+            <p className="notice" role="status">{`${shortcut} 단축키를 등록하지 못했어요. 플레이 버튼을 쓰거나 조작 설정에서 단축키를 바꿔 주세요.`}</p>
+          )}
+          {controlsError && <p className="notice notice-error" role="alert">{controlsError}</p>}
+          {(error ?? (!playing && playError)) && <p className="notice notice-error" role="alert">{error ?? playError}</p>}
+          <div hidden={page !== "home"}>
+            <MultiplayerPanel
+              game={multiplayer}
+              playing={playing || playPending}
+              highlight={activeGuide === "space" || activeGuide === "visit" ? activeGuide : null}
+            />
           </div>
         </main>
       </div>

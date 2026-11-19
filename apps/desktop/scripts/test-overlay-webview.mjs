@@ -736,8 +736,17 @@ checks: try {
     await testDesktopDesign(main, profileRoot, until);
   }
   if (designOnly) {
-    await main.evaluate("document.querySelector('.mode-panel .button-primary').click()");
+    await main.evaluate("document.querySelector('.help-button').click()");
+    await main.evaluate("document.querySelector('#help-topics button').click()");
+    await until(() => main.evaluate("!!document.querySelector('#mode-coachmark:popover-open')"), "Help did not reopen before Play");
+    const playCenter = await main.evaluate(`(() => {
+      const {x, y, width, height} = document.querySelector('.mode-panel .button-primary').getBoundingClientRect();
+      return {x: x + width / 2, y: y + height / 2};
+    })()`);
+    await main.rpc("Input.dispatchMouseEvent", { type: "mousePressed", ...playCenter, button: "left", clickCount: 1 });
+    await main.rpc("Input.dispatchMouseEvent", { type: "mouseReleased", ...playCenter, button: "left", clickCount: 1 });
     await until(() => main.evaluate("document.querySelector('#play-mode').textContent === '플레이 모드'"), "Main button did not start native PLAY");
+    assert.equal(await main.evaluate("!!document.querySelector('#mode-coachmark:popover-open')"), false, "Starting Play must dismiss help");
     control("close-home");
     await until(() => !control("state").mainVisible, "Window X must hide main");
     assert.equal(await main.evaluate("document.querySelector('#play-mode').textContent"), "플레이 모드", "Hiding main must preserve PLAY");

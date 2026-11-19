@@ -95,7 +95,7 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
               setRecording(undefined);
             }
           }}
-          className={`${buttonClass} key-binding min-w-28 ${active ? "recording" : ""}`}
+          className={`${buttonClass} key-binding ${active ? "recording" : ""}`}
         >
           {active ? "키를 누르세요…" : value}
         </button>
@@ -104,21 +104,22 @@ export function ControlSettings({ controls, disabled, onSave }: ControlSettingsP
   }
 
   return (
-    <section aria-labelledby="control-settings-title" className="panel settings-panel">
-      <div className="panel-heading">
-        <h2 id="control-settings-title">조작키 설정</h2>
-      </div>
+    <section
+      id="control-settings-title"
+      aria-labelledby="page-title"
+      className="panel settings-panel"
+    >
       <p className="text-xs leading-relaxed text-muted-foreground">
         {disabled ? "Esc를 눌러 작업 모드로 돌아오면 조작키를 바꿀 수 있어요." : "바꿀 조작의 버튼을 누른 뒤 새 키를 눌러 주세요. Esc는 플레이 종료에 사용해요."}
       </p>
-      <ul className="mt-5">
+      <ul className="binding-list">
         {GAME_ACTIONS.map((action) => renderControlRow(action, ACTION_LABELS[action], keyLabel(draft.keys[action])))}
         {renderControlRow("toggle", "플레이 전환 단축키", shortcutLabel(draft.toggle))}
       </ul>
       {problem !== undefined && <p className="notice notice-error" aria-live="polite">{problem}</p>}
       {failure !== undefined && <p className="notice notice-error" role="alert">{failure}</p>}
       {saved && !changed && <p className="mt-3 text-sm text-muted-foreground" role="status">저장했어요. 다음 실행에도 유지돼요.</p>}
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
+      <div className="settings-actions">
         <button
           type="button"
           disabled={locked || sameControls(draft, DEFAULT_CONTROLS)}
