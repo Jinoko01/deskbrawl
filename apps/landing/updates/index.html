@@ -3,36 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>공지사항 — DeskBrawl</title>
+    <title>공지사항 | DeskBrawl</title>
     <meta name="description" content="DeskBrawl에서 새로 생긴 기능과 고친 문제를 버전별로 확인해 보세요." />
     <meta name="theme-color" content="#dcefe6" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#233e33" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/png" href="/face.png" />
-    <link rel="stylesheet" href="/src/styles.css" />
-    <link rel="stylesheet" href="/src/updates.css" />
+    <link rel="stylesheet" href="../src/styles.css" />
+    <link rel="stylesheet" href="../src/updates.css" />
   </head>
   <body class="updates-page">
-    <main class="updates">
-      <a class="text-link updates__home" href="/">
-        <svg class="icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4m5-5-5 5 5 5" /></svg>
-        DeskBrawl 홈
-      </a>
-      <section class="window window--doc" aria-labelledby="updates-title">
-        <header class="titlebar">
-          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="titlebar__name">DeskBrawl 공지사항.md</span>
-        </header>
-        <div class="doc">
-          <h1 id="updates-title" tabindex="-1">공지사항</h1>
-          <p class="lede">새로 생긴 기능과 고친 문제를 버전별로 확인해 보세요.</p>
-          <div class="updates__status">
-            <p id="updates-status" role="status"></p>
-            <button class="btn" id="updates-retry" type="button" hidden>다시 시도</button>
-            <noscript><p>업데이트 소식을 보려면 브라우저에서 자바스크립트를 켜 주세요.</p></noscript>
-          </div>
-          <div class="updates__list" id="updates-list"></div>
+    <header class="masthead wrap">
+      <a class="updates__home" href="/" aria-label="DeskBrawl 홈"><span class="wordmark" aria-hidden="true"></span></a>
+      <span class="brand__slogan">작업과 놀이 사이</span>
+    </header>
+    <main class="updates wrap">
+      <header class="updates__intro">
+        <h1 id="updates-title" tabindex="-1">공지사항</h1>
+        <p class="lede">새로 생긴 기능과 고친 문제를 버전별로 확인해 보세요.</p>
+      </header>
+      <div class="updates__feed">
+        <div class="updates__status">
+          <p id="updates-status" role="status"></p>
+          <button class="btn" id="updates-retry" type="button" hidden>다시 시도</button>
+          <noscript><p>업데이트 소식을 보려면 브라우저에서 자바스크립트를 켜 주세요.</p></noscript>
         </div>
-      </section>
+        <div class="updates__list" id="updates-list"></div>
+      </div>
     </main>
     <script type="module" src="/src/updates-page.ts"></script>
   </body>

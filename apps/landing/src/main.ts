@@ -48,6 +48,9 @@ async function start(): Promise<void> {
   const inviteButton = need<HTMLButtonElement>("#invite");
   const inviteLabel = need<HTMLElement>("#invite-label");
   const portrait = need<HTMLCanvasElement>("#portrait");
+  const skinCount = need<HTMLElement>("#skin-count");
+  const previousSkin = need<HTMLElement>("#skin-prev .miniature");
+  const nextSkin = need<HTMLElement>("#skin-next .miniature");
   const skinName = need<HTMLElement>("#skin-name");
   const focusButton = need<HTMLButtonElement>("#focus");
   const clock = need<HTMLElement>("#clock");
@@ -110,7 +113,7 @@ async function start(): Promise<void> {
     }
     if (game.hasFriend && !done.has("hit")) {
       if (mode === "play") {
-        return touch ? "톡 치거나 돌을 던져요" : "<kbd>Z</kbd> 톡 치기 · <kbd>X</kbd> 돌 던지기";
+        return touch ? "톡 치거나 돌을 던져요" : "<kbd>Z</kbd> 톡 치기 / <kbd>X</kbd> 돌 던지기";
       }
       return touch ? "PLAY를 눌러 다시 놀아요" : "<kbd>Space</kbd>를 눌러 다시 놀아요";
     }
@@ -197,6 +200,7 @@ async function start(): Promise<void> {
   }
 
   function syncInvite(): void {
+    showSkinChoices();
     inviteButton.disabled = focus;
     inviteButton.classList.toggle("btn--primary", !focus && !game.hasFriend);
     if (focus) {
@@ -230,16 +234,22 @@ async function start(): Promise<void> {
     updateHint();
   }
 
+  function adjacentSkin(direction: -1 | 1): Skin {
+    const choices = SKINS.filter((choice) => !game.hasFriend || choice !== friendSkin);
+    const index = (choices.indexOf(skin) + direction + choices.length) % choices.length;
+    return choices[index] ?? skin;
+  }
+
+  function showSkinChoices(): void {
+    previousSkin.dataset.skin = adjacentSkin(-1);
+    nextSkin.dataset.skin = adjacentSkin(1);
+    skinCount.textContent = `${String(SKINS.indexOf(skin) + 1).padStart(2, "0")} / ${String(SKINS.length).padStart(2, "0")}`;
+  }
+
+  let skinRequest = 0;
   async function changeSkin(direction: -1 | 1): Promise<void> {
-    const step = (from: Skin): Skin | undefined => SKINS[(SKINS.indexOf(from) + direction + SKINS.length) % SKINS.length];
-    let next = step(skin);
-    // 놀러 와 있는 친구와 같은 캐릭터는 건너뛴다.
-    if (next !== undefined && game.hasFriend && next === friendSkin) {
-      next = step(next);
-    }
-    if (next === undefined) {
-      return;
-    }
+    const request = ++skinRequest;
+    const next = adjacentSkin(direction);
     try {
       await loadSkin(next);
     } catch (error) {
@@ -247,7 +257,11 @@ async function start(): Promise<void> {
       notice("캐릭터를 불러오지 못했어요. 다시 눌러 주세요.");
       return;
     }
+    if (request !== skinRequest || (game.hasFriend && next === friendSkin)) {
+      return;
+    }
     skin = next;
+    showSkinChoices();
     skinName.textContent = SKIN_NAMES[next];
     drawPortrait(portrait, next);
   }
@@ -471,10 +485,12 @@ async function start(): Promise<void> {
   window.setInterval(tickClock, 20_000);
 
   resize();
-  // 모찌는 문서 창 위에 올라서서 시작한다.
-  const doc = need<HTMLElement>("#doc").getBoundingClientRect();
-  game.place(HOST, { x: doc.right - Math.min(120, doc.width * 0.22), y: doc.top - size * 0.477 + 3 });
+  // 작업 모드 캐릭터가 첫 화면의 버튼을 가리지 않게 체험 영역의 여백에 놓는다.
+  const perch = need<HTMLElement>(".perch").getBoundingClientRect();
+  game.place(HOST, { x: perch.left + perch.width / 2, y: perch.bottom - size * 0.477 });
   drawPortrait(portrait, skin);
+  portrait.dataset.ready = "";
+  showSkinChoices();
   updateHint();
   // 첫 장면은 바로 그린다. 말풍선이 자리 잡기 전에 보이지 않게 한다.
   frame(performance.now());

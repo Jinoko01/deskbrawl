@@ -1,82 +1,37 @@
-.updates-page {
-  padding-bottom: 0;
-}
-
+/* Hallmark · shape: release index · genre: playful · theme: DeskBrawl brand · redesign: full · hero: index · nav: linked wordmark · footer: none · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 · weakest: scanning, aligned release dates with their notes. */
+.updates-page { padding-bottom: 0; }
+.updates-page .masthead { justify-content: flex-start; gap: 20px; }
+.updates__home { display: inline-flex; align-items: center; min-height: 44px; }
 .updates {
-  width: min(100%, 800px);
-  margin-inline: auto;
-  padding: 24px clamp(16px, 4vw, 40px) 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  align-items: start;
+  gap: clamp(24px, 5vw, 80px);
+  padding-block: clamp(40px, 6vw, 88px);
 }
-
-.updates__home {
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.updates h1 {
-  font-size: clamp(2rem, 1.5rem + 2vw, 3rem);
-}
-
-.updates .lede {
-  margin-top: 12px;
-}
-
-.updates__status p {
-  margin: 0;
-  color: var(--muted-foreground);
-}
-
-.updates__status p:not(:empty) {
-  margin-top: 28px;
-}
-
-.updates__status .btn {
-  margin-top: 12px;
-}
-
-.updates__status .btn[hidden] {
-  display: none;
-}
-
+.updates__intro .lede { max-width: 18em; }
+.updates__status p { color: var(--muted-foreground); }
+.updates__status .btn { margin-top: 16px; }
+.updates__status .btn[hidden] { display: none; }
+.updates__feed { border-top: 2px solid var(--foreground); }
+.updates__status p:not(:empty) { margin-top: 20px; }
 .updates__entry {
   padding-block: 24px;
-  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   overflow-wrap: anywhere;
 }
-
-.updates__entry:first-child {
-  margin-top: 28px;
-}
-
-.updates__entry:last-child {
-  padding-bottom: 0;
-}
-
 .updates__entry header {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  justify-content: space-between;
   gap: 4px 16px;
 }
-
-.updates__entry h2 {
-  margin: 0;
-  color: var(--accent);
-  font-size: 1.375rem;
-  font-weight: 800;
-}
-
-.updates__entry time {
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.updates__entry ul {
-  margin: 12px 0 0;
-  padding-inline-start: 1.25em;
-}
-
-.updates__entry li + li {
-  margin-top: 6px;
+.updates__entry h2 { color: var(--accent); font-size: 1.5rem; font-weight: 800; }
+.updates__entry time { color: var(--muted-foreground); font-size: .875rem; font-variant-numeric: tabular-nums; }
+.updates__entry ul { margin: 16px 0 0; padding-inline-start: 1.25em; }
+.updates__entry li + li { margin-top: 8px; }
+@media (max-width: 850px) {
+  .updates { grid-template-columns: minmax(0, 1fr); max-width: 640px; }
 }

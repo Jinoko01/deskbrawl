@@ -1,0 +1,26 @@
+[
+ {
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "site",
+  "shape": "Character select",
+  "theme": "DeskBrawl brand",
+  "axes": "light/grotesk-heavy/cool",
+  "hero": "Stage",
+  "nav": "Wordmark and notices",
+  "footer": "Game controls",
+  "imagery": "Existing game sprites",
+  "photos": [],
+  "entry": "Character selection and play",
+  "fingerprint": "character-select / stage / masthead / control bar / sprite atlas / checklist",
+  "sections": [
+   "Hero and picker",
+   "Checklist and demo chat",
+   "Game controls"
+  ],
+  "signature": "Selectable idle pose with previews of its two neighbours",
+  "waived": [],
+  "prompt": "Redesign the landing site while keeping its functions",
+  "date": "2026-11-19"
+ }
+]

@@ -1,0 +1,26 @@
+{
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "apps/landing",
+  "routes": [
+    "/",
+    "/updates/"
+  ],
+  "system": "DESIGN.md:1",
+  "tokens": "apps/desktop/src/brand-colors.css:1",
+  "materials": [
+    "apps/landing/src/render.ts:9",
+    "packages/game-assets/characters/mochi-v2.json:1"
+  ],
+  "keep": [
+    "brand, download and notices links",
+    "live game, keyboard and touch controls",
+    "demo invitation, focus, checklist and character selection",
+    "release loading, error and retry"
+  ],
+  "introduce": [
+    "first-screen character selection with adjacent idle frames",
+    "release index layout"
+  ],
+  "before": "before.json"
+}
