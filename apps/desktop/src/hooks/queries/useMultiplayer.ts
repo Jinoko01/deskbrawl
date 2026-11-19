@@ -309,7 +309,7 @@ export function useMultiplayer() {
     mutationFn: async (next: PlayerProfile) => {
       const nickname = next.nickname === undefined ? undefined : nicknameSchema.safeParse(next.nickname);
       if (nickname !== undefined && !nickname.success) {
-        throw new RoomError("닉네임을 1~24자로 입력해 주세요.");
+        throw new RoomError("닉네임을 1~12자로 입력해 주세요.");
       }
       if (client.current !== undefined) {
         await client.current.setProfile({ ...next, ...(nickname?.success ? { nickname: nickname.data } : {}) });

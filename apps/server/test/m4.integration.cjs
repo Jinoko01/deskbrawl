@@ -259,7 +259,7 @@ test('six authenticated participants share one world, seventh is rejected and ou
 
 test('guest resumes only with its JWT and rotating token; stale commands and token replay cannot mutate the world', async () => {
   const { hs, hosted, join, host } = await openRoom();
-  const guest = await register('recovering guest');
+  const guest = await register('recovering');
   const gs = await connect(guest);
   const entered = await ack(gs, 'visit:join', join);
   const service = await sessions();
@@ -382,7 +382,7 @@ test('guest resumes only with its JWT and rotating token; stale commands and tok
 
 test('host transport loss preserves the world, expiry closes it, and expired guest credentials cannot resume', async () => {
   const { host, hs, hosted, join } = await openRoom();
-  const guest = await register('waiting guest');
+  const guest = await register('waiting');
   const gs = await connect(guest);
   const entered = await ack(gs, 'visit:join', join);
   const service = await sessions();
@@ -436,7 +436,7 @@ test('host transport loss preserves the world, expiry closes it, and expired gue
 
 test('profiles update host and guest nicknames, persist across rooms and keep legacy snapshots compatible', async () => {
   const { host, hs, hosted, join } = await openRoom();
-  const guest = await register('profile guest');
+  const guest = await register('profile');
   const gs = await connect(guest);
   const entered = await ack(gs, 'visit:join', join);
   expect(entered.ok).toBe(true);

@@ -752,11 +752,11 @@ test('idle snapshots are skipped only for opted-in sockets and resume on changes
 
   // Explicit events send the full current state even while idle.
   const renamed = until(hs, 'world:snapshot', (snapshot) =>
-    snapshot.members.some((member) => member.nickname === 'Renamed guest'),
+    snapshot.members.some((member) => member.nickname === 'Renamed'),
   );
   await ack(gs, 'player:profile', {
     visitId: entered.visitId,
-    nickname: 'Renamed guest',
+    nickname: 'Renamed',
   });
   await renamed;
   const departed = until(
@@ -769,7 +769,7 @@ test('idle snapshots are skipped only for opted-in sockets and resume on changes
 });
 
 test('commands reuse handshake authentication without per-command device lookups', async () => {
-  const host = await register('Auth cache host');
+  const host = await register('Auth host');
   const hs = await connect(host);
   const hosted = await hostRoom(hs);
   const { Database } = await import('../dist/app.mjs');
@@ -798,7 +798,7 @@ test('commands reuse handshake authentication without per-command device lookups
 
 test('revoking a connected device ends its connection within the check interval and blocks reconnects', async () => {
   const host = await register('Revoked host');
-  const other = await register('Unrevoked device');
+  const other = await register('Unrevoked');
   const hs = await connect(host);
   const os = await connect(other);
   await hostRoom(hs);
@@ -815,7 +815,7 @@ test('revoking a connected device ends its connection within the check interval 
 });
 
 test('an expired access token is disconnected without waiting for reconnect', async () => {
-  const host = await register('Expiring host');
+  const host = await register('Expiring');
   const exp = Math.floor(Date.now() / 1000) + 2;
   const hs = await connect(host, {
     auth: { version: 2, token: signAccessToken(host.deviceId, exp) },
@@ -831,8 +831,8 @@ test('an expired access token is disconnected without waiting for reconnect', as
 });
 
 test('renewal keeps the original room and visit past token expiry', async () => {
-  const host = await register('Renewing host');
-  const other = await register('Different device');
+  const host = await register('Renewing');
+  const other = await register('Different');
   const soon = signAccessToken(
     host.deviceId,
     Math.floor(Date.now() / 1000) + 3,
@@ -862,19 +862,19 @@ test('renewal keeps the original room and visit past token expiry', async () => 
     'world:snapshot',
     (body) =>
       body.worldId === hosted.worldId &&
-      body.members[0]?.nickname === 'Still connected',
+      body.members[0]?.nickname === 'Connected',
   );
   expect(
     await ack(hs, 'player:profile', {
       visitId: hosted.visitId,
-      nickname: 'Still connected',
+      nickname: 'Connected',
     }),
   ).toEqual({ ok: true });
   expect(await snapshot).toMatchObject({ roomId: hosted.roomId });
 });
 
 test('existing connections keep working while the batched device check fails', async () => {
-  const host = await register('DB outage host');
+  const host = await register('DB outage');
   const hs = await connect(host);
   const hosted = await hostRoom(hs);
   const { Database } = await import('../dist/app.mjs');

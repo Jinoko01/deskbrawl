@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const PROTOCOL_VERSION = 2;
 export const idSchema = z.uuid();
-export const nicknameSchema = z.string().trim().min(1).max(24);
+export const nicknameSchema = z.string().trim().min(1).max(12);
 export const characterSkinSchema = z.enum(["mochi", "mint", "sunny", "coral", "lumi", "rusty", "byte", "berry"]);
 export type CharacterSkin = z.infer<typeof characterSkinSchema>;
 export const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
@@ -79,7 +79,8 @@ const effect = z.object({ id: z.string().max(200), kind: z.enum(["impact", "dust
 export const worldSchema = z.object({ tick, bounds: boundsSchema,
   rules: z.object({ tickMs: positive, moveSpeedUnitsPerSecond: positive, playerRadius: positive, combat: combat.optional() }).strict(),
   players: z.array(player).max(6), projectiles: z.array(projectile).max(32), effects: z.array(effect).max(64) }).strict();
-export const memberSchema = z.object({ playerId: idSchema, nickname: nicknameSchema, role: z.enum(["host", "guest"]), skin: characterSkinSchema.optional() }).strict();
+// Existing devices may still have nicknames saved under the previous 24-character limit.
+export const memberSchema = z.object({ playerId: idSchema, nickname: z.string().trim().min(1).max(24), role: z.enum(["host", "guest"]), skin: characterSkinSchema.optional() }).strict();
 export const snapshotSchema = z.object({ version: z.literal(PROTOCOL_VERSION), roomId: idSchema, worldId: idSchema,
   world: worldSchema, chats: z.array(chatSchema).max(6).default([]), members: z.array(memberSchema).max(6), lastProcessedSeq: z.record(idSchema, tick) }).strict();
 export const joinedSchema = z.object({ ok: z.literal(true), roomId: idSchema, worldId: idSchema, visitId: idSchema,

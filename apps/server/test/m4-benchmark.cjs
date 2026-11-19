@@ -289,7 +289,7 @@ async function main() {
     for (let index = 0; index < 6; index++) {
       const registration = await api
         .post('/v1/devices')
-        .send({ nickname: `M4 measurement ${index}` });
+        .send({ nickname: `M4-${index}` });
       assert.equal(registration.status, 201);
       deviceIds.push(registration.body.deviceId);
       const user = registration.body;

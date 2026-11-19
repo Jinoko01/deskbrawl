@@ -610,7 +610,7 @@ async function runCase(roomCount, report, save) {
       }
       const response = await api
         .post('/v1/devices')
-        .send({ nickname: `cost baseline ${registered}` });
+        .send({ nickname: `cost-${registered}` });
       assert.equal(response.status, 201);
       registered++;
       deviceIds.push(response.body.deviceId);

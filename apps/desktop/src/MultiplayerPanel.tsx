@@ -48,7 +48,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
   const visitors = game.view.members.filter((member) => member.role === "guest");
   const nicknameValid = nicknameSchema.safeParse(nickname).success;
   const canSaveNickname = nicknameValid && nickname.trim() !== game.self?.nickname;
-  const nicknameHelp = nicknameValid ? "1~24자로 입력해 주세요." : "닉네임은 앞뒤 공백을 빼고 1~24자여야 해요.";
+  const nicknameHelp = nicknameValid ? "1~12자로 입력해 주세요." : "닉네임은 앞뒤 공백을 빼고 1~12자여야 해요.";
   const lobbyHelp = playing ? "플레이 중에는 캐릭터와 연결을 바꿀 수 없어요. Esc를 눌러 작업 모드로 돌아와 주세요." : undefined;
   const canCancel = !game.disconnecting.isPending && (
     game.connect.isPending || game.join.isPending || game.returning.isPending
@@ -123,6 +123,7 @@ export function MultiplayerPanel({ game, playing }: MultiplayerPanelProps) {
             <input
               className="field"
               value={nickname}
+              maxLength={12}
               required
               disabled={busy}
               aria-invalid={!nicknameValid || undefined}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { characterSkinSchema, playerProfileSchema, roomProfilesSchema } from "./index";
+import { characterSkinSchema, memberSchema, playerProfileSchema, registerSchema, roomProfilesSchema } from "./index";
 import { playerModeSchema, playerPositionSchema, socketCapabilitiesSchema } from "./index";
 import { chatSchema, playerChatSchema, bridgeSchema, resumeSchema, roomSchema, snapshotSchema, worldSchema, clearVisitorsSchema, focusSchema, hostSchema, inputSchema, joinSchema, kickSchema, parseInviteLink, playerActionSchema } from "./index";
 
@@ -25,7 +25,7 @@ it("validates profile edits and room-scoped character selections", () => {
   }
   expect(playerProfileSchema.parse({ visitId, nickname: " 새 이름 ", skin: "mint" }).nickname).toBe("새 이름");
   for (const body of [
-    { visitId }, { visitId, nickname: " " }, { visitId, nickname: "x".repeat(25) },
+    { visitId }, { visitId, nickname: " " }, { visitId, nickname: "x".repeat(13) },
     { visitId, skin: "other" }, { visitId, skin: "mochi", playerId: visitId },
   ]) {
     expect(playerProfileSchema.safeParse(body).success).toBe(false);
@@ -33,6 +33,14 @@ it("validates profile edits and room-scoped character selections", () => {
   const profiles = { roomId: visitId, worldId: visitId, profiles: [{ playerId: visitId, skin: "mint" }] };
   expect(roomProfilesSchema.parse(profiles)).toEqual(profiles);
   expect(roomProfilesSchema.safeParse({ ...profiles, profiles: Array.from({ length: 7 }, () => profiles.profiles[0]) }).success).toBe(false);
+});
+it("limits new nicknames to 12 characters while accepting existing member names", () => {
+  for (const length of [12, 13]) {
+    const nickname = "x".repeat(length);
+    expect(registerSchema.safeParse({ nickname }).success).toBe(length === 12);
+    expect(playerProfileSchema.safeParse({ visitId, nickname }).success).toBe(length === 12);
+  }
+  expect(memberSchema.safeParse({ playerId: visitId, nickname: "x".repeat(24), role: "host" }).success).toBe(true);
 });
 describe("M2 trust boundaries", () => {
   it("accepts app and configured web links and rejects alternate origins or URL extras", () => {

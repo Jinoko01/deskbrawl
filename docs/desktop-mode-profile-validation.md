@@ -19,7 +19,7 @@
 | `player:profile` | client → server | 현재 `visitId`, 선택적인 `nickname`·`skin` 중 하나 이상. 자신의 현재 멤버십만 변경한다. 성공 ack는 닉네임 DB 저장과 활성 멤버 정보 반영 완료를 뜻한다. |
 | `room:profiles` | server → room | `roomId`, `worldId`, 최대 6개의 `{ playerId, skin }`. 입장·프로필 변경 시 같은 방에만 전송한다. |
 
-캐릭터 값은 `mochi`·`mint`·`sunny`·`coral`·`lumi`·`rusty`·`byte`·`berry`, 닉네임은 공백 제거 후 1~24자다. 기존 v2 클라이언트의 strict 스냅샷과 호환되도록 서버의 `world:snapshot`·입장 ack 멤버 필드에 skin을 추가하지 않는다. 새 앱은 별도 이벤트의 캐릭터 정보를 합쳐 렌더링한다. 새 기능을 쓰려면 변경된 서버도 실행해야 한다. 구형 2종 클라이언트는 새 캐릭터 이벤트를 해석하지 못하면 기존 역할별 모습으로 표시한다. DB 스키마 변경은 없다.
+캐릭터 값은 `mochi`·`mint`·`sunny`·`coral`·`lumi`·`rusty`·`byte`·`berry`, 새 닉네임은 공백 제거 후 1~12자다. 이전에 저장된 13~24자 닉네임은 멤버 정보에서 계속 허용한다. 기존 v2 클라이언트의 strict 스냅샷과 호환되도록 서버의 `world:snapshot`·입장 ack 멤버 필드에 skin을 추가하지 않는다. 새 앱은 별도 이벤트의 캐릭터 정보를 합쳐 렌더링한다. 새 기능을 쓰려면 변경된 서버도 실행해야 한다. 구형 2종 클라이언트는 새 캐릭터 이벤트를 해석하지 못하면 기존 역할별 모습으로 표시한다. DB 스키마 변경은 없다.
 
 ## 초기 구현 실행 결과
 
