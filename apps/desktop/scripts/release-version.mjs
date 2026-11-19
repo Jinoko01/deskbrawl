@@ -111,11 +111,21 @@ function prepare(channel, notesPath) {
     throw new Error("CHANGELOG.md needs an Unreleased section.");
   }
   const curated = new Map();
+  const publicNotes = new Set();
   for (const section of unreleased[2].trim().split(/(?=^### )/m).filter(Boolean)) {
     const [heading, ...lines] = section.trimEnd().split("\n");
     const name = heading.slice(4).trimEnd();
+    if (heading.trimEnd() === "### 공지사항") {
+      for (const line of lines.filter((line) => line.trim())) {
+        if (!/^- \S/.test(line)) {
+          throw new Error("Write each public update note on one line starting with '- '.");
+        }
+        publicNotes.add(line.trimEnd());
+      }
+      continue;
+    }
     if (!heading.startsWith("### ") || !Object.hasOwn(categories, name)) {
-      throw new Error("Use Keep a Changelog headings for Unreleased notes.");
+      throw new Error("Use Keep a Changelog headings or '### 공지사항' for Unreleased notes.");
     }
     curated.set(name, [...(curated.get(name) ?? []), ...lines]);
   }
@@ -140,13 +150,15 @@ function prepare(channel, notesPath) {
     throw new Error(`${tag} already exists.`);
   }
 
-  const curatedLines = new Set([...curated.values()].flat());
-  const notes = Object.keys(categories).flatMap((name) => {
+  const curatedLines = new Set([...curated.values()].flat().concat([...publicNotes]));
+  const categorizedNotes = Object.keys(categories).flatMap((name) => {
     const lines = changes.filter(({ group }) => group === name).map(({ note }) => `- ${note}`)
       .filter((line) => !curatedLines.has(line));
     const entries = [...new Set([...(curated.get(name) ?? []), ...lines])].join("\n").trim();
     return entries ? [`### ${name}\n\n${entries}`] : [];
-  }).join("\n\n");
+  });
+  const publicSection = publicNotes.size > 0 ? [`### 공지사항\n\n${[...publicNotes].join("\n")}`] : [];
+  const notes = [...publicSection, ...categorizedNotes].join("\n\n");
 
   if (channel === "stable") {
     const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul", dateStyle: "short" }).format();

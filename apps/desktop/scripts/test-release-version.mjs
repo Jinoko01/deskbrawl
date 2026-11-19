@@ -32,7 +32,10 @@ function fixture(t, version, tagged = true, unreleased = "") {
     git("add", ".");
     git("commit", "-m", message);
   };
-  const tag = (version) => git("tag", "-a", `v${version}`, "-m", "Release notes");
+  const tag = (version, notes = "Release notes") => {
+    write(".git/tag-notes.md", notes);
+    git("tag", "-a", "--cleanup=verbatim", `v${version}`, "-F", ".git/tag-notes.md");
+  };
   let changeNumber = 0;
   function change(message, area = "apps/desktop") {
     write(`${area}/change-${++changeNumber}`, "fixture\n");
@@ -88,6 +91,23 @@ test("does not release maintenance alone and handles stable and initial breaking
   const initial = fixture(t, "0.4.2");
   initial.change("feat(protocol)!: replace a message", "packages/protocol");
   assert.equal(initial.plan().version, "0.5.0");
+});
+
+test("carries explicit public notes through stable releases and draft retries", (t) => {
+  const publicSection = "### 공지사항\n\n- 연습용 샌드백을 켜거나 끌 수 있어요.";
+  const repo = fixture(t, "1.4.2", true, `\n${publicSection}\n\n### Changed\n\n- tune server metrics\n`);
+  const pending = repo.read("CHANGELOG.md");
+  repo.plan("beta");
+  assert.equal(repo.read("CHANGELOG.md"), pending);
+  repo.plan();
+
+  const notes = repo.read(".git/release-notes.md");
+  assert.equal(notes, `${publicSection}\n\n### Changed\n\n- tune server metrics\n`);
+  assert.match(repo.read("CHANGELOG.md"), /## \[Unreleased\]\n\n## \[1\.4\.3\][^\n]*\n\n### 공지사항/);
+  repo.commit("chore(release): v1.4.3");
+  repo.tag("1.4.3", notes);
+  repo.plan("stable", "v1.4.3");
+  assert.equal(repo.read(".git/release-notes.md"), notes);
 });
 
 test("numbers and promotes prereleases without consuming Unreleased", (t) => {

@@ -113,7 +113,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             git commit -m "chore(release): $($env:RELEASE_TAG)"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            git tag -a $env:RELEASE_TAG -F $env:RELEASE_NOTES
+            git tag -a --cleanup=verbatim $env:RELEASE_TAG -F $env:RELEASE_NOTES
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             git push --atomic origin 'HEAD:refs/heads/main' "refs/tags/$($env:RELEASE_TAG)"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
