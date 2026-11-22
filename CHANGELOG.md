@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 공지사항
+
+- macOS 15 이상에서 DeskBrawl을 사용할 수 있어요. 웹사이트에서 Apple Silicon과 Intel용 공용 설치 파일을 받을 수 있어요.
+
+### Added
+
+- macOS 데스크톱 앱과 공용 DMG 다운로드 추가
+
 ## [1.1.0] - 2026-11-19
 
 ### 공지사항

@@ -1,4 +1,5 @@
 import type { MovementAxis, PlayerAction, Vector2, WorldState } from "@deskbrawl/game-core";
+import { loadMacDownload } from "./downloads";
 import { createGame, FRIEND, HOST } from "./game";
 import { createRenderer, drawPortrait, loadSkin, SKIN_NAMES, SKINS } from "./render";
 import type { Skin } from "./render";
@@ -41,7 +42,7 @@ async function start(): Promise<void> {
   const playCta = need<HTMLButtonElement>("#play-cta");
   const playCtaLabel = need<HTMLElement>("#play-cta-label");
   const playCtaKey = need<HTMLElement>("#play-cta-key");
-  const downloadCta = document.querySelector<HTMLAnchorElement>("#download-cta[href]");
+  const downloadCtas = document.querySelectorAll("[data-download]");
   const todo = need<HTMLElement>("#todo");
   const doneLine = need<HTMLElement>("#done");
   const chatLog = need<HTMLElement>("#chat-log");
@@ -143,8 +144,10 @@ async function start(): Promise<void> {
       mark.textContent = " (완료)";
       item.append(mark);
     }
-    if (step === "hit" && downloadCta !== null) {
-      downloadCta.classList.add("btn--primary");
+    if (step === "hit") {
+      for (const download of downloadCtas) {
+        download.classList.add("btn--primary");
+      }
       playCta.classList.remove("btn--primary");
     }
     doneLine.hidden = done.size < STEP_COUNT;
@@ -495,6 +498,14 @@ async function start(): Promise<void> {
   // 첫 장면은 바로 그린다. 말풍선이 자리 잡기 전에 보이지 않게 한다.
   frame(performance.now());
 }
+
+const macDownload = need<HTMLAnchorElement>("#download-macos");
+void loadMacDownload().then((url) => {
+  if (url !== undefined) {
+    macDownload.href = url;
+    macDownload.hidden = false;
+  }
+});
 
 start().catch((error: unknown) => {
   console.error(error);

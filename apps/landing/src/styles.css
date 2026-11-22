@@ -194,6 +194,7 @@ h1 {
   line-height: 1.7;
 }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.actions [hidden] { display: none; }
 .btn {
   display: inline-flex;
   align-items: center;
