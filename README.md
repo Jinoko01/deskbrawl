@@ -2,7 +2,7 @@
 
 **English** · [한국어](README.ko.md)
 
-DeskBrawl is a multiplayer desktop pet for Windows. Pixel characters roam on a transparent overlay above your apps. Switch to PLAY for a quick brawl, or send an invite link so friends can join you on their own desktops.
+DeskBrawl is a multiplayer desktop pet. Pixel characters roam on a transparent overlay above your apps. Switch to PLAY for a quick brawl, or send an invite link so friends can join you on their own desktops.
 
 ![DeskBrawl banner with pixel characters](apps/desktop/public/brand/deskbrawl-banner.png)
 
@@ -10,11 +10,13 @@ DeskBrawl is a multiplayer desktop pet for Windows. Pixel characters roam on a t
 
 Open [GitHub Releases](https://github.com/Jinoko01/deskbrawl/releases) and download `DeskBrawl_x64-setup.exe` under **Assets**. Run the installer, then open **DeskBrawl** from the Start menu. If the Releases page has no installer yet, you can [run from source](#run-from-source).
 
-DeskBrawl has been tested on the primary monitor in Windows 11. Windows 10, other operating systems, and multi-monitor setups are outside the verified range. The app interface is in Korean.
+DeskBrawl has been tested on the primary monitor in Windows 11. The app interface is in Korean.
+
+For macOS 15 or later, [run from source or build a universal DMG](docs/macos-build.md) (Korean). On macOS, keep the DeskBrawl window focused to use the game keys or the PLAY shortcut.
 
 ## What you can do
 
-- Choose from eight pixel characters and drag them around in WORK mode. Clicks outside the characters pass through to the app underneath.
+- Choose from eight pixel characters. In WORK mode, clicks pass through to the app underneath. On Windows, you can drag the characters to move them.
 - Move, swing, and throw rocks in PLAY mode. Hits can knock characters back or briefly stun them.
 - Share an invite link and play with up to six people, including the host. Everyone sees the same game state on their own desktop. The connection carries game state and chat, while desktop contents stay on each computer.
 - Use Focus Mode to hide the overlay and pause visits. You can also remap the game controls and reduce animation effects.
@@ -23,7 +25,7 @@ DeskBrawl has been tested on the primary monitor in Windows 11. Windows 10, othe
 
 1. Open DeskBrawl. Your character and a practice opponent appear on the primary monitor. Local play works without a multiplayer server.
 2. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd> to enter PLAY. Use the arrow keys to move, <kbd>Z</kbd> to swing, and <kbd>X</kbd> to throw a rock. Move close to the practice opponent and land a hit to see the knockback.
-3. Press <kbd>Esc</kbd> to return to WORK. Minimize the home window to keep the overlay running. Closing the home window exits DeskBrawl.
+3. Press <kbd>Esc</kbd> to return to WORK. Close the home window to leave the overlay running. To quit DeskBrawl, use **종료** (Quit) in the tray or menu bar.
 
 To play together, connect both apps to the same server. The host selects **내 공간 연결** (Connect my space), then **방문 링크 생성** (Create invite link). The guest pastes the link into **친구에게 놀러 가기** (Visit a friend) and selects **방문하기** (Join). Once connected, switch to PLAY and press <kbd>/</kbd> to open chat.
 
@@ -66,7 +68,7 @@ Check that `http://127.0.0.1:3000/health` returns `{"ok":true}`. The desktop app
 
 | Path | Role |
 | --- | --- |
-| [apps/desktop](apps/desktop) | Windows app and overlay built with Tauri, React, and PixiJS |
+| [apps/desktop](apps/desktop) | Desktop app and overlay built with Tauri, React, and PixiJS |
 | [apps/server](apps/server) | NestJS and Socket.IO server that runs multiplayer sessions and resolves hits, with PostgreSQL and Prisma |
 | [packages/game-core](packages/game-core) | Game rules shared by the desktop app and the server |
 | [packages/protocol](packages/protocol) | Shared REST and Socket.IO message schemas |
@@ -74,7 +76,7 @@ Check that `http://127.0.0.1:3000/health` returns `{"ok":true}`. The desktop app
 
 ## Contributing
 
-Use [GitHub Issues](https://github.com/Jinoko01/deskbrawl/issues) to report bugs or suggest improvements. For a bug report, include your Windows version, DeskBrawl version, and steps to reproduce it. Send code changes as pull requests.
+Use [GitHub Issues](https://github.com/Jinoko01/deskbrawl/issues) to report bugs or suggest improvements. For a bug report, include your OS version, DeskBrawl version, and steps to reproduce it. Send code changes as pull requests.
 
 From the repository root, generate Prisma Client, then run the checks and unit tests.
 

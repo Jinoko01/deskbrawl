@@ -1,15 +1,15 @@
 # Build the Windows installer
 
-Run **Prepare Windows release** from GitHub Actions to calculate the next version, build the Windows 11 x64 installer, and create a draft release. After the build succeeds, the workflow commits the version files and changelog and pushes an annotated tag.
+Run **Prepare desktop release** from GitHub Actions to calculate the next version and build both installers. After the Windows and macOS builds succeed, the workflow commits the version files and changelog, pushes an annotated tag, and creates a draft release.
 
 ## Release a new version
 
-1. Open [GitHub Actions](https://github.com/Jinoko01/deskbrawl/actions), select **Prepare Windows release**, and click **Run workflow** on `main`. Choose `stable` for a public release or `alpha`, `beta`, or `rc` for testing.
-2. Wait for the workflow to test the app, build the installer, and attach it as `DeskBrawl_x64-setup.exe` to a draft. The workflow updates the desktop `package.json`, `tauri.conf.json`, `Cargo.toml`, and `Cargo.lock` for you.
-3. Download the draft installer and test it on Windows 11. Check local play, then run a shared-server test with two clients by creating an invite link and joining from the second client.
-4. After approval, publish the stable draft and mark it as the latest release. Verify the website download while signed out. Publish test builds as prereleases so the website still offers the latest stable release.
+1. Configure the Apple signing and notarization secrets before running the release workflow. [macOS release setup](macos-build.md#공개-릴리스-준비하기)
+2. Open [GitHub Actions](https://github.com/Jinoko01/deskbrawl/actions), select **Prepare desktop release**, and click **Run workflow** on `main`. Choose `stable` for a public release or `alpha`, `beta`, or `rc` for testing.
+3. Confirm the draft contains `DeskBrawl_x64-setup.exe` and `DeskBrawl_macOS-universal.dmg`. Check local play on both operating systems, then test a shared-server visit between two clients.
+4. After approval, publish the stable draft and mark it as the latest release. Verify both website downloads while signed out. Publish test builds as prereleases so the website still offers the latest stable release.
 
-For the first rollout, publish a release with the `DeskBrawl_x64-setup.exe` asset before deploying the new website link. After that, each release published as latest updates the [download target](https://github.com/Jinoko01/deskbrawl/releases/latest/download/DeskBrawl_x64-setup.exe) without a website redeploy.
+Each stable release marked latest updates the Windows download target and the Mac link without a website redeploy. The website displays the Mac link when GitHub lists `DeskBrawl_macOS-universal.dmg` on the latest stable release. [Windows download target](https://github.com/Jinoko01/deskbrawl/releases/latest/download/DeskBrawl_x64-setup.exe)
 
 ## Publish website update notes
 
@@ -69,7 +69,7 @@ pnpm --filter @deskbrawl/desktop tauri dev --config src-tauri/tauri.network.conf
 
 1. Find the Windows installer in `apps/desktop/src-tauri/target/release/bundle/nsis/`. The x64 build produces `DeskBrawl_<version>_x64-setup.exe`.
 2. Install it on Windows 11. Check local play, then run a shared-server test with two clients by creating an invite link and joining from the second client.
-3. For a manual release, create a draft at [GitHub Releases](https://github.com/Jinoko01/deskbrawl/releases) for the source tag. Upload a copy of `DeskBrawl_<version>_x64-setup.exe` named `DeskBrawl_x64-setup.exe`.
+3. For a manual release, create a draft at [GitHub Releases](https://github.com/Jinoko01/deskbrawl/releases) for the source tag. Upload `DeskBrawl_<version>_x64-setup.exe` as `DeskBrawl_x64-setup.exe` and the signed, notarized Mac installer from the same tag as `DeskBrawl_macOS-universal.dmg`.
 4. Follow the same approval and download check as an automated release.
 
 ## Prepare an in-app update
