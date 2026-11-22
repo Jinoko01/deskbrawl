@@ -4,7 +4,7 @@
 
 ### 공지사항
 
-- macOS 15 이상에서 DeskBrawl을 사용할 수 있어요. 웹사이트에서 Apple Silicon과 Intel용 공용 설치 파일을 받을 수 있어요.
+- macOS 15 이상에서 테스트 버전 추가
 
 ### Added
 
