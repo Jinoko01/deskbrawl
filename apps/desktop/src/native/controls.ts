@@ -3,8 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { GAME_ACTIONS } from "../game/keyMap";
 import type { Controls } from "../game/keyMap";
 
-// loading: 저장된 설정을 읽는 중, unavailable: 다른 앱 점유 등으로 전역 단축키 등록 실패.
-export type ShortcutStatus = "loading" | "registered" | "unavailable";
+export type ShortcutStatus = "loading" | "registered" | "local" | "unavailable";
 
 export interface ControlsSnapshot {
   readonly controls: Controls;
@@ -18,7 +17,7 @@ export function parseControls(value: unknown): ControlsSnapshot {
   const [codes, shortcut] = value as unknown[];
   if (!Array.isArray(codes) || codes.length !== GAME_ACTIONS.length + 1
     || !codes.every((code) => typeof code === "string" && code.length > 0 && code.length <= 32)
-    || (shortcut !== "loading" && shortcut !== "registered" && shortcut !== "unavailable")) {
+    || (shortcut !== "loading" && shortcut !== "registered" && shortcut !== "local" && shortcut !== "unavailable")) {
     throw new Error("Invalid controls");
   }
   const strings = codes as string[];

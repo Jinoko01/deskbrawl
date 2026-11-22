@@ -6,6 +6,7 @@ import { roomErrorMessage, SERVER_ORIGIN } from "./api/rooms";
 import { AppIcon } from "./AppIcon";
 import { CharacterPicker, CharacterPortrait } from "./CharacterPicker";
 import { CHARACTERS } from "./game/characters";
+import { copyInvite } from "./native/focus";
 import { VisitPreview } from "./VisitPreview";
 
 interface MultiplayerPanelProps {
@@ -78,7 +79,7 @@ export function MultiplayerPanel({ game, playing, highlight }: MultiplayerPanelP
     if (invitation === undefined) {
       return;
     }
-    void navigator.clipboard.writeText(invitation.link).then(
+    void copyInvite(invitation.link).then(
       () => setCopy("링크를 복사했어요."),
       () => setCopy("링크를 복사하지 못했어요. 방문 링크를 선택해 직접 복사해 주세요."),
     );

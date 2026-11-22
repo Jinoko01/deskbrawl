@@ -1,6 +1,10 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+export function requestChat(): Promise<void> {
+  return invoke("chat_request");
+}
+
 export async function watchChatRequest(onRequest: () => void): Promise<() => void> {
   return isTauri() ? listen("chat-request", onRequest) : () => { /* Optional outside the desktop session. */ };
 }

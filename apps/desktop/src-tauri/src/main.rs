@@ -1,11 +1,13 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-use tauri::{Manager, WindowEvent};
+use tauri::{AppHandle, Manager, WindowEvent};
 
 mod chat;
 mod clipboard;
 mod controls;
 mod drag;
+#[cfg(target_os = "macos")]
+mod keychain;
 mod local_game;
 #[cfg(windows)]
 mod native_drag;
@@ -16,18 +18,22 @@ mod native_windows;
 mod network;
 mod overlay;
 
+fn show_main(app: &AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        if let Err(error) = main
+            .unminimize()
+            .and_then(|_| main.show())
+            .and_then(|_| main.set_focus())
+        {
+            eprintln!("Could not show DeskBrawl: {error}");
+        }
+    }
+}
+
 fn main() -> tauri::Result<()> {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(main) = app.get_webview_window("main") {
-                if let Err(error) = main
-                    .unminimize()
-                    .and_then(|_| main.show())
-                    .and_then(|_| main.set_focus())
-                {
-                    eprintln!("Could not show DeskBrawl: {error}");
-                }
-            }
+            show_main(app);
         }))
         .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(tauri::generate_handler![
@@ -37,9 +43,11 @@ fn main() -> tauri::Result<()> {
             overlay::focus_read,
             overlay::focus_set,
             overlay::invite_publish,
+            overlay::invite_copy,
             overlay::app_exit,
             overlay::app_request_exit,
             chat::chat_open,
+            chat::chat_request,
             chat::chat_update,
             chat::chat_close,
             local_game::local_available,
@@ -61,6 +69,7 @@ fn main() -> tauri::Result<()> {
             app.manage(network::NetworkState::default());
             app.manage(controls::ControlState::default());
             app.manage(chat::ChatState::default());
+            #[cfg(windows)]
             app.manage(drag::DragRegions::default());
             #[cfg(windows)]
             native_drag::start(app.handle())?;
@@ -80,6 +89,8 @@ fn main() -> tauri::Result<()> {
             if window.label() == "main" {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
+                    #[cfg(target_os = "macos")]
+                    local_game::end_play(window.app_handle());
                     if let Err(error) = window.hide() {
                         eprintln!("Could not hide DeskBrawl: {error}");
                     }
@@ -90,5 +101,25 @@ fn main() -> tauri::Result<()> {
                 overlay::exit_app(window.app_handle());
             }
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())?;
+
+    #[cfg(target_os = "macos")]
+    app.run(|app, event| match event {
+        tauri::RunEvent::Reopen { .. } => show_main(app),
+        tauri::RunEvent::Opened { urls } if urls.iter().any(|url| url.scheme() == "deskbrawl") => {
+            show_main(app);
+        }
+        tauri::RunEvent::ExitRequested {
+            code: None, api, ..
+        } => {
+            api.prevent_exit();
+            if let Err(error) = overlay::prompt_exit(app) {
+                eprintln!("Could not request DeskBrawl exit: {error}");
+            }
+        }
+        _ => {}
+    });
+    #[cfg(not(target_os = "macos"))]
+    app.run(|_, _| {});
+    Ok(())
 }

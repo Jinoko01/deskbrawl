@@ -1,4 +1,6 @@
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+#[cfg(windows)]
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow, WebviewWindowBuilder, Window,
     WindowEvent,
@@ -8,6 +10,7 @@ use tauri::{
 pub struct ChatState {
     requested: AtomicBool,
     active: AtomicBool,
+    #[cfg(windows)]
     previous: AtomicUsize,
 }
 
@@ -15,6 +18,7 @@ pub fn active(app: &AppHandle) -> bool {
     app.state::<ChatState>().active.load(Ordering::SeqCst)
 }
 
+#[cfg(any(windows, target_os = "macos"))]
 pub fn request(app: &AppHandle) {
     #[cfg(windows)]
     app.state::<ChatState>()
@@ -25,6 +29,27 @@ pub fn request(app: &AppHandle) {
         .requested
         .store(true, Ordering::SeqCst);
     let _ = app.emit_to("main", "chat-request", ());
+}
+
+#[tauri::command]
+pub fn chat_request(window: WebviewWindow) -> Result<(), &'static str> {
+    if window.label() != "main" {
+        return Err("MAIN_ONLY");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let app = window.app_handle();
+        if crate::local_game::playing(app)
+            && crate::network::chat_allowed(app)
+            && !crate::overlay::focused(app)
+            && window.is_focused().map_err(|_| "LOCAL_FOCUS_FAILED")?
+        {
+            request(app);
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err("CHAT_UNAVAILABLE")
 }
 
 pub fn dismiss(app: &AppHandle) {
@@ -60,6 +85,10 @@ pub async fn chat_open(window: WebviewWindow, x: f64, y: f64) -> Result<(), &'st
         || crate::overlay::focused(app)
     {
         return Err("CHAT_UNAVAILABLE");
+    }
+    #[cfg(target_os = "macos")]
+    if !window.is_focused().map_err(|_| "LOCAL_FOCUS_FAILED")? {
+        return Err("MAIN_NOT_FOCUSED");
     }
     crate::local_game::end_play(app);
     let result = (|| -> tauri::Result<()> {
@@ -139,11 +168,19 @@ pub fn chat_close(window: WebviewWindow) -> Result<(), &'static str> {
     #[cfg(windows)]
     let resume = active(app)
         && crate::native_windows::is_foreground(&window.as_ref().window()).unwrap_or(false);
+    #[cfg(target_os = "macos")]
+    let restore = active(app) && window.is_focused().unwrap_or(false);
     dismiss(app);
     #[cfg(windows)]
     if resume {
         if let Err(error) = crate::native_windows::start_play(app) {
             eprintln!("Could not resume PLAY after chat: {error}");
+        }
+    }
+    #[cfg(target_os = "macos")]
+    if restore {
+        if let Some(main) = app.get_webview_window("main") {
+            main.set_focus().map_err(|_| "CHAT_FOCUS_FAILED")?;
         }
     }
     Ok(())

@@ -152,26 +152,34 @@ pub async fn credential_read(window: WebviewWindow) -> Result<Option<String>, &'
     if window.label() != "main" {
         return Err("MAIN_ONLY");
     }
+    tauri::async_runtime::spawn_blocking(move || read_credential(&window))
+        .await
+        .map_err(|_| "CREDENTIAL_READ_FAILED")?
+}
+
+#[cfg(target_os = "macos")]
+fn read_credential(_window: &WebviewWindow) -> Result<Option<String>, &'static str> {
+    crate::keychain::read()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn read_credential(window: &WebviewWindow) -> Result<Option<String>, &'static str> {
     let path = window
         .path()
         .app_local_data_dir()
         .map_err(|_| "CREDENTIAL_PATH_FAILED")?
         .join("device-credential.bin");
-    tauri::async_runtime::spawn_blocking(move || {
-        if !path.exists() {
-            return Ok(None);
-        }
-        let bytes = std::fs::read(path).map_err(|_| "CREDENTIAL_READ_FAILED")?;
-        if bytes.len() > 16384 {
-            return Err("INVALID_CREDENTIAL");
-        }
-        let plain = protect(&bytes, false)?;
-        String::from_utf8(plain)
-            .map(Some)
-            .map_err(|_| "INVALID_CREDENTIAL")
-    })
-    .await
-    .map_err(|_| "CREDENTIAL_READ_FAILED")?
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path).map_err(|_| "CREDENTIAL_READ_FAILED")?;
+    if bytes.len() > 16384 {
+        return Err("INVALID_CREDENTIAL");
+    }
+    let plain = protect(&bytes, false)?;
+    String::from_utf8(plain)
+        .map(Some)
+        .map_err(|_| "INVALID_CREDENTIAL")
 }
 
 #[tauri::command]
@@ -185,29 +193,39 @@ pub async fn credential_write(
     if credential.len() > 4096 || credential.is_empty() {
         return Err("INVALID_CREDENTIAL");
     }
-    let directory = window
-        .path()
-        .app_local_data_dir()
-        .map_err(|_| "CREDENTIAL_PATH_FAILED")?;
     tauri::async_runtime::spawn_blocking(move || {
         let mut plain = credential.into_bytes();
-        let encrypted = protect(&plain, true);
+        let result = write_credential(&window, &plain);
         plain.fill(0);
-        let encrypted = encrypted?;
-        std::fs::create_dir_all(&directory).map_err(|_| "CREDENTIAL_WRITE_FAILED")?;
-        // Only protected bytes reach disk, including the temporary file.
-        let temporary = directory.join("device-credential.tmp");
-        std::fs::write(&temporary, encrypted).map_err(|_| "CREDENTIAL_WRITE_FAILED")?;
-        std::fs::rename(temporary, directory.join("device-credential.bin"))
-            .map_err(|_| "CREDENTIAL_WRITE_FAILED")
+        result
     })
     .await
     .map_err(|_| "CREDENTIAL_WRITE_FAILED")?
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn write_credential(_window: &WebviewWindow, plain: &[u8]) -> Result<(), &'static str> {
+    crate::keychain::write(plain)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn write_credential(window: &WebviewWindow, plain: &[u8]) -> Result<(), &'static str> {
+    let directory = window
+        .path()
+        .app_local_data_dir()
+        .map_err(|_| "CREDENTIAL_PATH_FAILED")?;
+    let encrypted = protect(plain, true)?;
+    std::fs::create_dir_all(&directory).map_err(|_| "CREDENTIAL_WRITE_FAILED")?;
+    // Only protected bytes reach disk, including the temporary file.
+    let temporary = directory.join("device-credential.tmp");
+    std::fs::write(&temporary, encrypted).map_err(|_| "CREDENTIAL_WRITE_FAILED")?;
+    std::fs::rename(temporary, directory.join("device-credential.bin"))
+        .map_err(|_| "CREDENTIAL_WRITE_FAILED")
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn protect(_bytes: &[u8], _encrypt: bool) -> Result<Vec<u8>, &'static str> {
-    Err("WINDOWS_REQUIRED")
+    Err("CREDENTIAL_PROTECTION_UNAVAILABLE")
 }
 
 #[cfg(windows)]

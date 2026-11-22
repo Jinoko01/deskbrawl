@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Vector2 } from "@deskbrawl/game-core";
+import { isMacDesktop } from "./platform";
 
 export type DragRegion = [id: string, left: number, top: number, right: number, bottom: number];
 export interface CharacterDrag {
@@ -11,14 +12,14 @@ export interface CharacterDrag {
 }
 
 export async function publishDragRegions(regions: DragRegion[]): Promise<void> {
-  if (isTauri()) {
+  if (isTauri() && !isMacDesktop()) {
     await invoke("overlay_drag_regions", { regions });
   }
 }
 
 export async function watchCharacterDrag(receive: (drag: CharacterDrag) => void): Promise<() => void> {
-  if (!isTauri()) {
-    return () => { /* 브라우저에는 네이티브 드래그 구독이 없다. */ };
+  if (!isTauri() || isMacDesktop()) {
+    return () => { /* 네이티브 드래그를 지원하는 환경에서만 구독한다. */ };
   }
   return listen<unknown>("character-drag", ({ payload }) => {
     if (!Array.isArray(payload) || payload.length !== 4) {

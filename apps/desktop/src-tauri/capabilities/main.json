@@ -19,12 +19,14 @@
     "allow-focus-read",
     "allow-focus-set",
     "allow-invite-publish",
+    "allow-invite-copy",
     "deep-link:allow-get-current",
     "core:window:allow-close",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "allow-app-exit",
     "allow-app-request-exit",
-    "allow-chat-open"
+    "allow-chat-open",
+    "allow-chat-request"
   ]
 }

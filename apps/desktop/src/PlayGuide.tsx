@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
+import { isMacDesktop } from "./native/platform";
 import type { CharacterSkin } from "@deskbrawl/protocol";
 import { CharacterPortrait } from "./CharacterPicker";
 import { AppIcon } from "./AppIcon";
@@ -202,7 +203,7 @@ export function DesktopCoachmark({
                   <kbd>Esc</kbd>
                   작업 모드
                 </dt>
-                <dd>작업 창으로 돌아가요. 캐릭터는 마우스로 끌어 옮겨요.</dd>
+                <dd>{isMacDesktop() ? "Esc를 누르거나 다른 창으로 전환해요." : "작업 창으로 돌아가요. 캐릭터는 마우스로 끌어 옮겨요."}</dd>
               </div>
             </dl>
           )

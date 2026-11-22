@@ -1,3 +1,4 @@
+#[cfg(windows)]
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
@@ -5,6 +6,7 @@ use std::sync::{
 use tauri::{Emitter, Manager, WebviewWindow};
 
 #[derive(Clone)]
+#[cfg(windows)]
 pub struct Region {
     pub id: String,
     pub rect: [f64; 4],
@@ -12,19 +14,22 @@ pub struct Region {
 }
 
 #[derive(Default)]
+#[cfg(windows)]
 pub struct DragRegions {
     pub regions: Mutex<Vec<Region>>,
     pub available: AtomicBool,
 }
 
-pub fn clear(app: &tauri::AppHandle) {
-    if let Some(state) = app.try_state::<DragRegions>() {
+pub fn clear(_app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    if let Some(state) = _app.try_state::<DragRegions>() {
         if let Ok(mut regions) = state.regions.lock() {
             regions.clear();
         }
     }
 }
 
+#[cfg(windows)]
 #[tauri::command]
 pub fn overlay_drag_regions(
     window: WebviewWindow,
@@ -75,6 +80,21 @@ pub fn overlay_drag_regions(
         });
     }
     *state.regions.lock().map_err(|_| "DRAG_STATE_FAILED")? = validated;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn overlay_drag_regions(
+    window: WebviewWindow,
+    regions: Vec<(String, f64, f64, f64, f64)>,
+) -> Result<(), &'static str> {
+    if window.label() != "overlay" {
+        return Err("OVERLAY_ONLY");
+    }
+    if !regions.is_empty() {
+        return Err("DRAG_UNAVAILABLE");
+    }
     Ok(())
 }
 

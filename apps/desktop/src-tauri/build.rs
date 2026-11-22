@@ -1,6 +1,8 @@
 fn main() {
-    // tauri-build does not watch the icon, so a changed logo would not reach dev builds.
+    // tauri-build does not watch the icons, so a changed logo would not reach dev builds.
     println!("cargo:rerun-if-changed=icons/icon.ico");
+    println!("cargo:rerun-if-changed=icons/icon.png");
+    println!("cargo:rerun-if-changed=icons/icon.icns");
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "overlay_reduced_effects",
@@ -9,9 +11,11 @@ fn main() {
             "focus_read",
             "focus_set",
             "invite_publish",
+            "invite_copy",
             "app_exit",
             "app_request_exit",
             "chat_open",
+            "chat_request",
             "chat_update",
             "chat_close",
             "local_available",

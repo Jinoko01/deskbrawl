@@ -1,6 +1,28 @@
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn copy_text(_window: &tauri::Window, _text: &str) -> tauri::Result<()> {
-    Err(std::io::Error::other("Windows clipboard is not supported on this platform").into())
+    Err(std::io::Error::other("Clipboard is not supported on this platform").into())
+}
+
+#[cfg(target_os = "macos")]
+pub fn copy_text(_window: &tauri::Window, text: &str) -> tauri::Result<()> {
+    use std::io::{Error, Write};
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new("/usr/bin/pbcopy")
+        .env("LC_ALL", "en_US.UTF-8")
+        .stdin(Stdio::piped())
+        .spawn()?;
+    let written = child
+        .stdin
+        .take()
+        .ok_or_else(|| Error::other("Missing clipboard pipe"))
+        .and_then(|mut pipe| pipe.write_all(text.as_bytes()));
+    let status = child.wait()?;
+    written?;
+    if !status.success() {
+        return Err(Error::other("Could not write to the macOS clipboard").into());
+    }
+    Ok(())
 }
 
 #[cfg(windows)]

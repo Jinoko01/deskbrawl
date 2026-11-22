@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { isMacDesktop } from "./platform";
 
 export async function readFocus(): Promise<boolean> {
   const value: unknown = isTauri() ? await invoke("focus_read") : false;
@@ -29,5 +30,13 @@ export async function watchFocus(onChange: (focused: boolean) => void): Promise<
 export async function publishInviteLink(link: string | null): Promise<void> {
   if (isTauri()) {
     await invoke("invite_publish", { link });
+  }
+}
+
+export async function copyInvite(link: string): Promise<void> {
+  if (isMacDesktop()) {
+    await invoke("invite_copy", { link });
+  } else {
+    await navigator.clipboard.writeText(link);
   }
 }

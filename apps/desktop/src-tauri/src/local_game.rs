@@ -20,13 +20,14 @@ pub fn capturing(app: &AppHandle) -> bool {
     app.state::<LocalSession>().capturing.load(Ordering::SeqCst)
 }
 
+#[cfg(windows)]
 pub fn set_capturing(app: &AppHandle, value: bool) {
     app.state::<LocalSession>()
         .capturing
         .store(value, Ordering::SeqCst);
 }
 
-// The native shortcut starts PLAY without changing any window's focus or visibility.
+// The main webview owns the PLAY input sequence.
 pub fn request_play(app: &AppHandle) -> tauri::Result<()> {
     app.emit_to("main", "local-play", ())
 }
@@ -73,7 +74,13 @@ pub fn local_start(window: WebviewWindow) -> Result<(), &'static str> {
         eprintln!("Could not start PLAY: {error}");
         "PLAY_UNAVAILABLE"
     });
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    return if window.is_focused().map_err(|_| "LOCAL_FOCUS_FAILED")? {
+        request_play(app).map_err(|_| "LOCAL_EVENT_FAILED")
+    } else {
+        Err("MAIN_NOT_FOCUSED")
+    };
+    #[cfg(not(any(windows, target_os = "macos")))]
     Err("PLAY_UNAVAILABLE")
 }
 

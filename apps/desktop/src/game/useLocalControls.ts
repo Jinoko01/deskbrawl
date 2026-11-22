@@ -16,8 +16,10 @@ import {
 import type { LocalCommand } from "../native/localGame";
 import { loadControls, saveControls, watchControls } from "../native/controls";
 import type { ControlsSnapshot } from "../native/controls";
+import { requestChat } from "../native/chat";
+import { isMacDesktop } from "../native/platform";
 import { createKeyboardInput } from "./keyboardInput";
-import { controlsErrorMessage } from "./keyMap";
+import { controlsErrorMessage, shortcutFromEvent } from "./keyMap";
 import type { Controls } from "./keyMap";
 
 const zero = { x: 0, y: 0 } as const;
@@ -56,6 +58,8 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
     let unlistenControls: (() => void) | undefined;
     let controlsLoaded = false;
     let controlsEvent = false;
+    let localShortcut: string | undefined;
+    const focusedPlay = isMacDesktop();
 
     function enqueue(kind: LocalCommand["kind"], movement: PlayerInput["movement"] = zero, action?: LocalCommand["action"], restore = false): Promise<void> {
       const command: LocalCommand = {
@@ -114,6 +118,7 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
         leave();
       }
       keys.setKeys(snapshot.controls.keys);
+      localShortcut = snapshot.shortcut === "local" ? snapshot.controls.toggle : undefined;
       controlsLoaded = snapshot.shortcut !== "loading";
       if (live) {
         setControls(snapshot);
@@ -155,7 +160,7 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
         void enqueue("work").catch(inputFailed);
         return;
       }
-      nativeCapture = true;
+      nativeCapture = !focusedPlay;
       start();
     }
 
@@ -177,16 +182,42 @@ export function useLocalControls(onCommand?: (command: LocalCommand) => void) {
     }
 
     function onKeyDown(event: KeyboardEvent): void {
-      if (!active) {
-        return;
-      }
-      if (event.code === "Escape") {
+      if (active && event.code === "Escape") {
         event.preventDefault();
         leave(true);
         return;
       }
       const target = event.target;
       if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
+        return;
+      }
+      if (event.isComposing) {
+        return;
+      }
+      if (localShortcut !== undefined && !event.metaKey && shortcutFromEvent(event) === localShortcut) {
+        event.preventDefault();
+        if (!event.repeat) {
+          if (active || pending) {
+            leave();
+          } else {
+            start();
+          }
+        }
+        return;
+      }
+      if (!active) {
+        return;
+      }
+      if (focusedPlay && event.code === "Slash" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+        event.preventDefault();
+        if (!event.repeat) {
+          void requestChat().catch((cause: unknown) => {
+            if (live) {
+              console.error("채팅 시작 실패", cause);
+              setError("채팅을 열지 못했어요. / 키를 다시 눌러 주세요.");
+            }
+          });
+        }
         return;
       }
       const result = keys.press(event.code, event.repeat, event.ctrlKey || event.altKey || event.metaKey);

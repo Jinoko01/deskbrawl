@@ -11,6 +11,7 @@ import {
   finishExit, requestExit, watchClosing, watchExitConfirmation,
 } from "./native/lifecycle";
 import { startNativePlay } from "./native/localGame";
+import { isMacDesktop } from "./native/platform";
 import { AppIcon } from "./AppIcon";
 import { DesktopCoachmark, HelpTopics, PlayKeys } from "./PlayGuide";
 import type { GuideTopic } from "./PlayGuide";
@@ -148,16 +149,21 @@ export function App() {
   const shown = loaded?.controls ?? (supported ? undefined : DEFAULT_CONTROLS);
   const keys = shown?.keys;
   const shortcut = shown && shortcutLabel(shown.toggle);
+  const focusedPlay = isMacDesktop();
   const connectionBusy = multiplayer.connectionBusy;
   const activeGuide = page === "home" ? guideTopic : null;
   const showPracticeTargetSwitch = page === "home" && (multiplayer.view.phase === "local" || multiplayer.view.phase === "error");
   const changingFocus = multiplayer.focus.isPending;
   const playPending = busy || starting;
   let mode = "작업 모드";
-  let modeHelp = "작업 창을 평소처럼 쓰고, 캐릭터는 드래그로 옮길 수 있어요.";
+  let modeHelp = focusedPlay
+    ? "DeskBrawl 창을 선택하고 플레이를 시작하세요."
+    : "작업 창을 평소처럼 쓰고, 캐릭터는 드래그로 옮길 수 있어요.";
   if (playing) {
     mode = "플레이 모드";
-    modeHelp = "Esc를 누르면 작업 모드로 돌아가요.";
+    modeHelp = focusedPlay
+      ? "Esc를 누르거나 다른 창으로 전환하면 작업 모드로 돌아가요."
+      : "Esc를 누르면 작업 모드로 돌아가요.";
   } else if (multiplayer.focused) {
     mode = "집중 모드";
     modeHelp = "캐릭터와 방문을 쉬어요. 집중 모드를 끄면 플레이할 수 있어요.";
@@ -298,7 +304,7 @@ export function App() {
               >
                 <AppIcon name="controls" />
                 {playLabel}
-                {loaded?.shortcut === "registered" && !playing && <kbd>{shortcut}</kbd>}
+                {(loaded?.shortcut === "registered" || loaded?.shortcut === "local") && !playing && <kbd>{shortcut}</kbd>}
               </button>
             </section>
             {activeGuide && (

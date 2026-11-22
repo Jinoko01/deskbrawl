@@ -47,8 +47,13 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, SHOW, "오버레이 표시", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, HIDE, "오버레이 숨김", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, EXIT, "종료", true, None::<&str>)?;
-    // Opening the tray menu already takes focus from main, so this item only starts PLAY.
-    let play = MenuItem::with_id(app, PLAY, "플레이 시작", cfg!(windows), None::<&str>)?;
+    let play = MenuItem::with_id(
+        app,
+        PLAY,
+        "플레이 시작",
+        cfg!(any(windows, target_os = "macos")),
+        None::<&str>,
+    )?;
     // Load the saved preference on the worker, never block the UI on filesystem I/O.
     let reduced_effects = true;
     let effects_menu = CheckMenuItem::with_id(
@@ -84,42 +89,20 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            HOME => {
-                if let Some(main) = app.get_webview_window("main") {
-                    if let Err(error) = main
-                        .unminimize()
-                        .and_then(|_| main.show())
-                        .and_then(|_| main.set_focus())
-                    {
-                        eprintln!("Could not open home: {error}");
-                    }
-                }
-            }
+            HOME => crate::show_main(app),
             FOCUS => {
                 if let Err(error) = set_focus(app, !focused(app)) {
                     eprintln!("Could not change focus mode: {error}");
                 }
             }
             COPY_LINK => {
-                let result = (|| -> tauri::Result<()> {
-                    let link = app
-                        .state::<Control>()
-                        .invite_link
-                        .lock()
-                        .map_err(|_| std::io::Error::other("Invite state unavailable"))?
-                        .clone();
-                    if let (Some(link), Some(main)) = (link, app.get_webview_window("main")) {
-                        crate::clipboard::copy_text(&main.as_ref().window(), &link)?;
-                    }
-                    Ok(())
-                })();
-                if let Err(error) = result {
-                    eprintln!("Could not copy invite: {error}");
-                    let _ = app
-                        .state::<Control>()
-                        .status
-                        .set_text("링크 복사 실패 — 홈에서 다시 시도");
+                #[cfg(target_os = "macos")]
+                {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn_blocking(move || copy_invite(&app));
                 }
+                #[cfg(not(target_os = "macos"))]
+                copy_invite(app);
             }
             SHOW => dispatch(app, VISIBLE),
             HIDE => dispatch(app, HIDDEN),
@@ -132,6 +115,26 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
                     .and_then(|main| {
                         crate::native_windows::toggle_play_from(&main.as_ref().window())
                     });
+                if let Err(error) = result {
+                    eprintln!("Tray play failed: {error}");
+                }
+            }
+            #[cfg(target_os = "macos")]
+            PLAY => {
+                let result = (|| -> tauri::Result<()> {
+                    let main = app
+                        .get_webview_window("main")
+                        .ok_or_else(|| std::io::Error::other("Missing main window"))?;
+                    if !crate::local_game::local_available(main.clone())
+                        .map_err(std::io::Error::other)?
+                    {
+                        return Ok(());
+                    }
+                    main.unminimize()?;
+                    main.show()?;
+                    main.set_focus()?;
+                    crate::local_game::request_play(app)
+                })();
                 if let Err(error) = result {
                     eprintln!("Tray play failed: {error}");
                 }
@@ -162,6 +165,28 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     });
     dispatch(app.handle(), VISIBLE);
     Ok(())
+}
+
+fn copy_invite(app: &AppHandle) {
+    let result = (|| -> tauri::Result<()> {
+        let link = app
+            .state::<Control>()
+            .invite_link
+            .lock()
+            .map_err(|_| std::io::Error::other("Invite state unavailable"))?
+            .clone();
+        if let (Some(link), Some(main)) = (link, app.get_webview_window("main")) {
+            crate::clipboard::copy_text(&main.as_ref().window(), &link)?;
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
+        eprintln!("Could not copy invite: {error}");
+        let _ = app
+            .state::<Control>()
+            .status
+            .set_text("링크 복사 실패 — 홈에서 다시 시도");
+    }
 }
 
 pub fn focused(app: &AppHandle) -> bool {
@@ -216,6 +241,28 @@ fn validate_invite_link(link: &str) -> Result<(), &'static str> {
         return Err("INVALID_INVITE");
     }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn invite_copy(window: WebviewWindow, link: String) -> Result<(), &'static str> {
+    if window.label() != "main" {
+        return Err("MAIN_ONLY");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        validate_invite_link(&link)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::clipboard::copy_text(&window.as_ref().window(), &link)
+                .map_err(|_| "CLIPBOARD_WRITE_FAILED")
+        })
+        .await
+        .map_err(|_| "CLIPBOARD_WRITE_FAILED")?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = link;
+        Err("CLIPBOARD_UNAVAILABLE")
+    }
 }
 
 #[tauri::command]
@@ -410,6 +457,7 @@ fn validate_monitor(width: u32, height: u32, scale: f64) -> tauri::Result<()> {
 
 // Configuration changes never trigger a z-order/focus reclaim loop. A tray show
 // fits the hidden webview against a fresh primary-monitor measurement.
+#[cfg(windows)]
 pub fn display_changed(app: &AppHandle) -> bool {
     let Some(control) = app.try_state::<Control>() else {
         return false;
@@ -590,7 +638,7 @@ pub fn exit_app(app: &AppHandle) {
     app.exit(0);
 }
 
-fn prompt_exit(app: &AppHandle) -> tauri::Result<()> {
+pub fn prompt_exit(app: &AppHandle) -> tauri::Result<()> {
     if crate::network::has_visitors(app) {
         if let Some(main) = app.get_webview_window("main") {
             main.unminimize()?;

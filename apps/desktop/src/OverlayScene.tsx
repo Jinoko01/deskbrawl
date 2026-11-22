@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { mountCharacter } from "./game/mountCharacter";
 import { startLocalGame } from "./game/startLocalGame";
 import { reportRendererFailure, watchReducedEffects } from "./native/overlay";
+import { isMacDesktop } from "./native/platform";
 
 export function OverlayScene() {
   const host = useRef<HTMLDivElement>(null);
@@ -9,6 +10,7 @@ export function OverlayScene() {
   const [playing, setPlaying] = useState(false);
   const [showMode, setShowMode] = useState(false);
   const [reducedEffects, setReducedEffects] = useState(true);
+  const workLabel = isMacDesktop() ? "작업 모드" : "작업 모드 · 드래그로 이동";
 
   useEffect(() => {
     if (host.current === null) {
@@ -68,7 +70,7 @@ export function OverlayScene() {
         hidden={!showMode || status !== "ready"}
       >
         <span aria-hidden="true" />
-        {playing ? "플레이 모드" : "작업 모드 · 드래그로 이동"}
+        {playing ? "플레이 모드" : workLabel}
       </p>
       {status !== "ready" && (
         <p className="overlay-status" role="status">

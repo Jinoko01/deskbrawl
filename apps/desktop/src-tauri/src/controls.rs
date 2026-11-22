@@ -1,7 +1,10 @@
+#[cfg(windows)]
+use std::sync::mpsc;
 use std::sync::{
     atomic::{AtomicU8, Ordering},
-    mpsc, Mutex,
+    Mutex,
 };
+#[cfg(windows)]
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
@@ -152,6 +155,7 @@ fn path(app: &AppHandle) -> std::io::Result<std::path::PathBuf> {
         .join("controls"))
 }
 
+#[cfg(windows)]
 fn on_main(
     app: &AppHandle,
     action: impl FnOnce(&WebviewWindow) -> Result<(), &'static str> + Send + 'static,
@@ -178,7 +182,13 @@ fn register(app: &AppHandle, toggle: String) -> Result<(), &'static str> {
     })
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn register(_app: &AppHandle, _toggle: String) -> Result<(), &'static str> {
+    // The main webview handles this shortcut only while focused.
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn register(_app: &AppHandle, _toggle: String) -> Result<(), &'static str> {
     Err("SHORTCUT_UNSUPPORTED")
 }
@@ -186,6 +196,9 @@ fn register(_app: &AppHandle, _toggle: String) -> Result<(), &'static str> {
 fn status(app: &AppHandle) -> &'static str {
     match app.state::<ControlState>().shortcut.load(Ordering::SeqCst) {
         LOADING => "loading",
+        #[cfg(target_os = "macos")]
+        REGISTERED => "local",
+        #[cfg(not(target_os = "macos"))]
         REGISTERED => "registered",
         _ => "unavailable",
     }
