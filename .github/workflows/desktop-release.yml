@@ -201,7 +201,7 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
-      - name: Record the release and create a draft
+      - name: Record and create the release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -232,6 +232,14 @@ jobs:
             git push --atomic origin 'HEAD:refs/heads/main' "refs/tags/$($env:RELEASE_TAG)"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          $options = @('--verify-tag', '--draft', '--notes-file', $notes, '--title', "DeskBrawl $($env:DESKTOP_VERSION)")
-          if ($env:PRERELEASE -eq 'true') { $options += @('--prerelease', '--latest=false') }
+          $options = @('--verify-tag', '--notes-file', $notes, '--title', "DeskBrawl $($env:DESKTOP_VERSION)")
+          if ($env:PRERELEASE -eq 'true') {
+            $options += @('--draft', '--prerelease', '--latest=false')
+          } elseif ($env:RETRY_TAG) {
+            # A recovery tag may be older than the current release.
+            $options += '--draft'
+          } else {
+            # gh uploads assets to a draft before publishing it.
+            $options += '--latest'
+          }
           gh release create $env:RELEASE_TAG @assets @options

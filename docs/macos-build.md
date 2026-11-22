@@ -34,7 +34,7 @@ GitHub 저장소의 **Settings → Secrets and variables → Actions**에 서명
 - `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`에 Developer ID Application 인증서, 인증서 비밀번호, 서명 ID를 설정하세요.
 - `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`에 Apple 계정, 앱 암호, Apple Developer 팀 ID를 설정하세요.
 
-**Prepare desktop release**에서 서명과 공증을 확인한 뒤 Windows 설치 파일과 `DeskBrawl_macOS-universal.dmg`를 같은 초안에 첨부해요. 두 운영체제에서 설치를 확인하고 안정 릴리스를 게시하면 웹사이트에 **macOS 15+ 다운로드**가 표시돼요. [공통 릴리스 절차](windows-release.md#release-a-new-version)
+**Prepare desktop release**에서 서명과 공증을 확인한 뒤 Windows 설치 파일과 `DeskBrawl_macOS-universal.dmg`를 같은 초안에 첨부해요. `stable`로 실행하면 두 파일을 업로드한 뒤 최신 안정 릴리스로 자동 게시하고, 웹사이트에 **macOS 15+ 다운로드**가 표시돼요. [공통 릴리스 절차](windows-release.md#release-a-new-version)
 
 ## Mac에서 확인하기
 
