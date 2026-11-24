@@ -17,6 +17,7 @@ services:
       retries: 20
 
   server:
+    image: ${DESKBRAWL_SERVER_IMAGE:-deskbrawl-server:local}
     build:
       context: .
       dockerfile: apps/server/Dockerfile

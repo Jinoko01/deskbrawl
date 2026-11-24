@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for an approved DeskBrawl server image
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

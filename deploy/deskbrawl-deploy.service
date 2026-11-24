@@ -1,0 +1,13 @@
+[Unit]
+Description=Apply the approved DeskBrawl server image
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/deskbrawl/deploy.env
+StateDirectory=deskbrawl-deploy
+StateDirectoryMode=0700
+ExecStart=/usr/local/libexec/deskbrawl/deploy-server.sh
+TimeoutStartSec=10min

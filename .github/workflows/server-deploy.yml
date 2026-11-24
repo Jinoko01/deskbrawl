@@ -1,0 +1,141 @@
+name: Server deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/server/**'
+      - 'packages/protocol/**'
+      - 'packages/game-core/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'patches/**'
+      - '.dockerignore'
+      - 'compose.prod.yaml'
+      - 'deploy/**'
+      - '.github/workflows/server-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      approved_sha:
+        description: 'Current main commit SHA with verified production DB state and rollback compatibility'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Verify server
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: deskbrawl
+          POSTGRES_PASSWORD: deskbrawl_test
+          POSTGRES_DB: deskbrawl_test
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U deskbrawl -d deskbrawl_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter '@deskbrawl/server...'
+      - name: Check server and shared packages
+        run: |
+          pnpm --filter '@deskbrawl/server...' --if-present lint
+          pnpm --filter '@deskbrawl/server...' --if-present typecheck
+          pnpm --filter '@deskbrawl/server...' --if-present test
+      - name: Migrate the test database and run integration tests
+        env:
+          TEST_DATABASE_URL: postgresql://deskbrawl:deskbrawl_test@localhost:${{ job.services.postgres.ports[5432] }}/deskbrawl_test
+        run: |
+          DATABASE_URL="$TEST_DATABASE_URL" pnpm --filter @deskbrawl/server db:migrate
+          pnpm --filter @deskbrawl/server test:integration
+      - name: Verify deployment recovery
+        run: bash deploy/test-deploy-server.sh
+
+  publish:
+    name: Publish server image
+    needs: test
+    if: vars.DESKBRAWL_SERVER_PLATFORM == 'linux/amd64' || vars.DESKBRAWL_SERVER_PLATFORM == 'linux/arm64'
+    runs-on: ${{ vars.DESKBRAWL_SERVER_PLATFORM == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: server-production
+      queue: max
+    env:
+      SERVER_PLATFORM: ${{ vars.DESKBRAWL_SERVER_PLATFORM }}
+      APPROVED_SHA: ${{ inputs.approved_sha }}
+      BEFORE_SHA: ${{ github.event.before }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Publish and decide whether to deploy
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$APPROVED_SHA" != "$GITHUB_SHA" ]]; then
+            echo 'Enter the exact SHA of main at the time this workflow is started.' >&2
+            exit 1
+          fi
+
+          server_paths=(apps/server packages/protocol packages/game-core package.json pnpm-lock.yaml
+            pnpm-workspace.yaml patches .dockerignore)
+          if [[ "$GITHUB_EVENT_NAME" == push ]] && git diff --quiet "$BEFORE_SHA" "$GITHUB_SHA" -- "${server_paths[@]}"; then
+            echo 'Server image inputs are unchanged.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          image="ghcr.io/${GITHUB_REPOSITORY,,}-server"
+          db_label=io.deskbrawl.prisma-revision
+          db_revision=$(git rev-parse HEAD:apps/server/prisma HEAD:apps/server/prisma.config.ts | git hash-object --stdin)
+
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker buildx build --platform "$SERVER_PLATFORM" --file apps/server/Dockerfile \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "$db_label=$db_revision" \
+            --tag "$image:sha-$GITHUB_SHA" --push --metadata-file "$RUNNER_TEMP/server-image.json" .
+          digest=$(jq -er '."containerimage.digest" | select(test("^sha256:[0-9a-f]{64}$"))' "$RUNNER_TEMP/server-image.json")
+          printf 'Image `%s@%s`\n\n' "$image" "$digest" >> "$GITHUB_STEP_SUMMARY"
+
+          git fetch --no-tags origin main
+          if ! git diff --quiet "$GITHUB_SHA" FETCH_HEAD -- "${server_paths[@]}"; then
+            echo 'Production tag held because main has newer server changes.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            if ! docker pull --platform "$SERVER_PLATFORM" "$image:production"; then
+              echo 'Production tag held because its current database revision could not be read. Use an approved manual run to initialize the first deployment, or retry a registry failure.' >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            approved_database=$(docker image inspect --format '{{ index .Config.Labels "io.deskbrawl.prisma-revision" }}' "$image:production")
+            if [[ "$approved_database" != "$db_revision" ]]; then
+              echo 'Production tag held for database review. Apply the approved migration, verify rollback compatibility, then run this workflow manually with the exact main SHA.' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+
+          docker buildx imagetools create --prefer-index=false --tag "$image:production" "$image@$digest"
+          echo 'Production tag updated. Lightsail applies this image on its next enabled timer run.' >> "$GITHUB_STEP_SUMMARY"
