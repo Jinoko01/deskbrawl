@@ -55,6 +55,7 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter '@deskbrawl/server...'
+      - run: pnpm --filter @deskbrawl/server db:generate
       - name: Check server and shared packages
         run: |
           pnpm --filter '@deskbrawl/server...' --if-present lint
