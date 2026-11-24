@@ -20,8 +20,11 @@ case "$*" in
   'compose '*" ps --quiet server") echo existing-container ;;
   'container inspect '*) printf 'sha256:%064x\n' 0 ;;
   'image tag '*) ;;
+  'image inspect '*) exit 1 ;;
+  'pull '*@sha256:*) printf '%s\n' "$2" >> "$DESKBRAWL_ROOT/pinned" ;;
   'pull '*) printf 'Digest: sha256:%s\n' "$(cat "$DESKBRAWL_ROOT/production")" ;;
   'compose '*" up "*" --wait --wait-timeout 120 server")
+    grep -Fxq "$DESKBRAWL_SERVER_IMAGE" "$DESKBRAWL_ROOT/pinned" || exit 1
     printf '%s\n' "$DESKBRAWL_SERVER_IMAGE" >> "$DESKBRAWL_ROOT/replacements"
     printf '%s\n' "$DESKBRAWL_SERVER_IMAGE" > "$DESKBRAWL_ROOT/running"
     ;;

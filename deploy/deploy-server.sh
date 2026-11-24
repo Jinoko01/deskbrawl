@@ -32,6 +32,9 @@ apply_image() {
 rollback() {
   local failed=$1
   echo "Restoring $last_good after unsuccessful deployment of $failed" >&2
+  if [[ "$last_good" == *@sha256:* ]] && ! docker image inspect "$last_good" >/dev/null 2>&1; then
+    docker pull "$last_good" || return 1
+  fi
   if ! apply_image "$last_good"; then
     echo 'Rollback health check failed. The next run will retry recovery.' >&2
     return 1
@@ -79,6 +82,8 @@ if [[ "$candidate" == "$last_good" || -f "$state/rejected/${digest#sha256:}" ]];
   exit 0
 fi
 
+# Pulling a movable tag alone can drop its old digest when the tag advances.
+docker pull "$candidate" >/dev/null
 record "$state/pending" "$candidate"
 if ! apply_image "$candidate"; then
   rollback "$candidate"

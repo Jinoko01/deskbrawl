@@ -57,7 +57,7 @@ GitHub Actions 요약에 `Production tag held for database review`가 표시되�
 
 `sudo journalctl -u deskbrawl-deploy.service -n 100 --no-pager`로 실패 원인과 `Restored` 결과를 확인한다. 복구 과정도 실패하면 타이머가 다음 실행에서 복구를 다시 시도한다. 복구에 성공한 뒤에는 같은 실패 digest를 건너뛰고, 수정한 커밋에서 새로운 digest를 발행하면 다시 배포한다.
 
-현재 정상으로 기록된 이미지는 `/var/lib/deskbrawl-deploy/server.env`에 있다. 수동으로 `server`를 재시작할 때에는 이 파일을 추가해 같은 digest를 사용한다.
+현재 정상으로 기록된 이미지는 `/var/lib/deskbrawl-deploy/server.env`에 있다. 이 이미지의 커밋 SHA 태그를 GHCR에 보관하면 로컬에서 이미지가 사라져도 같은 digest를 다시 받을 수 있다. 수동으로 `server`를 재시작할 때에는 이 파일을 추가해 같은 digest를 사용한다.
 
 ```bash
 sudo docker compose --env-file .env.prod --env-file /var/lib/deskbrawl-deploy/server.env \
